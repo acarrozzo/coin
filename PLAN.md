@@ -185,14 +185,20 @@ The whole engine, proven with minimal content:
 - **Done when:** you can play, close the tab, reopen, and correctly gain offline
   resources — and the whole thing is one state object + one tick.
 
-### Phase 2 — Port the full v1 core loop (as data)  *(3–5 days)*
-Using `coin-old` as the spec, express the full base game as content:
-- All base + crafted resources, the settlement tiers (Shack→Kingdom),
-  buildings (Farm, Hunter's Cabin, Blacksmith, Barracks, Deep Mine, Bank,
-  Wizard Tower, Cloud Shaman, Castle), crafting recipes, worker costs.
-- Progression gating (level unlocks) driven by data + flags.
-- **Done when:** feature-parity with the original's economy — no combat yet —
-  and adding a resource/building is a pure data edit.
+### Phase 2 — Generalized economy engine + core production chain  *(done)*
+Using `coin-old` as the spec, express the base game as content data:
+- Generalized **producers** (gathering and crafting unified; crafting throttled
+  by inputs), **settlement tiers** with absolute caps, dynamic capacities,
+  **worker training** on the floor(n²/2) food curve.
+- Content: resources (base, metals, weapons, goods), settlement tiers
+  Shack→Village, buildings **Farm, Deep Mine, Blacksmith, Hunter's Cabin**,
+  crafting recipes. Adding a resource/building/producer is a pure data edit.
+- Save **v2** with a v1→v2 migration.
+- **Scoping refinement:** the original's **military units, castle/wizard/shaman
+  quest items, and combat-gated upper tiers** (defense/honor/wisdom) are
+  inseparable from combat, so they move to **Phase 4** — where the Barracks,
+  Castle, Wizard Tower, Cloud Shaman, and the Kingdom-tier climb are ported
+  alongside the systems that give them meaning.
 
 ### Phase 3 — Polish & feel  *(2–4 days)*
 - Responsive layout for desktop + mobile; touch targets; **PWA** (installable,
@@ -202,7 +208,11 @@ Using `coin-old` as the spec, express the full base game as content:
 - Settings: theme toggle, save export/import, hard reset.
 - **Done when:** it feels good to play on a phone and a desktop.
 
-### Phase 4 — Battle (auto-battler first)  *(3–5 days)*
+### Phase 4 — Battle (auto-battler first) + combat-coupled content  *(3–5 days)*
+- Port the **Barracks (units), Castle chain, Wizard Tower, Cloud Shaman**, their
+  quest items (magic orb/soul gem/star metal/holy water, ward, ether, dream
+  leaf), and the **combat-gated settlement tiers** (Town→Kingdom) — deferred
+  from Phase 2 because they only matter with combat.
 - Replace the single RNG roll with a **deterministic power-vs-power auto-battler**:
   unit compositions, counters, escalating assaults, honor rewards, defeat
   consequences — all data-driven (`units.ts`, `enemies.ts`).

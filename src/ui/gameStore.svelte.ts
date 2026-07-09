@@ -2,8 +2,9 @@ import { createInitialState, type GameState, type ResourceId, type BuildingId } 
 import { tick } from '../engine/tick';
 import { applyOffline, type OfflineSummary } from '../engine/offline';
 import { loadFromStorage, saveToStorage, clearStorage } from '../engine/save';
-import { assignWorker } from '../engine/actions';
+import { assignWorker, trainWorker } from '../engine/actions';
 import { buildBuilding } from '../systems/buildings';
+import { upgradeSettlement } from '../systems/settlement';
 
 /** Fixed simulation step in seconds (10 ticks/sec). */
 const TICK_STEP = 0.1;
@@ -97,8 +98,14 @@ function createGameStore() {
     assign(id: ResourceId, delta: number): void {
       assignWorker(state, id, delta);
     },
+    train(): void {
+      if (trainWorker(state)) persist();
+    },
     build(id: BuildingId): void {
       if (buildBuilding(state, id)) persist();
+    },
+    upgradeSettlement(): void {
+      if (upgradeSettlement(state)) persist();
     },
     reset(): void {
       clearStorage();

@@ -9,12 +9,26 @@ export const STORAGE_KEY = 'cc:save';
 type RawSave = Record<string, unknown> & { version?: number };
 
 /**
- * Ordered migrations. A migration at key N upgrades a version-N save to N+1.
- * Empty today (we're at v1); the harness is here so shipping a schema change
- * never bricks a player's save.
+ * Ordered migrations. A migration at key N upgrades a version-N save to N+1,
+ * so shipping a schema change never bricks a player's save.
  */
 const migrations: Record<number, (data: RawSave) => RawSave> = {
-  // 1: (data) => ({ ...data, someNewField: 0, version: 2 }),
+  // v1 (Phase 1: wood/stone + a "cabin") → v2 (Phase 2: full economy).
+  // The building/level semantics changed, so reset progression but keep the
+  // raw materials and playtime the player accumulated.
+  1: (data) => {
+    const resources = (data.resources as Record<string, unknown>) ?? {};
+    return {
+      version: 2,
+      createdAt: data.createdAt,
+      playtime: data.playtime,
+      level: 1,
+      resources: {
+        wood: resources.wood,
+        stone: resources.stone,
+      },
+    };
+  },
 };
 
 function migrate(data: RawSave): RawSave {
@@ -23,7 +37,6 @@ function migrate(data: RawSave): RawSave {
   while ((d.version ?? 0) < SAVE_VERSION && guard++ < 100) {
     const step = migrations[d.version ?? 0];
     if (!step) {
-      // No migration path — accept as current rather than losing progress.
       d = { ...d, version: SAVE_VERSION };
       break;
     }
@@ -84,10 +97,11 @@ export function deserialize(raw: string, now: number): GameState {
   }
 
   const workers = data.workers as
-    | { total?: unknown; assigned?: Record<string, unknown> }
+    | { trained?: unknown; bonus?: unknown; assigned?: Record<string, unknown> }
     | undefined;
   if (workers) {
-    if (typeof workers.total === 'number') state.workers.total = workers.total;
+    if (typeof workers.trained === 'number') state.workers.trained = workers.trained;
+    if (typeof workers.bonus === 'number') state.workers.bonus = workers.bonus;
     if (workers.assigned) {
       for (const id of RESOURCE_IDS) {
         const a = workers.assigned[id];
@@ -111,7 +125,7 @@ export function saveToStorage(state: GameState): void {
   try {
     localStorage.setItem(STORAGE_KEY, serialize(state));
   } catch {
-    // Storage full or unavailable — nothing we can do; skip this save.
+    // Storage full or unavailable — skip this save.
   }
 }
 

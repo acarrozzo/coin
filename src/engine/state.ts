@@ -5,9 +5,9 @@ import { BUILDING_IDS, type BuildingId } from '../content/buildings';
 export type { ResourceId, BuildingId };
 
 /** Bumped whenever the save shape changes; drives migrations (see save.ts). */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
-/** Workers the player starts with. */
+/** Trained workers the player starts with. */
 export const STARTING_WORKERS = 3;
 
 export interface ResourceState {
@@ -22,11 +22,15 @@ export interface GameState {
   lastTick: number;
   /** Total seconds simulated. */
   playtime: number;
-  /** Settlement level — gates resource/building unlocks. */
+  /** Settlement level — the spine of progression. */
   level: number;
   resources: Record<ResourceId, ResourceState>;
   workers: {
-    total: number;
+    /** Workers trained via food; drives the training cost curve. */
+    trained: number;
+    /** Bonus workers from other sources (none yet; reserved). */
+    bonus: number;
+    /** Workers assigned per production line (keyed by output resource). */
     assigned: Record<ResourceId, number>;
   };
   buildings: Record<BuildingId, { level: number }>;
@@ -53,7 +57,7 @@ export function createInitialState(now: number): GameState {
     playtime: 0,
     level: 1,
     resources,
-    workers: { total: STARTING_WORKERS, assigned },
+    workers: { trained: STARTING_WORKERS, bonus: 0, assigned },
     buildings,
   };
 }

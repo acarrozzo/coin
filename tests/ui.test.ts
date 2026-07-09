@@ -10,9 +10,10 @@ describe('ResourcePanel (runtime)', () => {
   it('renders the unlocked resource and assigns a worker on click', async () => {
     render(ResourcePanel);
 
+    // Wood + stone gather from the start; food needs a Farm, so it's hidden.
     expect(screen.getByText('Wood')).toBeTruthy();
-    // Stone is locked at level 1, so it should not render.
-    expect(screen.queryByText('Stone')).toBeNull();
+    expect(screen.getByText('Stone')).toBeTruthy();
+    expect(screen.queryByText('Food')).toBeNull();
 
     const before = game.state.workers.assigned.wood;
     await fireEvent.click(screen.getByLabelText('Add worker to Wood'));

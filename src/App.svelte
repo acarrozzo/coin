@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { game } from './ui/gameStore.svelte';
-  import { getAvailableWorkers } from './engine/selectors';
+  import { getAvailableWorkers, getTotalWorkers } from './engine/selectors';
+  import SettlementPanel from './ui/SettlementPanel.svelte';
   import ResourcePanel from './ui/ResourcePanel.svelte';
   import BuildingPanel from './ui/BuildingPanel.svelte';
   import WelcomeBack from './ui/WelcomeBack.svelte';
@@ -12,6 +13,7 @@
 
   const gs = $derived(game.state);
   const available = $derived(getAvailableWorkers(gs));
+  const total = $derived(getTotalWorkers(gs));
 
   onMount(() => {
     const saved = localStorage.getItem(THEME_KEY) as Theme | null;
@@ -37,7 +39,7 @@
     <h1>🏰 Coin &amp; Castle</h1>
     <div class="hud">
       <span class="stat" title="Settlement level">Lv {gs.level}</span>
-      <span class="stat" title="Idle / total workers">{available}/{gs.workers.total} 👷</span>
+      <span class="stat" title="Idle / total workers">{available}/{total} 👷</span>
       <button class="theme-toggle" onclick={toggleTheme} aria-label="Toggle theme">
         {theme === 'dark' ? '☀' : '☾'}
       </button>
@@ -46,6 +48,7 @@
 
   <main>
     <WelcomeBack />
+    <SettlementPanel />
     <ResourcePanel />
     <BuildingPanel />
   </main>

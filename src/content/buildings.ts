@@ -1,50 +1,67 @@
 /**
  * Building content — constructions and their per-level cost/effects, as data.
- * A generic building system (systems/buildings.ts) interprets these entries;
- * adding a building or level is a pure data edit.
+ * A building's level also caps how many workers can staff each of its
+ * production lines (see producers.ts). Buildings become available at a
+ * settlement level.
  */
-import type { ResourceId } from './resources';
+import type { ResourceCost } from './settlement';
 
-export type BuildingId = 'cabin';
-
-export type ResourceCost = Partial<Record<ResourceId, number>>;
-
-export interface BuildingEffect {
-  /** Raise the settlement level to this value (unlocks gated content). */
-  setLevel?: number;
-  /** Multiply all resource capacities (stacks across owned levels). */
-  capMult?: number;
-}
+export type BuildingId = 'farm' | 'deepmine' | 'blacksmith' | 'hunterscabin';
 
 export interface BuildingLevel {
   cost: ResourceCost;
-  effect: BuildingEffect;
-  /** What this level does, for the UI. */
+  /** What this level unlocks/does, for the UI. */
   summary: string;
 }
 
 export interface BuildingDef {
   name: string;
   blurb: string;
+  /** Minimum settlement level before this building can be built. */
+  availableAtLevel: number;
   /** Levels in order; index 0 is the first build. */
   levels: BuildingLevel[];
 }
 
 export const BUILDINGS: Record<BuildingId, BuildingDef> = {
-  cabin: {
-    name: 'Cabin',
-    blurb: 'A humble start — and room to grow.',
+  farm: {
+    name: 'Farm',
+    blurb: 'Turns labor into food.',
+    availableAtLevel: 2,
     levels: [
-      {
-        cost: { wood: 10 },
-        effect: { setLevel: 2 },
-        summary: 'Settle in. Unlocks stone quarrying.',
-      },
-      {
-        cost: { wood: 30, stone: 15 },
-        effect: { capMult: 1.5 },
-        summary: '+50% storage capacity.',
-      },
+      { cost: { wood: 10, stone: 10 }, summary: 'Unlocks food gathering (1 farmer).' },
+      { cost: { wood: 60, stone: 40 }, summary: '+1 farmer.' },
+      { cost: { wood: 200, stone: 150 }, summary: '+1 farmer.' },
+    ],
+  },
+  blacksmith: {
+    name: 'Blacksmith',
+    blurb: 'Forges wood and metal into arms.',
+    availableAtLevel: 3,
+    levels: [
+      { cost: { wood: 100, stone: 100 }, summary: 'Unlocks arrow crafting.' },
+      { cost: { wood: 200, stone: 200, iron: 10 }, summary: 'Unlocks sword crafting.' },
+      { cost: { wood: 400, stone: 300, steel: 5 }, summary: 'Unlocks staff crafting.' },
+    ],
+  },
+  hunterscabin: {
+    name: "Hunter's Cabin",
+    blurb: 'Spears, and what spears bring back.',
+    availableAtLevel: 3,
+    levels: [
+      { cost: { wood: 100, stone: 50 }, summary: 'Unlocks spear crafting.' },
+      { cost: { wood: 200, spear: 10 }, summary: 'Unlocks leather.' },
+      { cost: { wood: 400, spear: 25 }, summary: 'Unlocks fur.' },
+    ],
+  },
+  deepmine: {
+    name: 'Deep Mine',
+    blurb: 'Descends for iron, steel, and mithril.',
+    availableAtLevel: 3,
+    levels: [
+      { cost: { wood: 300, stone: 200 }, summary: 'Unlocks iron (smelted from food).' },
+      { cost: { wood: 600, stone: 400 }, summary: 'Unlocks steel.' },
+      { cost: { wood: 1200, stone: 800, iron: 50 }, summary: 'Unlocks mithril.' },
     ],
   },
 };
