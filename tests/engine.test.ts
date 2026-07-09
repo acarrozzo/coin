@@ -7,6 +7,8 @@ import { buildBuilding } from '../src/systems/buildings';
 import { upgradeSettlement } from '../src/systems/settlement';
 import { applyOffline, MAX_OFFLINE_SECONDS } from '../src/engine/offline';
 import { serialize, deserialize } from '../src/engine/save';
+import { SETTLEMENT_TIERS } from '../src/content/settlement';
+import type { ResourceId } from '../src/content/resources';
 import {
   getCapacity,
   getAvailableWorkers,
@@ -119,16 +121,32 @@ describe('settlement', () => {
     expect(getCapacity(s, 'wood')!.toNumber()).toBe(50);
   });
 
+  it('never prices a tier above the previous tier storage cap', () => {
+    // The progression invariant (from the original): you must be able to save
+    // up for the next upgrade within your *current* storage. If a cost ever
+    // exceeds the current tier's cap for a capped resource, that upgrade is
+    // unreachable and progression dead-ends.
+    for (const tier of SETTLEMENT_TIERS) {
+      const next = SETTLEMENT_TIERS.find((t) => t.level === tier.level + 1);
+      if (!next) continue;
+      for (const [rid, amount] of Object.entries(next.cost) as [ResourceId, number][]) {
+        const cap = tier.caps[rid];
+        if (cap === undefined) continue; // uncapped resource (honor/wisdom/mithril)
+        expect(amount, `L${tier.level} cap for ${rid} must hold L${next.level} cost`).toBeLessThanOrEqual(cap);
+      }
+    }
+  });
+
   it('enforces the worker requirement for a tier', () => {
     const s = createInitialState(0);
-    s.level = 2; // next tier (3) needs 4 trained workers
+    s.level = 2; // next tier (3) needs 3 trained workers
     s.resources.wood.amount = D(100);
     s.resources.stone.amount = D(100);
-    expect(s.workers.trained).toBe(3);
+    s.resources.food.amount = D(100); // tier 3 also costs 15 food
+    s.workers.trained = 2; // one short of the requirement
     expect(canUpgradeSettlement(s)).toBe(false);
 
-    s.resources.food.amount = D(100);
-    trainWorker(s); // → 4 trained
+    s.workers.trained = 3; // meets the requirement
     expect(canUpgradeSettlement(s)).toBe(true);
   });
 });
