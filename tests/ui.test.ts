@@ -23,8 +23,15 @@ describe('ResourcePanel (runtime)', () => {
 
     // Store mutated...
     expect(game.state.workers.assigned.wood).toBe(before + 1);
-    // ...and the DOM reactively reflects it.
-    expect(await screen.findByText(`${before + 1} 👷`)).toBeTruthy();
+    // ...and the DOM reactively reflects it. Wood is pool-limited, so its count
+    // renders as just the assigned number (no "/max").
+    expect(
+      await screen.findByText(
+        (_, el) =>
+          el?.classList.contains('count') === true &&
+          el?.textContent?.trim().startsWith(String(before + 1)) === true,
+      ),
+    ).toBeTruthy();
   });
 
   it('upgrades the settlement and fires a level-up toast', async () => {
