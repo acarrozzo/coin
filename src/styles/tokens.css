@@ -1,0 +1,72 @@
+/*
+ * Design tokens for Coin & Castle.
+ * Ports the original's retro terminal identity (VT323 / Share Tech Mono,
+ * Nord-ish dark palette) into CSS custom properties with light + dark themes.
+ *
+ * Theme is selected by [data-theme="light|dark"] on <html>, defaulting to the
+ * OS preference. The UI store stamps data-theme so the toggle wins both ways.
+ */
+
+:root {
+  /* Typography */
+  --font-body: 'Share Tech Mono', 'Courier New', monospace;
+  --font-display: 'VT323', 'Share Tech Mono', monospace;
+  --letter-spacing: -0.02em;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 20px;
+  --space-5: 32px;
+
+  /* Radius + motion */
+  --radius: 4px;
+  --fade-in: 1.25s;
+  --transition: 0.18s ease;
+
+  /* Light theme (default) */
+  --bg: #f7f7f7;
+  --bg-panel: #ffffff;
+  --bg-header: #373e4d;
+  --text: #1a1a1a;
+  --text-muted: #666666;
+  --text-on-header: #cccccc;
+  --border: #666666;
+  --accent: #3b6ea5;
+  --good: #2e7d32;
+  --bad: #c62828;
+  --gold: #b8860b;
+}
+
+/* Dark theme — explicit override */
+:root[data-theme='dark'] {
+  --bg: #2e3440;
+  --bg-panel: #373e4d;
+  --bg-header: #373e4d;
+  --text: #ffffff;
+  --text-muted: #a0a8b8;
+  --text-on-header: #cccccc;
+  --border: #4c566a;
+  --accent: #88c0d0;
+  --good: #a3be8c;
+  --bad: #bf616a;
+  --gold: #ebcb8b;
+}
+
+/* Follow the OS when no explicit theme is set */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #2e3440;
+    --bg-panel: #373e4d;
+    --bg-header: #373e4d;
+    --text: #ffffff;
+    --text-muted: #a0a8b8;
+    --text-on-header: #cccccc;
+    --border: #4c566a;
+    --accent: #88c0d0;
+    --good: #a3be8c;
+    --bad: #bf616a;
+    --gold: #ebcb8b;
+  }
+}
