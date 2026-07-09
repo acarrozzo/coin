@@ -1,0 +1,133 @@
+import { D } from './numbers';
+import { createInitialState, SAVE_VERSION, type GameState } from './state';
+import { RESOURCE_IDS } from '../content/resources';
+import { BUILDING_IDS } from '../content/buildings';
+
+export const STORAGE_KEY = 'cc:save';
+
+/** Loosely-typed shape of a parsed save, before we rebuild a real GameState. */
+type RawSave = Record<string, unknown> & { version?: number };
+
+/**
+ * Ordered migrations. A migration at key N upgrades a version-N save to N+1.
+ * Empty today (we're at v1); the harness is here so shipping a schema change
+ * never bricks a player's save.
+ */
+const migrations: Record<number, (data: RawSave) => RawSave> = {
+  // 1: (data) => ({ ...data, someNewField: 0, version: 2 }),
+};
+
+function migrate(data: RawSave): RawSave {
+  let d = data;
+  let guard = 0;
+  while ((d.version ?? 0) < SAVE_VERSION && guard++ < 100) {
+    const step = migrations[d.version ?? 0];
+    if (!step) {
+      // No migration path — accept as current rather than losing progress.
+      d = { ...d, version: SAVE_VERSION };
+      break;
+    }
+    d = step(d);
+  }
+  return d;
+}
+
+/** Serialize to a JSON string (Decimals become strings). */
+export function serialize(state: GameState): string {
+  const resources: Record<string, { amount: string }> = {};
+  for (const id of RESOURCE_IDS) {
+    resources[id] = { amount: state.resources[id].amount.toString() };
+  }
+  return JSON.stringify({
+    version: state.version,
+    createdAt: state.createdAt,
+    lastTick: state.lastTick,
+    playtime: state.playtime,
+    level: state.level,
+    resources,
+    workers: state.workers,
+    buildings: state.buildings,
+  });
+}
+
+/**
+ * Rebuild a GameState from a JSON string. Missing/invalid fields fall back to a
+ * fresh state's defaults, so adding new content never breaks old saves.
+ */
+export function deserialize(raw: string, now: number): GameState {
+  let data: RawSave;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return createInitialState(now);
+    data = parsed as RawSave;
+  } catch {
+    return createInitialState(now);
+  }
+
+  data = migrate(data);
+  const state = createInitialState(now);
+  state.version = SAVE_VERSION;
+
+  if (typeof data.createdAt === 'number') state.createdAt = data.createdAt;
+  if (typeof data.lastTick === 'number') state.lastTick = data.lastTick;
+  if (typeof data.playtime === 'number') state.playtime = data.playtime;
+  if (typeof data.level === 'number') state.level = data.level;
+
+  const resources = data.resources as Record<string, { amount?: unknown }> | undefined;
+  if (resources) {
+    for (const id of RESOURCE_IDS) {
+      const amount = resources[id]?.amount;
+      if (typeof amount === 'string' || typeof amount === 'number') {
+        state.resources[id].amount = D(amount);
+      }
+    }
+  }
+
+  const workers = data.workers as
+    | { total?: unknown; assigned?: Record<string, unknown> }
+    | undefined;
+  if (workers) {
+    if (typeof workers.total === 'number') state.workers.total = workers.total;
+    if (workers.assigned) {
+      for (const id of RESOURCE_IDS) {
+        const a = workers.assigned[id];
+        if (typeof a === 'number') state.workers.assigned[id] = a;
+      }
+    }
+  }
+
+  const buildings = data.buildings as Record<string, { level?: unknown }> | undefined;
+  if (buildings) {
+    for (const id of BUILDING_IDS) {
+      const level = buildings[id]?.level;
+      if (typeof level === 'number') state.buildings[id].level = level;
+    }
+  }
+
+  return state;
+}
+
+export function saveToStorage(state: GameState): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, serialize(state));
+  } catch {
+    // Storage full or unavailable — nothing we can do; skip this save.
+  }
+}
+
+export function loadFromStorage(now: number): GameState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? deserialize(raw, now) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearStorage(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
