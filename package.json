@@ -17,6 +17,7 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@lucide/svelte": "^1.24.0",
     "break_infinity.js": "^2.0.0"
   },
   "devDependencies": {

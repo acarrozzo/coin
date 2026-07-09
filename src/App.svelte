@@ -10,6 +10,10 @@
   import SettingsPanel from './ui/SettingsPanel.svelte';
   import WelcomeBack from './ui/WelcomeBack.svelte';
   import Toasts from './ui/Toasts.svelte';
+  import Castle from '@lucide/svelte/icons/castle';
+  import PersonStanding from '@lucide/svelte/icons/person-standing';
+  import Sun from '@lucide/svelte/icons/sun';
+  import Moon from '@lucide/svelte/icons/moon';
 
   type Theme = 'light' | 'dark';
   const THEME_KEY = 'cc:theme';
@@ -53,12 +57,18 @@
 
 <div class="app">
   <header>
-    <h1>🏰 Coin &amp; Castle</h1>
+    <h1><Castle size={24} color="var(--gold)" aria-hidden="true" /> Coin &amp; Castle</h1>
     <div class="hud">
       <span class="stat" class:leveled title="Settlement level">Lv {gs.level}</span>
-      <span class="stat" title="Idle / total workers">{available}/{total} 👷</span>
+      <span class="stat" title="Idle / total workers"
+        >{available}/{total} <PersonStanding size={16} color="var(--gold)" aria-hidden="true" /></span
+      >
       <button class="theme-toggle" onclick={toggleTheme} aria-label="Toggle theme">
-        {theme === 'dark' ? '☀' : '☾'}
+        {#if theme === 'dark'}<Sun size={18} color="var(--gold)" aria-hidden="true" />{:else}<Moon
+            size={18}
+            color="var(--accent)"
+            aria-hidden="true"
+          />{/if}
       </button>
     </div>
   </header>
@@ -104,6 +114,9 @@
     border-bottom: 1px solid var(--border);
   }
   header h1 {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
     font-size: 26px;
     color: var(--text-on-header);
   }
@@ -113,6 +126,9 @@
     gap: var(--space-3);
   }
   .stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     color: var(--text-on-header);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
@@ -138,6 +154,9 @@
     }
   }
   .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-on-header);

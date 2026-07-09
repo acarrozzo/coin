@@ -11,6 +11,7 @@
     getMaxWorkers,
   } from '../engine/selectors';
   import { formatNumber, formatRate } from '../engine/numbers';
+  import PersonStanding from '@lucide/svelte/icons/person-standing';
 
   const gs = $derived(game.state);
   const available = $derived(getAvailableWorkers(gs));
@@ -68,6 +69,7 @@
       {#each group.ids as id (id)}
         {@const cap = getCapacity(gs, id)}
         {@const assigned = gs.workers.assigned[id]}
+        {@const maxWorkers = getMaxWorkers(gs, id)}
         {@const starved = starvedInput(id)}
         <div class="row" transition:fly={{ y: 8, duration: 260 }}>
           <div class="head">
@@ -97,10 +99,13 @@
                 disabled={assigned === 0}
                 aria-label="Remove worker from {RESOURCES[id].name}">−</button
               >
-              <span class="count">{assigned} 👷</span>
+              <span class="count"
+                >{assigned}/{maxWorkers}
+                <PersonStanding size={14} color="var(--gold)" aria-hidden="true" /></span
+              >
               <button
                 onclick={() => game.assign(id, 1)}
-                disabled={available <= 0 || assigned >= getMaxWorkers(gs, id)}
+                disabled={available <= 0 || assigned >= maxWorkers}
                 aria-label="Add worker to {RESOURCES[id].name}">+</button
               >
             </div>
@@ -185,7 +190,11 @@
     gap: var(--space-2);
   }
   .count {
-    min-width: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 64px;
     text-align: center;
     font-variant-numeric: tabular-nums;
   }
@@ -215,7 +224,7 @@
       font-size: 20px;
     }
     .count {
-      min-width: 60px;
+      min-width: 72px;
     }
   }
 </style>

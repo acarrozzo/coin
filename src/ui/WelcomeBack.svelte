@@ -2,6 +2,7 @@
   import { game } from './gameStore.svelte';
   import { RESOURCES, type ResourceId } from '../content/resources';
   import { formatNumber } from '../engine/numbers';
+  import X from '@lucide/svelte/icons/x';
 
   const summary = $derived(game.welcomeBack);
 
@@ -28,7 +29,9 @@
         {/each}
       </ul>
     </div>
-    <button onclick={() => game.dismissWelcome()} aria-label="Dismiss">✕</button>
+    <button onclick={() => game.dismissWelcome()} aria-label="Dismiss">
+      <X size={16} aria-hidden="true" />
+    </button>
   </div>
 {/if}
 
@@ -55,6 +58,9 @@
     color: var(--good);
   }
   button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
     border: none;
     color: var(--text-muted);

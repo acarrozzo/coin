@@ -109,11 +109,20 @@ function createGameStore() {
 
   function stop(): void {
     if (!running) return;
+    teardown();
+    persist();
+  }
+
+  /**
+   * Halt the loop and detach lifecycle listeners *without* persisting. Used
+   * before an intentional reload (reset/import) so the `beforeunload` handler
+   * can't write the current in-memory state back over what we just stored.
+   */
+  function teardown(): void {
     running = false;
     cancelAnimationFrame(rafId);
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('beforeunload', persist);
-    persist();
   }
 
   return {
@@ -161,11 +170,13 @@ function createGameStore() {
         return false;
       }
       saveToStorage(deserialize(raw, Date.now()));
+      teardown();
       location.reload();
       return true;
     },
     reset(): void {
       clearStorage();
+      teardown();
       location.reload();
     },
     start,

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fly, fade } from 'svelte/transition';
   import { notify } from './notify.svelte';
+  import Castle from '@lucide/svelte/icons/castle';
 </script>
 
 <div class="toasts" aria-live="polite">
@@ -11,7 +12,9 @@
       out:fade={{ duration: 200 }}
       onclick={() => notify.dismiss(toast.id)}
     >
-      {#if toast.kind === 'level'}🏰 {/if}{toast.text}
+      {#if toast.kind === 'level'}<Castle size={18} aria-hidden="true" />{/if}<span
+        >{toast.text}</span
+      >
     </button>
   {/each}
 </div>
@@ -31,6 +34,9 @@
     padding: 0 var(--space-4);
   }
   .toast {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     pointer-events: auto;
     max-width: 90vw;
     font-family: var(--font-body);

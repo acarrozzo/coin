@@ -37,6 +37,7 @@
   --good: #2e7d32;
   --bad: #c62828;
   --gold: #b8860b;
+  --wisdom: #9159a8;
 }
 
 /* Dark theme — explicit override */
@@ -52,6 +53,7 @@
   --good: #a3be8c;
   --bad: #bf616a;
   --gold: #ebcb8b;
+  --wisdom: #b48ead;
 }
 
 /* Follow the OS when no explicit theme is set */

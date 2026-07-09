@@ -11,6 +11,7 @@
     getAvailableWorkers,
   } from '../engine/selectors';
   import { formatNumber } from '../engine/numbers';
+  import PersonStanding from '@lucide/svelte/icons/person-standing';
 
   const gs = $derived(game.state);
   const tier = $derived(getTier(gs.level));
@@ -34,13 +35,19 @@
       <div class="action">
         <span class="cost">
           {#each costEntries(next.cost) as [rid, amt] (rid)}
-            <span class="cost-item" class:short={gs.resources[rid].amount.lt(amt)}>
+            {@const met = gs.resources[rid].amount.gte(amt)}
+            <span class="cost-item" class:short={!met} class:met>
               {formatNumber(amt)} {RESOURCES[rid].name}
             </span>
           {/each}
           {#if next.workersRequired}
-            <span class="cost-item" class:short={gs.workers.trained < next.workersRequired}>
-              {next.workersRequired} 👷 trained
+            {@const met = gs.workers.trained >= next.workersRequired}
+            <span class="cost-item" class:short={!met} class:met>
+              {next.workersRequired} <PersonStanding
+                size={13}
+                color="var(--gold)"
+                aria-hidden="true"
+              /> trained
             </span>
           {/if}
         </span>
@@ -118,12 +125,18 @@
     flex-wrap: wrap;
   }
   .cost-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
   .cost-item.short {
     color: var(--bad);
+  }
+  .cost-item.met {
+    color: var(--good);
   }
   button {
     padding: 6px 16px;

@@ -13,6 +13,9 @@
     willBreakHex,
   } from '../engine/selectors';
   import { formatNumber } from '../engine/numbers';
+  import Swords from '@lucide/svelte/icons/swords';
+  import Trophy from '@lucide/svelte/icons/trophy';
+  import Sparkles from '@lucide/svelte/icons/sparkles';
 
   const gs = $derived(game.state);
 
@@ -29,7 +32,7 @@
 
     <div class="army">
       <span class="label">Standing army</span>
-      <span class="power">⚔ {formatNumber(getArmyPower(gs))} power</span>
+      <span class="power"><Swords size={15} color="var(--gold)" aria-hidden="true" /> {formatNumber(getArmyPower(gs))} power</span>
     </div>
     <div class="units">
       {#each UNIT_IDS as id (id)}
@@ -53,8 +56,10 @@
       </div>
     </div>
     <div class="tally">
-      🏆 {formatNumber(gs.resources.honor.amount)} honor · {gs.combat.assault.wins}W / {gs.combat
-        .assault.losses}L
+      <Trophy size={14} color="var(--gold)" aria-hidden="true" /> {formatNumber(
+        gs.resources.honor.amount,
+      )} honor · {gs
+        .combat.assault.wins}W / {gs.combat.assault.losses}L
     </div>
 
     <!-- Hex track -->
@@ -74,8 +79,10 @@
         </div>
       </div>
       <div class="tally">
-        ✨ {formatNumber(gs.resources.wisdom.amount)} wisdom · {gs.combat.hex.wins}W / {gs.combat.hex
-          .losses}L
+        <Sparkles size={14} color="var(--wisdom)" aria-hidden="true" /> {formatNumber(
+          gs.resources.wisdom.amount,
+        )} wisdom ·
+        {gs.combat.hex.wins}W / {gs.combat.hex.losses}L
       </div>
     {/if}
   </section>
@@ -102,6 +109,9 @@
     font-size: 17px;
   }
   .power {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     color: var(--gold);
     font-variant-numeric: tabular-nums;
   }
@@ -152,6 +162,9 @@
     color: var(--bad);
   }
   .tally {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     margin-top: var(--space-2);
     color: var(--text-muted);
     font-size: 14px;
