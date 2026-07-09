@@ -1,11 +1,12 @@
 import { Decimal, D } from './numbers';
 import { RESOURCE_IDS, type ResourceId } from '../content/resources';
 import { BUILDING_IDS, type BuildingId } from '../content/buildings';
+import { ASSAULT, HEX } from '../content/combat';
 
 export type { ResourceId, BuildingId };
 
 /** Bumped whenever the save shape changes; drives migrations (see save.ts). */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** Trained workers the player starts with. */
 export const STARTING_WORKERS = 3;
@@ -34,6 +35,19 @@ export interface GameState {
     assigned: Record<ResourceId, number>;
   };
   buildings: Record<BuildingId, { level: number }>;
+  combat: {
+    /** Assault track: seconds to next attack, current wave, and tallies. */
+    assault: ThreatState;
+    /** Hex track. */
+    hex: ThreatState;
+  };
+}
+
+export interface ThreatState {
+  timer: number;
+  wave: number;
+  wins: number;
+  losses: number;
 }
 
 /** A fresh game. `now` is injected so tests stay deterministic. */
@@ -59,5 +73,9 @@ export function createInitialState(now: number): GameState {
     resources,
     workers: { trained: STARTING_WORKERS, bonus: 0, assigned },
     buildings,
+    combat: {
+      assault: { timer: ASSAULT.intervalSeconds, wave: 0, wins: 0, losses: 0 },
+      hex: { timer: HEX.intervalSeconds, wave: 0, wins: 0, losses: 0 },
+    },
   };
 }

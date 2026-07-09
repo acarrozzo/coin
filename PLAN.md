@@ -208,17 +208,22 @@ Using `coin-old` as the spec, express the base game as content data:
 - Settings: theme toggle, save export/import, hard reset.
 - **Done when:** it feels good to play on a phone and a desktop.
 
-### Phase 4 — Battle (auto-battler first) + combat-coupled content  *(3–5 days)*
-- Port the **Barracks (units), Castle chain, Wizard Tower, Cloud Shaman**, their
-  quest items (magic orb/soul gem/star metal/holy water, ward, ether, dream
-  leaf), and the **combat-gated settlement tiers** (Town→Kingdom) — deferred
-  from Phase 2 because they only matter with combat.
-- Replace the single RNG roll with a **deterministic power-vs-power auto-battler**:
-  unit compositions, counters, escalating assaults, honor rewards, defeat
-  consequences — all data-driven (`units.ts`, `enemies.ts`).
-- Port hexes/ward as a second threat track.
-- **Stretch/expansion:** wave/tower-defense mode as the marquee feature.
-- **Done when:** combat is a real subsystem with meaningful unit decisions.
+### Phase 4 — Battle (auto-battler) + combat-coupled content  *(done)*
+- Ported the **Barracks** (archer/warrior/mage units) and **Wizard Tower**
+  (ether/ward), plus the **combat-gated settlement tiers** Large Village → Town →
+  City → **Kingdom**, deferred from Phase 2.
+- **Deterministic power-vs-power combat:** two escalating threat tracks —
+  **assaults** (army power vs threat → honor; casualties on defeat) and **hexes**
+  (ward power vs threat → wisdom; wards consumed on defeat). Data-driven in
+  `content/combat.ts`. Honor/wisdom gate the upper tiers, closing the loop.
+- Combat runs live only (not during offline catch-up), with win/loss toasts and a
+  Defense panel forecasting each attack (will hold / will fall).
+- **Simplifications from the original** (candidates for later): the quest-item web
+  (magic orb / soul gem / star metal / holy water) and Cloud Shaman / dream leaf
+  were replaced by the cleaner honor/wisdom economy; unit-type **counters**
+  (rock-paper-scissors) and a **wave/tower-defense** mode remain as future
+  enhancements.
+- **Done when:** combat is a real, escalating subsystem that drives progression.
 
 ### Phase 5 — Prestige  *(2–4 days)*
 - **G1:** reset for a permanent multiplier currency (Honor-based), with a

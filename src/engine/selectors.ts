@@ -4,6 +4,7 @@ import { RESOURCE_IDS } from '../content/resources';
 import { BUILDINGS } from '../content/buildings';
 import { PRODUCERS, type StructureId } from '../content/producers';
 import { getTier, SETTLEMENT_TIERS, type ResourceCost } from '../content/settlement';
+import { ASSAULT, HEX, UNIT_IDS, UNIT_POWER, WARD_POWER, type ThreatConfig } from '../content/combat';
 
 // ---------- Structures ----------
 
@@ -15,7 +16,7 @@ export function getStructureLevel(state: GameState, structure: StructureId): num
 
 export function isResourceUnlocked(state: GameState, id: ResourceId): boolean {
   const p = PRODUCERS[id];
-  return getStructureLevel(state, p.structure) >= p.minLevel;
+  return p !== undefined && getStructureLevel(state, p.structure) >= p.minLevel;
 }
 
 export function unlockedResources(state: GameState): ResourceId[] {
@@ -35,8 +36,8 @@ export function isAtCapacity(state: GameState, id: ResourceId): boolean {
 
 /** Nominal production per second (workers × rate; ignores inputs and caps). */
 export function getProductionRate(state: GameState, id: ResourceId): Decimal {
-  if (!isResourceUnlocked(state, id)) return D(0);
   const p = PRODUCERS[id];
+  if (!p || !isResourceUnlocked(state, id)) return D(0);
   const perWorker = p.outputPerCycle / p.cycleSeconds;
   return D(state.workers.assigned[id]).times(perWorker);
 }
@@ -60,6 +61,7 @@ export function getAvailableWorkers(state: GameState): number {
 /** Max workers assignable to a single line. */
 export function getMaxWorkers(state: GameState, id: ResourceId): number {
   const p = PRODUCERS[id];
+  if (!p) return 0;
   return p.workerCap === 'pool' ? getTotalWorkers(state) : getStructureLevel(state, p.structure);
 }
 
@@ -115,4 +117,50 @@ export function canUpgradeSettlement(state: GameState): boolean {
   if (!next) return false;
   if (next.workersRequired && state.workers.trained < next.workersRequired) return false;
   return canAfford(state, next.cost);
+}
+
+// ---------- Combat ----------
+
+export function isCombatUnlocked(state: GameState): boolean {
+  return state.level >= ASSAULT.unlockLevel;
+}
+
+export function isHexUnlocked(state: GameState): boolean {
+  return state.level >= HEX.unlockLevel;
+}
+
+/** Total combat power of the standing army. */
+export function getArmyPower(state: GameState): Decimal {
+  let power = D(0);
+  for (const id of UNIT_IDS) {
+    power = power.plus(state.resources[id].amount.times(UNIT_POWER[id] ?? 0));
+  }
+  return power;
+}
+
+/** Total defensive power of your wards (vs hexes). */
+export function getWardPower(state: GameState): Decimal {
+  return state.resources.ward.amount.times(WARD_POWER);
+}
+
+/** Threat power at a given wave for a threat track. */
+export function getThreatPower(cfg: ThreatConfig, wave: number): Decimal {
+  return D(cfg.basePower).times(Math.pow(cfg.growth, wave));
+}
+
+export function getNextAssaultPower(state: GameState): Decimal {
+  return getThreatPower(ASSAULT, state.combat.assault.wave);
+}
+
+export function getNextHexPower(state: GameState): Decimal {
+  return getThreatPower(HEX, state.combat.hex.wave);
+}
+
+/** Would the current army repel the next assault? (UI forecast) */
+export function willRepelAssault(state: GameState): boolean {
+  return getArmyPower(state).gte(getNextAssaultPower(state));
+}
+
+export function willBreakHex(state: GameState): boolean {
+  return getWardPower(state).gte(getNextHexPower(state));
 }

@@ -31,7 +31,7 @@ export function simulate(state: GameState, seconds: number): void {
   let remaining = seconds;
   while (remaining > 0) {
     const dt = Math.min(step, remaining);
-    tick(state, dt);
+    tick(state, dt, { combat: false }); // combat only resolves while actively playing
     remaining -= dt;
   }
 }

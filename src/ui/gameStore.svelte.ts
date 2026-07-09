@@ -11,6 +11,7 @@ import {
 import { assignWorker, trainWorker } from '../engine/actions';
 import { buildBuilding } from '../systems/buildings';
 import { upgradeSettlement } from '../systems/settlement';
+import type { CombatEvent } from '../systems/combat';
 import { BUILDINGS } from '../content/buildings';
 import { getTier } from '../content/settlement';
 import { notify } from './notify.svelte';
@@ -38,6 +39,24 @@ function createGameStore() {
     saveToStorage(state);
   }
 
+  function announceCombat(e: CombatEvent): void {
+    if (e.kind === 'assault') {
+      if (e.won) {
+        notify.push(`Assault repelled — wave ${e.wave} cleared (+honor)`, 'good');
+        sound.play.build();
+      } else {
+        notify.push(`Walls breached on wave ${e.wave} — you took casualties`, 'info');
+      }
+    } else {
+      if (e.won) {
+        notify.push(`Hex broken — trial ${e.wave} (+wisdom)`, 'good');
+        sound.play.build();
+      } else {
+        notify.push(`A hex struck — wards consumed`, 'info');
+      }
+    }
+  }
+
   function frame(ts: number): void {
     if (!running) return;
     if (lastFrame === 0) lastFrame = ts;
@@ -47,10 +66,12 @@ function createGameStore() {
     if (dt > 1) dt = 1;
 
     accumulator += dt;
+    const events: CombatEvent[] = [];
     while (accumulator >= TICK_STEP) {
-      tick(state, TICK_STEP);
+      events.push(...tick(state, TICK_STEP));
       accumulator -= TICK_STEP;
     }
+    for (const e of events) announceCombat(e);
 
     sinceSaveMs += dt * 1000;
     if (sinceSaveMs >= AUTOSAVE_MS) {

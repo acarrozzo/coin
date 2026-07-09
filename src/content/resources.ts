@@ -1,7 +1,7 @@
 /**
  * Resource content — every material in the economy, as data.
- * Adding a resource is a data edit here (plus its id in the union) and a
- * matching producer in producers.ts.
+ * Adding a resource is a data edit here (plus its id in the union) and, if it's
+ * producible, a matching producer in producers.ts.
  */
 
 export type ResourceId =
@@ -16,9 +16,16 @@ export type ResourceId =
   | 'sword'
   | 'staff'
   | 'leather'
-  | 'fur';
+  | 'fur'
+  | 'ether'
+  | 'ward'
+  | 'archer'
+  | 'warrior'
+  | 'mage'
+  | 'honor'
+  | 'wisdom';
 
-export type ResourceCategory = 'base' | 'metal' | 'weapon' | 'good';
+export type ResourceCategory = 'base' | 'metal' | 'weapon' | 'good' | 'magic' | 'unit' | 'stat';
 
 export interface ResourceDef {
   name: string;
@@ -42,6 +49,16 @@ export const RESOURCES: Record<ResourceId, ResourceDef> = {
 
   leather: { name: 'Leather', category: 'good', blurb: 'Cured hide for armor.' },
   fur: { name: 'Fur', category: 'good', blurb: 'Warmth against the cold.' },
+
+  ether: { name: 'Ether', category: 'magic', blurb: 'Raw arcane essence.' },
+  ward: { name: 'Ward', category: 'magic', blurb: 'Turns aside dark magic.' },
+
+  archer: { name: 'Archer', category: 'unit', blurb: 'Rains arrows from the walls.' },
+  warrior: { name: 'Warrior', category: 'unit', blurb: 'Holds the line.' },
+  mage: { name: 'Mage', category: 'unit', blurb: 'Unleashes devastation.' },
+
+  honor: { name: 'Honor', category: 'stat', blurb: 'Won by repelling assaults.' },
+  wisdom: { name: 'Wisdom', category: 'stat', blurb: 'Won by breaking hexes.' },
 };
 
 export const RESOURCE_IDS = Object.keys(RESOURCES) as ResourceId[];

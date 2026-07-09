@@ -5,7 +5,8 @@
  * no inputs.
  *
  * Rates below are per worker. `outputPerCycle / cycleSeconds` = output/sec/worker.
- * Numbers adapted from the original's auto-loop yields and tick durations.
+ * Not every resource is producible (honor/wisdom come from combat), so this map
+ * is partial.
  */
 import type { ResourceId, ResourceCategory } from './resources';
 import type { BuildingId } from './buildings';
@@ -14,7 +15,6 @@ import type { BuildingId } from './buildings';
 export type StructureId = 'settlement' | BuildingId;
 
 export interface ProducerDef {
-  /** Output resource (also the producer's key). */
   output: ResourceId;
   category: ResourceCategory;
   /** Structure whose level gates this line. */
@@ -35,7 +35,7 @@ export interface ProducerDef {
   inputs?: Partial<Record<ResourceId, number>>;
 }
 
-export const PRODUCERS: Record<ResourceId, ProducerDef> = {
+export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
   // Base gathering (settlement-gated, pool-limited)
   wood: { output: 'wood', category: 'base', structure: 'settlement', minLevel: 1, workerCap: 'pool', outputPerCycle: 1, cycleSeconds: 1 },
   stone: { output: 'stone', category: 'base', structure: 'settlement', minLevel: 1, workerCap: 'pool', outputPerCycle: 1, cycleSeconds: 2 },
@@ -55,7 +55,16 @@ export const PRODUCERS: Record<ResourceId, ProducerDef> = {
   spear: { output: 'spear', category: 'weapon', structure: 'hunterscabin', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 2, inputs: { wood: 8, stone: 4 } },
   leather: { output: 'leather', category: 'good', structure: 'hunterscabin', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 5, inputs: { spear: 1 } },
   fur: { output: 'fur', category: 'good', structure: 'hunterscabin', minLevel: 3, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 5, inputs: { spear: 1 } },
+
+  // Wizard Tower — arcane
+  ether: { output: 'ether', category: 'magic', structure: 'wizardtower', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 2, inputs: { wood: 50 } },
+  ward: { output: 'ward', category: 'magic', structure: 'wizardtower', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 5, inputs: { ether: 5 } },
+
+  // Barracks — the standing army
+  archer: { output: 'archer', category: 'unit', structure: 'barracks', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 5, inputs: { arrow: 10, leather: 2 } },
+  warrior: { output: 'warrior', category: 'unit', structure: 'barracks', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 8, inputs: { sword: 1, fur: 3 } },
+  mage: { output: 'mage', category: 'unit', structure: 'barracks', minLevel: 3, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { staff: 1, ether: 3 } },
 };
 
-/** Every resource has exactly one producer (enforced by the Record type above). */
+/** Ids of producible resources (honor/wisdom excluded — they come from combat). */
 export const PRODUCER_IDS = Object.keys(PRODUCERS) as ResourceId[];

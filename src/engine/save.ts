@@ -29,6 +29,9 @@ const migrations: Record<number, (data: RawSave) => RawSave> = {
       },
     };
   },
+  // v2 → v3 (Phase 4): combat state added. Nothing to transform — the new
+  // fields fall back to fresh defaults in deserialize.
+  2: (data) => ({ ...data, version: 3 }),
 };
 
 function migrate(data: RawSave): RawSave {
@@ -60,6 +63,7 @@ export function serialize(state: GameState): string {
     resources,
     workers: state.workers,
     buildings: state.buildings,
+    combat: state.combat,
   });
 }
 
@@ -118,7 +122,22 @@ export function deserialize(raw: string, now: number): GameState {
     }
   }
 
+  const combat = data.combat as
+    | { assault?: Record<string, unknown>; hex?: Record<string, unknown> }
+    | undefined;
+  if (combat) {
+    reviveThreat(combat.assault, state.combat.assault);
+    reviveThreat(combat.hex, state.combat.hex);
+  }
+
   return state;
+}
+
+function reviveThreat(raw: Record<string, unknown> | undefined, target: GameState['combat']['assault']): void {
+  if (!raw) return;
+  for (const key of ['timer', 'wave', 'wins', 'losses'] as const) {
+    if (typeof raw[key] === 'number') target[key] = raw[key];
+  }
 }
 
 export function saveToStorage(state: GameState): void {

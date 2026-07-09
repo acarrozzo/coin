@@ -22,6 +22,8 @@
     'deepmine',
     'blacksmith',
     'hunterscabin',
+    'wizardtower',
+    'barracks',
   ];
   const STRUCTURE_LABELS: Record<StructureId, string> = {
     settlement: 'Gathering',
@@ -29,13 +31,15 @@
     deepmine: 'Deep Mine',
     blacksmith: 'Blacksmith',
     hunterscabin: "Hunter's Cabin",
+    wizardtower: 'Wizard Tower',
+    barracks: 'Barracks',
   };
 
   const groups = $derived(
     STRUCTURE_ORDER.map((structure) => ({
       structure,
       label: STRUCTURE_LABELS[structure],
-      ids: unlocked.filter((id) => PRODUCERS[id].structure === structure),
+      ids: unlocked.filter((id) => PRODUCERS[id]?.structure === structure),
     })).filter((g) => g.ids.length > 0),
   );
 
@@ -48,7 +52,7 @@
   // A crafting line with workers but a completely empty input is "starved".
   function starvedInput(id: ResourceId): ResourceId | null {
     const p = PRODUCERS[id];
-    if (!p.inputs || gs.workers.assigned[id] === 0) return null;
+    if (!p?.inputs || gs.workers.assigned[id] === 0) return null;
     for (const rid of Object.keys(p.inputs) as ResourceId[]) {
       if (gs.resources[rid].amount.lte(0)) return rid;
     }

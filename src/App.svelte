@@ -4,6 +4,7 @@
   import { sound } from './ui/sound.svelte';
   import { getAvailableWorkers, getTotalWorkers } from './engine/selectors';
   import SettlementPanel from './ui/SettlementPanel.svelte';
+  import CombatPanel from './ui/CombatPanel.svelte';
   import ResourcePanel from './ui/ResourcePanel.svelte';
   import BuildingPanel from './ui/BuildingPanel.svelte';
   import SettingsPanel from './ui/SettingsPanel.svelte';
@@ -65,6 +66,7 @@
   <main>
     <WelcomeBack />
     <SettlementPanel />
+    <CombatPanel />
     <ResourcePanel />
     <BuildingPanel />
     <SettingsPanel />

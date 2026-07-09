@@ -6,7 +6,7 @@
  */
 import type { ResourceCost } from './settlement';
 
-export type BuildingId = 'farm' | 'deepmine' | 'blacksmith' | 'hunterscabin';
+export type BuildingId = 'farm' | 'deepmine' | 'blacksmith' | 'hunterscabin' | 'wizardtower' | 'barracks';
 
 export interface BuildingLevel {
   cost: ResourceCost;
@@ -62,6 +62,25 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
       { cost: { wood: 300, stone: 200 }, summary: 'Unlocks iron (smelted from food).' },
       { cost: { wood: 600, stone: 400 }, summary: 'Unlocks steel.' },
       { cost: { wood: 1200, stone: 800, iron: 50 }, summary: 'Unlocks mithril.' },
+    ],
+  },
+  barracks: {
+    name: 'Barracks',
+    blurb: 'Trains the standing army that defends your walls.',
+    availableAtLevel: 5,
+    levels: [
+      { cost: { wood: 400, stone: 400 }, summary: 'Unlocks archers (arrows + leather).' },
+      { cost: { wood: 800, stone: 800, sword: 5 }, summary: 'Unlocks warriors (swords + fur).' },
+      { cost: { wood: 1600, stone: 1600, staff: 5 }, summary: 'Unlocks mages (staves + ether).' },
+    ],
+  },
+  wizardtower: {
+    name: 'Wizard Tower',
+    blurb: 'Draws ether and weaves protective wards.',
+    availableAtLevel: 6,
+    levels: [
+      { cost: { wood: 1000, stone: 500 }, summary: 'Unlocks ether (from wood).' },
+      { cost: { wood: 2000, stone: 1000, mithril: 5 }, summary: 'Unlocks wards (from ether).' },
     ],
   },
 };

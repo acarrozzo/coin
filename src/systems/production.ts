@@ -20,6 +20,7 @@ export function runProduction(state: GameState, dt: number): void {
     if (workers <= 0 || !isResourceUnlocked(state, id)) continue;
 
     const p = PRODUCERS[id];
+    if (!p) continue;
     const perWorkerPerSec = p.outputPerCycle / p.cycleSeconds;
     let output = D(workers * perWorkerPerSec * dt);
     if (output.lte(0)) continue;
