@@ -2,7 +2,10 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import ResourcePanel from '../src/ui/ResourcePanel.svelte';
+import SettlementPanel from '../src/ui/SettlementPanel.svelte';
 import { game } from '../src/ui/gameStore.svelte';
+import { notify } from '../src/ui/notify.svelte';
+import { D } from '../src/engine/numbers';
 
 // Runtime check: proves Svelte 5 runes reactivity + the store wiring + event
 // handlers all work together in a real DOM — not just that the engine is correct.
@@ -22,5 +25,16 @@ describe('ResourcePanel (runtime)', () => {
     expect(game.state.workers.assigned.wood).toBe(before + 1);
     // ...and the DOM reactively reflects it.
     expect(await screen.findByText(`${before + 1} 👷`)).toBeTruthy();
+  });
+
+  it('upgrades the settlement and fires a level-up toast', async () => {
+    game.state.resources.wood.amount = D(20);
+    game.state.resources.stone.amount = D(20);
+    render(SettlementPanel);
+
+    await fireEvent.click(screen.getByText(/Upgrade →/));
+
+    expect(game.state.level).toBe(2);
+    expect(notify.toasts.some((t) => t.kind === 'level')).toBe(true);
   });
 });

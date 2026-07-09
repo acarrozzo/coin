@@ -1,10 +1,20 @@
 import { createInitialState, type GameState, type ResourceId, type BuildingId } from '../engine/state';
 import { tick } from '../engine/tick';
 import { applyOffline, type OfflineSummary } from '../engine/offline';
-import { loadFromStorage, saveToStorage, clearStorage } from '../engine/save';
+import {
+  loadFromStorage,
+  saveToStorage,
+  clearStorage,
+  serialize,
+  deserialize,
+} from '../engine/save';
 import { assignWorker, trainWorker } from '../engine/actions';
 import { buildBuilding } from '../systems/buildings';
 import { upgradeSettlement } from '../systems/settlement';
+import { BUILDINGS } from '../content/buildings';
+import { getTier } from '../content/settlement';
+import { notify } from './notify.svelte';
+import { sound } from './sound.svelte';
 
 /** Fixed simulation step in seconds (10 ticks/sec). */
 const TICK_STEP = 0.1;
@@ -99,13 +109,39 @@ function createGameStore() {
       assignWorker(state, id, delta);
     },
     train(): void {
-      if (trainWorker(state)) persist();
+      if (trainWorker(state)) {
+        notify.push('Worker trained', 'info');
+        sound.play.train();
+        persist();
+      }
     },
     build(id: BuildingId): void {
-      if (buildBuilding(state, id)) persist();
+      const wasBuilt = state.buildings[id].level > 0;
+      if (buildBuilding(state, id)) {
+        notify.push(`${BUILDINGS[id].name} ${wasBuilt ? 'upgraded' : 'built'}`, 'good');
+        sound.play.build();
+        persist();
+      }
     },
     upgradeSettlement(): void {
-      if (upgradeSettlement(state)) persist();
+      if (upgradeSettlement(state)) {
+        notify.push(`Reached ${getTier(state.level)?.name ?? `Level ${state.level}`}!`, 'level');
+        sound.play.level();
+        persist();
+      }
+    },
+    exportSave(): string {
+      return serialize(state);
+    },
+    importSave(raw: string): boolean {
+      try {
+        JSON.parse(raw); // reject non-JSON before touching storage
+      } catch {
+        return false;
+      }
+      saveToStorage(deserialize(raw, Date.now()));
+      location.reload();
+      return true;
     },
     reset(): void {
       clearStorage();

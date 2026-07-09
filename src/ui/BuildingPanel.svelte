@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fly } from 'svelte/transition';
   import { game } from './gameStore.svelte';
   import { BUILDINGS, BUILDING_IDS } from '../content/buildings';
   import { RESOURCES, type ResourceId } from '../content/resources';
@@ -28,7 +29,7 @@
       {@const def = BUILDINGS[id]}
       {@const next = getNextBuildingLevel(gs, id)}
       {@const owned = gs.buildings[id].level}
-      <div class="row">
+      <div class="row" transition:fly={{ y: 8, duration: 260 }}>
         <div class="info">
           <span class="name"
             >{def.name}{#if owned > 0}<span class="lvl"> · Lv {owned}</span>{/if}</span

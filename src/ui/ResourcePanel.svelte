@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fly } from 'svelte/transition';
   import { game } from './gameStore.svelte';
   import { RESOURCES, type ResourceId } from '../content/resources';
   import { PRODUCERS, type StructureId } from '../content/producers';
@@ -58,13 +59,13 @@
 <section class="panel">
   <h2>Resources</h2>
   {#each groups as group (group.structure)}
-    <div class="group">
+    <div class="group" transition:fly={{ y: 10, duration: 300 }}>
       <h3>{group.label}</h3>
       {#each group.ids as id (id)}
         {@const cap = getCapacity(gs, id)}
         {@const assigned = gs.workers.assigned[id]}
         {@const starved = starvedInput(id)}
-        <div class="row">
+        <div class="row" transition:fly={{ y: 8, duration: 260 }}>
           <div class="head">
             <span class="name">{RESOURCES[id].name}</span>
             <span class="amount">
@@ -201,5 +202,16 @@
   button:disabled {
     opacity: 0.35;
     cursor: not-allowed;
+  }
+
+  @media (max-width: 480px) {
+    button {
+      width: 40px;
+      height: 40px;
+      font-size: 20px;
+    }
+    .count {
+      min-width: 60px;
+    }
   }
 </style>

@@ -42,6 +42,20 @@ button {
   font-family: var(--font-body);
   cursor: pointer;
 }
+/* Tactile press feedback across all buttons. */
+button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
+}
+
+/* Respect users who prefer less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
 
 /* Subtle entrance used across panels, ported from the original. */
 @keyframes fadeIn {
