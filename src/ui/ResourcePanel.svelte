@@ -322,10 +322,11 @@
   }
   .group {
     background: var(--bg-panel);
-    border: 1px solid var(--border);
+    border: var(--panel-border);
     border-top: 3px solid var(--accent);
-    border-radius: var(--radius);
-    padding: var(--space-4);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    padding: var(--panel-pad);
   }
 
   /* --- Group header --- */

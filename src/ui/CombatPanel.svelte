@@ -91,9 +91,10 @@
 <style>
   .panel {
     background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: var(--space-4);
+    border: var(--panel-border);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    padding: var(--panel-pad);
     animation: fadeIn var(--fade-in);
   }
   h2 {

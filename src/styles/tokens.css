@@ -25,6 +25,21 @@
   --fade-in: 1.25s;
   --transition: 0.18s ease;
 
+  /*
+   * Layout tokens — driven by [data-layout] presets in themes.css so the
+   * Look Explorer can reshape width, density, panel framing, and the header
+   * without touching component markup. These are the defaults (the "Classic"
+   * layout); every layout preset overrides a subset.
+   */
+  --content-width: 720px;
+  --panel-gap: var(--space-4); /* spacing between panels */
+  --panel-pad: var(--space-4); /* spacing inside a panel */
+  --panel-border: 1px solid var(--border);
+  --panel-radius: var(--radius);
+  --panel-shadow: none;
+  --header-border: 1px solid var(--border);
+  --header-pad-y: var(--space-2);
+
   /* Light theme (default) */
   --bg: #f7f7f7;
   --bg-panel: #ffffff;

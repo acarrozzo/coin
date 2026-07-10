@@ -73,8 +73,9 @@
 <style>
   .panel {
     background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border: var(--panel-border);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
     padding: var(--space-3) var(--space-4);
   }
   summary {

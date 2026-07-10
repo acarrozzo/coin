@@ -1,0 +1,660 @@
+/*
+ * Look Explorer presets for Coin & Castle.
+ *
+ * Three independent axes, each selected by a data-attribute on <html> and each
+ * overriding only the design tokens it owns:
+ *   [data-palette]  → colors
+ *   [data-font]     → typography
+ *   [data-layout]   → width / density / framing / header / columns
+ *
+ * Because every component already styles itself from these tokens, swapping an
+ * attribute reskins the whole app. The theme store (ui/theme.svelte.ts) stamps
+ * the attributes and persists them. Presets are additive: to add a look, add a
+ * block here and an entry in the store — no component changes required.
+ *
+ * Imported after tokens.css, so these blocks win over the :root defaults.
+ */
+
+/* ============================== PALETTES ============================== */
+
+:root[data-palette='nord'] {
+  --bg: #2e3440;
+  --bg-panel: #373e4d;
+  --bg-header: #373e4d;
+  --text: #ffffff;
+  --text-muted: #a0a8b8;
+  --text-on-header: #cccccc;
+  --border: #4c566a;
+  --accent: #88c0d0;
+  --good: #a3be8c;
+  --bad: #bf616a;
+  --gold: #ebcb8b;
+  --wisdom: #b48ead;
+}
+
+:root[data-palette='paper'] {
+  --bg: #f7f7f7;
+  --bg-panel: #ffffff;
+  --bg-header: #373e4d;
+  --text: #1a1a1a;
+  --text-muted: #666666;
+  --text-on-header: #cccccc;
+  --border: #666666;
+  --accent: #3b6ea5;
+  --good: #2e7d32;
+  --bad: #c62828;
+  --gold: #b8860b;
+  --wisdom: #9159a8;
+}
+
+/* Warm medieval light — sun-bleached parchment and terracotta. */
+:root[data-palette='parchment'] {
+  --bg: #efe6d0;
+  --bg-panel: #f8f1de;
+  --bg-header: #5c4326;
+  --text: #3b2f1c;
+  --text-muted: #8a7a5c;
+  --text-on-header: #f0e2c4;
+  --border: #c8b48a;
+  --accent: #9c5b2e;
+  --good: #5b7d3a;
+  --bad: #a63a2e;
+  --gold: #b8860b;
+  --wisdom: #7a5aa0;
+}
+
+/* Dark stone keep lit by torchlight. */
+:root[data-palette='dungeon'] {
+  --bg: #1c1a17;
+  --bg-panel: #262320;
+  --bg-header: #17140f;
+  --text: #e8e0d0;
+  --text-muted: #9a8f7c;
+  --text-on-header: #d8c9a8;
+  --border: #3d372e;
+  --accent: #c9822f;
+  --good: #7fae5a;
+  --bad: #cf4b3a;
+  --gold: #d9a441;
+  --wisdom: #9a7bc0;
+}
+
+/* Green phosphor CRT. */
+:root[data-palette='terminal'] {
+  --bg: #0a0f0a;
+  --bg-panel: #0f160f;
+  --bg-header: #0f160f;
+  --text: #6ee66e;
+  --text-muted: #3f8f3f;
+  --text-on-header: #8effa0;
+  --border: #1f3f1f;
+  --accent: #39ff14;
+  --good: #6ee66e;
+  --bad: #ff5f5f;
+  --gold: #b6ff6e;
+  --wisdom: #7effc0;
+}
+
+/* Amber CRT. */
+:root[data-palette='amber'] {
+  --bg: #100b02;
+  --bg-panel: #171004;
+  --bg-header: #171004;
+  --text: #ffb642;
+  --text-muted: #a9741f;
+  --text-on-header: #ffce7a;
+  --border: #3a2a0a;
+  --accent: #ffb000;
+  --good: #ffd35c;
+  --bad: #ff6a3d;
+  --gold: #ffcf6a;
+  --wisdom: #ff9a4d;
+}
+
+/* Clean modern light — indigo accent. */
+:root[data-palette='modern-light'] {
+  --bg: #f4f5f7;
+  --bg-panel: #ffffff;
+  --bg-header: #1e293b;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-on-header: #e2e8f0;
+  --border: #dfe3e8;
+  --accent: #6366f1;
+  --good: #16a34a;
+  --bad: #dc2626;
+  --gold: #d97706;
+  --wisdom: #9333ea;
+}
+
+/* Clean modern dark — slate with cyan accent. */
+:root[data-palette='modern-dark'] {
+  --bg: #0f172a;
+  --bg-panel: #1e293b;
+  --bg-header: #1e293b;
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-on-header: #cbd5e1;
+  --border: #334155;
+  --accent: #22d3ee;
+  --good: #4ade80;
+  --bad: #f87171;
+  --gold: #fbbf24;
+  --wisdom: #c084fc;
+}
+
+/* ---- Popular editor themes ---- */
+
+/* Solarized Dark — Ethan Schoonover's low-strain classic. */
+:root[data-palette='solarized-dark'] {
+  --bg: #002b36;
+  --bg-panel: #073642;
+  --bg-header: #001f27;
+  --text: #93a1a1;
+  --text-muted: #586e75;
+  --text-on-header: #93a1a1;
+  --border: #14505f;
+  --accent: #268bd2;
+  --good: #859900;
+  --bad: #dc322f;
+  --gold: #b58900;
+  --wisdom: #6c71c4;
+}
+
+/* Solarized Light. */
+:root[data-palette='solarized-light'] {
+  --bg: #fdf6e3;
+  --bg-panel: #eee8d5;
+  --bg-header: #073642;
+  --text: #586e75;
+  --text-muted: #93a1a1;
+  --text-on-header: #eee8d5;
+  --border: #ddd6c1;
+  --accent: #268bd2;
+  --good: #859900;
+  --bad: #dc322f;
+  --gold: #b58900;
+  --wisdom: #6c71c4;
+}
+
+/* Gruvbox — warm, retro, earthy. */
+:root[data-palette='gruvbox'] {
+  --bg: #282828;
+  --bg-panel: #3c3836;
+  --bg-header: #1d2021;
+  --text: #ebdbb2;
+  --text-muted: #a89984;
+  --text-on-header: #ebdbb2;
+  --border: #504945;
+  --accent: #83a598;
+  --good: #b8bb26;
+  --bad: #fb4934;
+  --gold: #fabd2f;
+  --wisdom: #d3869b;
+}
+
+/* Dracula — dark with vivid neon accents. */
+:root[data-palette='dracula'] {
+  --bg: #282a36;
+  --bg-panel: #343746;
+  --bg-header: #21222c;
+  --text: #f8f8f2;
+  --text-muted: #6272a4;
+  --text-on-header: #f8f8f2;
+  --border: #44475a;
+  --accent: #bd93f9;
+  --good: #50fa7b;
+  --bad: #ff5555;
+  --gold: #f1fa8c;
+  --wisdom: #ff79c6;
+}
+
+/* Rosé Pine — muted, cozy, dusky. */
+:root[data-palette='rose-pine'] {
+  --bg: #191724;
+  --bg-panel: #1f1d2e;
+  --bg-header: #16141f;
+  --text: #e0def4;
+  --text-muted: #908caa;
+  --text-on-header: #e0def4;
+  --border: #403d52;
+  --accent: #9ccfd8;
+  --good: #31748f;
+  --bad: #eb6f92;
+  --gold: #f6c177;
+  --wisdom: #c4a7e7;
+}
+
+/* Catppuccin Mocha — soft pastel dark. */
+:root[data-palette='catppuccin-mocha'] {
+  --bg: #1e1e2e;
+  --bg-panel: #313244;
+  --bg-header: #181825;
+  --text: #cdd6f4;
+  --text-muted: #a6adc8;
+  --text-on-header: #cdd6f4;
+  --border: #45475a;
+  --accent: #89b4fa;
+  --good: #a6e3a1;
+  --bad: #f38ba8;
+  --gold: #f9e2af;
+  --wisdom: #cba6f7;
+}
+
+/* Catppuccin Latte — soft pastel light. */
+:root[data-palette='catppuccin-latte'] {
+  --bg: #eff1f5;
+  --bg-panel: #ffffff;
+  --bg-header: #4c4f69;
+  --text: #4c4f69;
+  --text-muted: #8c8fa1;
+  --text-on-header: #eff1f5;
+  --border: #ccd0da;
+  --accent: #1e66f5;
+  --good: #40a02b;
+  --bad: #d20f39;
+  --gold: #df8e1d;
+  --wisdom: #8839ef;
+}
+
+/* Royal — heraldic navy, gold, and crimson. */
+:root[data-palette='royal'] {
+  --bg: #101a3a;
+  --bg-panel: #182552;
+  --bg-header: #0a1128;
+  --text: #f4efe0;
+  --text-muted: #9aa7c7;
+  --text-on-header: #f0d98c;
+  --border: #2a3a6b;
+  --accent: #d4af37;
+  --good: #5a9e6f;
+  --bad: #c0392b;
+  --gold: #d4af37;
+  --wisdom: #8f6fc0;
+}
+
+/* Blood Moon — near-black with deep reds. */
+:root[data-palette='blood-moon'] {
+  --bg: #140a0a;
+  --bg-panel: #1f1010;
+  --bg-header: #0d0606;
+  --text: #ecccc4;
+  --text-muted: #9a6a64;
+  --text-on-header: #f0d0c8;
+  --border: #3a1a1a;
+  --accent: #c0392b;
+  --good: #8a9a5b;
+  --bad: #e74c3c;
+  --gold: #c99a4b;
+  --wisdom: #9a5a7a;
+}
+
+/* Frost — cool whites and pale ice blues (light). */
+:root[data-palette='frost'] {
+  --bg: #eef4f8;
+  --bg-panel: #ffffff;
+  --bg-header: #2c4a5e;
+  --text: #1c3a4a;
+  --text-muted: #6a8598;
+  --text-on-header: #dce9f0;
+  --border: #cadde8;
+  --accent: #3a9bd4;
+  --good: #4a9e8f;
+  --bad: #d9534f;
+  --gold: #c9a34b;
+  --wisdom: #7a8fc0;
+}
+
+/* Sepia — warm, easy-reading e-reader light. */
+:root[data-palette='sepia'] {
+  --bg: #f4ecd8;
+  --bg-panel: #faf3e0;
+  --bg-header: #5b4636;
+  --text: #4a3b2a;
+  --text-muted: #8a7358;
+  --text-on-header: #ecdfc8;
+  --border: #d8c8a8;
+  --accent: #9c6b3f;
+  --good: #6a7d3a;
+  --bad: #a4442e;
+  --gold: #b08430;
+  --wisdom: #7a5a8a;
+}
+
+/* High Contrast — bold black-on-white for accessibility. */
+:root[data-palette='high-contrast'] {
+  --bg: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-header: #000000;
+  --text: #000000;
+  --text-muted: #333333;
+  --text-on-header: #ffffff;
+  --border: #000000;
+  --accent: #0b57d0;
+  --good: #006400;
+  --bad: #cc0000;
+  --gold: #8a5a00;
+  --wisdom: #6a00b0;
+}
+
+/* Mono Grey — grayscale minimalist. */
+:root[data-palette='mono-grey'] {
+  --bg: #f2f2f2;
+  --bg-panel: #ffffff;
+  --bg-header: #2b2b2b;
+  --text: #1e1e1e;
+  --text-muted: #767676;
+  --text-on-header: #e2e2e2;
+  --border: #c9c9c9;
+  --accent: #555555;
+  --good: #3f6f4f;
+  --bad: #8a4a4a;
+  --gold: #7a7a7a;
+  --wisdom: #6a6a6a;
+}
+
+/* Vaporwave — dreamy pink, cyan, and purple. */
+:root[data-palette='vaporwave'] {
+  --bg: #2a1b3d;
+  --bg-panel: #362449;
+  --bg-header: #1c1229;
+  --text: #f6e9ff;
+  --text-muted: #b39ddb;
+  --text-on-header: #ff9de2;
+  --border: #4a3566;
+  --accent: #01cdfe;
+  --good: #05ffa1;
+  --bad: #ff5b79;
+  --gold: #fffb96;
+  --wisdom: #ff71ce;
+}
+
+/* ---- Environments ---- */
+
+/* Midnight — very dark, almost pure black. */
+:root[data-palette='midnight'] {
+  --bg: #050506;
+  --bg-panel: #0e0e11;
+  --bg-header: #000000;
+  --text: #d8d8dc;
+  --text-muted: #6a6a72;
+  --text-on-header: #c8c8cc;
+  --border: #1e1e23;
+  --accent: #5a8fca;
+  --good: #6aa06a;
+  --bad: #c85a5a;
+  --gold: #b89a4a;
+  --wisdom: #8a6ab0;
+}
+
+/* Forest — deep woodland greens and bark. */
+:root[data-palette='forest'] {
+  --bg: #14201a;
+  --bg-panel: #1d2d24;
+  --bg-header: #0e1712;
+  --text: #dfe8dc;
+  --text-muted: #8aa08c;
+  --text-on-header: #cfe0c8;
+  --border: #2c3f34;
+  --accent: #6fae5a;
+  --good: #8fbf6a;
+  --bad: #c56a4a;
+  --gold: #c9a24b;
+  --wisdom: #7a9c7a;
+}
+
+/* Desert — sun-baked sand and terracotta (light). */
+:root[data-palette='desert'] {
+  --bg: #efe0c4;
+  --bg-panel: #f6ecd6;
+  --bg-header: #7a5230;
+  --text: #4a3826;
+  --text-muted: #9a835f;
+  --text-on-header: #f0dcb8;
+  --border: #d8c29a;
+  --accent: #c9772e;
+  --good: #8a9a4a;
+  --bad: #b0432e;
+  --gold: #d99a3a;
+  --wisdom: #9a6a8a;
+}
+
+/* Alpine — snowy peaks, slate rock, and pine (light). */
+:root[data-palette='alpine'] {
+  --bg: #eef1f4;
+  --bg-panel: #ffffff;
+  --bg-header: #33414f;
+  --text: #26333f;
+  --text-muted: #6d7d8c;
+  --text-on-header: #dce4ec;
+  --border: #cbd6df;
+  --accent: #4a7fa5;
+  --good: #4f8f6a;
+  --bad: #c15b56;
+  --gold: #c2a24a;
+  --wisdom: #7a86b0;
+}
+
+/* Meadow — bright grass, sky, and wildflowers (light). */
+:root[data-palette='meadow'] {
+  --bg: #eaf3df;
+  --bg-panel: #f4faec;
+  --bg-header: #3f6b2e;
+  --text: #2c3d22;
+  --text-muted: #6f8a5c;
+  --text-on-header: #e4f0d4;
+  --border: #cadcb4;
+  --accent: #5aa02e;
+  --good: #4f9e3f;
+  --bad: #d0603a;
+  --gold: #e0b93a;
+  --wisdom: #8a6ab0;
+}
+
+/* Ocean — deep sea blues and teal. */
+:root[data-palette='ocean'] {
+  --bg: #071a26;
+  --bg-panel: #0d2734;
+  --bg-header: #04121a;
+  --text: #d6ecf2;
+  --text-muted: #79a0ad;
+  --text-on-header: #c4e6ef;
+  --border: #1a3d4c;
+  --accent: #2bb4c8;
+  --good: #4fbf9a;
+  --bad: #e06a5a;
+  --gold: #e0c04a;
+  --wisdom: #6a9bd0;
+}
+
+/* Autumn — warm foliage, ember, and bark. */
+:root[data-palette='autumn'] {
+  --bg: #241611;
+  --bg-panel: #31201a;
+  --bg-header: #1a0f0b;
+  --text: #f0dcc8;
+  --text-muted: #a88a70;
+  --text-on-header: #f0d0b0;
+  --border: #3f2a20;
+  --accent: #d2691e;
+  --good: #9a9a3a;
+  --bad: #c0392b;
+  --gold: #e0a03a;
+  --wisdom: #9a6a4a;
+}
+
+/* =============================== FONTS =============================== */
+
+/* --- Terminal & monospace --- */
+
+/* Retro terminal (original identity). */
+:root[data-font='retro'] {
+  --font-body: 'Share Tech Mono', 'Courier New', monospace;
+  --font-display: 'VT323', 'Share Tech Mono', monospace;
+  --letter-spacing: -0.02em;
+}
+
+/* IBM Plex Mono — clean, humanist, highly legible. */
+:root[data-font='plex-mono'] {
+  --font-body: 'IBM Plex Mono', 'Courier New', monospace;
+  --font-display: 'IBM Plex Mono', 'Courier New', monospace;
+  --letter-spacing: 0;
+}
+
+/* JetBrains Mono — crisp and technical. */
+:root[data-font='jetbrains'] {
+  --font-body: 'JetBrains Mono', 'Courier New', monospace;
+  --font-display: 'JetBrains Mono', 'Courier New', monospace;
+  --letter-spacing: 0;
+}
+
+/* Space Mono — quirky retro-futurist monospace. */
+:root[data-font='space-mono'] {
+  --font-body: 'Space Mono', 'Courier New', monospace;
+  --font-display: 'Space Mono', 'Courier New', monospace;
+  --letter-spacing: -0.01em;
+}
+
+/* Fira Code — smooth, rounded developer monospace. */
+:root[data-font='fira-code'] {
+  --font-body: 'Fira Code', 'Courier New', monospace;
+  --font-display: 'Fira Code', 'Courier New', monospace;
+  --letter-spacing: 0;
+}
+
+/* Inconsolata — classic, elegant coding monospace. */
+:root[data-font='inconsolata'] {
+  --font-body: 'Inconsolata', 'Courier New', monospace;
+  --font-display: 'Inconsolata', 'Courier New', monospace;
+  --letter-spacing: 0;
+}
+
+/* Sixtyfour — blocky Commodore-64 style retro computer face. */
+:root[data-font='sixtyfour'] {
+  --font-body: 'Share Tech Mono', 'Courier New', monospace;
+  --font-display: 'Sixtyfour', 'VT323', monospace;
+  --letter-spacing: 0;
+}
+
+/* Doto — LED dot-matrix display. */
+:root[data-font='dot-matrix'] {
+  --font-body: 'Doto', 'Share Tech Mono', monospace;
+  --font-display: 'Doto', 'Share Tech Mono', monospace;
+  --letter-spacing: 0.02em;
+}
+
+/* --- 8-bit / pixel --- */
+
+/* Chunky 8-bit arcade. */
+:root[data-font='pixel'] {
+  --font-body: 'Silkscreen', 'Share Tech Mono', monospace;
+  --font-display: 'Press Start 2P', 'VT323', monospace;
+  --letter-spacing: 0;
+}
+
+/* Pixelify — softer, rounder pixel sans (readable at small sizes). */
+:root[data-font='pixelify'] {
+  --font-body: 'Pixelify Sans', 'Share Tech Mono', monospace;
+  --font-display: 'Pixelify Sans', 'Share Tech Mono', monospace;
+  --letter-spacing: 0;
+}
+
+/* Jersey — athletic pixel numerals and caps. */
+:root[data-font='jersey'] {
+  --font-body: 'Jersey 10', 'Share Tech Mono', monospace;
+  --font-display: 'Jersey 10', 'Share Tech Mono', monospace;
+  --letter-spacing: 0.01em;
+}
+
+/* 8-bit monospace — DotGothic16 pixel grid, evenly spaced. */
+:root[data-font='pixel-mono'] {
+  --font-body: 'DotGothic16', 'Share Tech Mono', monospace;
+  --font-display: 'DotGothic16', 'Share Tech Mono', monospace;
+  --letter-spacing: 0;
+}
+
+/* --- Serif & medieval --- */
+
+/* Cozy — engraved caps over a warm serif body. */
+:root[data-font='serif'] {
+  --font-body: 'EB Garamond', Georgia, serif;
+  --font-display: 'Cinzel', Georgia, serif;
+  --letter-spacing: 0;
+}
+
+/* Antique — inky old-press serif, like an aged manuscript. */
+:root[data-font='im-fell'] {
+  --font-body: 'IM Fell English', Georgia, serif;
+  --font-display: 'IM Fell English', Georgia, serif;
+  --letter-spacing: 0;
+}
+
+/* Elegant — high-contrast Cormorant serif. */
+:root[data-font='cormorant'] {
+  --font-body: 'Cormorant Garamond', Georgia, serif;
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --letter-spacing: 0;
+}
+
+/* Storybook medieval — hand-drawn display over a warm serif body. */
+:root[data-font='medieval'] {
+  --font-body: 'EB Garamond', Georgia, serif;
+  --font-display: 'MedievalSharp', Georgia, serif;
+  --letter-spacing: 0;
+}
+
+/* Uncial — early-medieval manuscript display over a serif body. */
+:root[data-font='uncial'] {
+  --font-body: 'EB Garamond', Georgia, serif;
+  --font-display: 'Uncial Antiqua', Georgia, serif;
+  --letter-spacing: 0;
+}
+
+/* Blackletter — gothic display over a serif body. */
+:root[data-font='blackletter'] {
+  --font-body: 'EB Garamond', Georgia, serif;
+  --font-display: 'Pirata One', Georgia, serif;
+  --letter-spacing: 0;
+}
+
+/* ============================== LAYOUTS ============================== */
+
+/* Classic — matches the :root defaults; listed for completeness. */
+:root[data-layout='classic'] {
+  --content-width: 720px;
+}
+
+/* Wide — roomy single column. */
+:root[data-layout='wide'] {
+  --content-width: 960px;
+}
+
+/* Flat — borderless, sharp corners, slim header. */
+:root[data-layout='flat'] {
+  --radius: 0px;
+  --panel-border: 0;
+  --panel-radius: 0px;
+  --panel-shadow: none;
+  --header-border: 0;
+}
+
+/* Soft — rounded floating cards with soft shadows. */
+:root[data-layout='soft'] {
+  --radius: 10px;
+  --content-width: 760px;
+  --panel-border: 1px solid transparent;
+  --panel-radius: 14px;
+  --panel-shadow: 0 6px 22px rgba(0, 0, 0, 0.12);
+  --header-border: 0;
+  --header-pad-y: var(--space-3);
+}
+
+/* Elevated — borderless cards that float on strong drop shadows. */
+:root[data-layout='elevated'] {
+  --radius: 6px;
+  --content-width: 760px;
+  --panel-border: 1px solid transparent;
+  --panel-radius: 6px;
+  --panel-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+  --header-border: 0;
+}

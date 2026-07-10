@@ -17,10 +17,9 @@
   import SettingsPanel from './ui/SettingsPanel.svelte';
   import WelcomeBack from './ui/WelcomeBack.svelte';
   import Toasts from './ui/Toasts.svelte';
+  import ExplorerBar from './ui/ExplorerBar.svelte';
   import Castle from '@lucide/svelte/icons/castle';
   import PersonStanding from '@lucide/svelte/icons/person-standing';
-  import Sun from '@lucide/svelte/icons/sun';
-  import Moon from '@lucide/svelte/icons/moon';
   import TreePine from '@lucide/svelte/icons/tree-pine';
   import Mountain from '@lucide/svelte/icons/mountain';
   import Wheat from '@lucide/svelte/icons/wheat';
@@ -33,9 +32,6 @@
     { id: 'food', icon: Wheat },
   ];
 
-  type Theme = 'light' | 'dark';
-  const THEME_KEY = 'cc:theme';
-  let theme = $state<Theme>('dark');
   let leveled = $state(false);
 
   const gs = $derived(game.state);
@@ -56,18 +52,10 @@
   );
 
   onMount(() => {
-    const saved = localStorage.getItem(THEME_KEY) as Theme | null;
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    theme = saved ?? (prefersDark ? 'dark' : 'light');
     sound.load();
 
     game.start();
     return () => game.stop();
-  });
-
-  $effect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem(THEME_KEY, theme);
   });
 
   // Briefly flourish the level badge whenever the settlement levels up.
@@ -80,14 +68,12 @@
     }
     prevLevel = level;
   });
-
-  function toggleTheme() {
-    theme = theme === 'dark' ? 'light' : 'dark';
-  }
 </script>
 
-<header>
-  <div class="header-inner">
+<div class="topstack">
+  <ExplorerBar />
+  <header>
+    <div class="header-inner">
     <h1><Castle size={24} color="var(--gold)" aria-hidden="true" /> Coin &amp; Castle</h1>
 
     {#if stores.length > 0}
@@ -115,16 +101,10 @@
         <PersonStanding size={16} color="var(--gold)" aria-hidden="true" />
         <span class="store-bar"><span class="store-fill" style:width="{workerPct}%"></span></span>
       </span>
-      <button class="theme-toggle" onclick={toggleTheme} aria-label="Toggle theme">
-        {#if theme === 'dark'}<Sun size={18} color="var(--gold)" aria-hidden="true" />{:else}<Moon
-            size={18}
-            color="var(--accent)"
-            aria-hidden="true"
-          />{/if}
-      </button>
     </div>
   </div>
-</header>
+  </header>
+</div>
 
 <div class="app">
   <main>
@@ -145,7 +125,7 @@
 
 <style>
   .app {
-    max-width: 720px;
+    max-width: var(--content-width);
     margin: 0 auto;
     padding: 0 var(--space-4) var(--space-5);
     min-height: 100vh;
@@ -153,12 +133,15 @@
     flex-direction: column;
   }
 
-  header {
+  /* Explorer bar + game header stick together as one unit. */
+  .topstack {
     position: sticky;
     top: 0;
-    z-index: 1;
+    z-index: 5;
+  }
+  header {
     background: var(--bg-header);
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--header-border);
   }
   .header-inner {
     display: flex;
@@ -166,7 +149,7 @@
     justify-content: space-between;
     gap: var(--space-3);
     flex-wrap: wrap;
-    padding: var(--space-2) var(--space-4);
+    padding: var(--header-pad-y) var(--space-4);
   }
   header h1 {
     display: inline-flex;
@@ -244,30 +227,12 @@
       box-shadow: 0 0 0 12px transparent;
     }
   }
-  .theme-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text-on-header);
-    border-radius: var(--radius);
-    width: 34px;
-    height: 34px;
-    font-size: 18px;
-    line-height: 1;
-    transition: background var(--transition);
-  }
-  .theme-toggle:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
   main {
     flex: 1;
     padding-top: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--panel-gap);
   }
 
   footer {
