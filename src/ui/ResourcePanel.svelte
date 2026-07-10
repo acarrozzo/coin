@@ -327,6 +327,10 @@
     border-radius: var(--panel-radius);
     box-shadow: var(--panel-shadow);
     padding: var(--panel-pad);
+    /* Rows reflow based on THIS card's width (see @container below), so they
+       stack whether the viewport is small or the settings drawer pushed the
+       content column narrow. */
+    container-type: inline-size;
   }
 
   /* --- Group header --- */
@@ -548,8 +552,12 @@
     color: var(--gold);
   }
 
-  /* --- Mobile: rows fall back to a wrapped, stacked layout (no subgrid) --- */
-  @media (max-width: 560px) {
+  /* --- Narrow card: rows fall back to a wrapped, stacked layout (no subgrid).
+     Keyed on the CARD's own width, so this triggers both on small screens and
+     when the settings drawer pushes the content column narrow on desktop —
+     the fixed 6-column grid would otherwise collide the rate onto the cost
+     pills. ~700px is the point below which those columns stop fitting. --- */
+  @container (max-width: 700px) {
     .rows {
       display: block;
     }
@@ -580,6 +588,10 @@
     .rcost {
       grid-area: rcost;
     }
+  }
+
+  /* Larger tap targets on actual touch-sized screens. */
+  @media (max-width: 560px) {
     .workers button {
       width: 40px;
       height: 40px;

@@ -17,8 +17,8 @@
   import SettingsPanel from './ui/SettingsPanel.svelte';
   import WelcomeBack from './ui/WelcomeBack.svelte';
   import Toasts from './ui/Toasts.svelte';
-  import ExplorerBar from './ui/ExplorerBar.svelte';
   import Castle from '@lucide/svelte/icons/castle';
+  import Settings from '@lucide/svelte/icons/settings';
   import PersonStanding from '@lucide/svelte/icons/person-standing';
   import TreePine from '@lucide/svelte/icons/tree-pine';
   import Mountain from '@lucide/svelte/icons/mountain';
@@ -33,6 +33,10 @@
   ];
 
   let leveled = $state(false);
+  let settingsOpen = $state(false);
+  // Measured so the sticky settings column can park just below the header,
+  // whose height shifts with the chosen font/layout.
+  let headerH = $state(0);
 
   const gs = $derived(game.state);
   const available = $derived(getAvailableWorkers(gs));
@@ -70,8 +74,7 @@
   });
 </script>
 
-<div class="topstack">
-  <ExplorerBar />
+<div class="topstack" bind:clientHeight={headerH}>
   <header>
     <div class="header-inner">
     <h1><Castle size={24} color="var(--gold)" aria-hidden="true" /> Coin &amp; Castle</h1>
@@ -101,36 +104,65 @@
         <PersonStanding size={16} color="var(--gold)" aria-hidden="true" />
         <span class="store-bar"><span class="store-fill" style:width="{workerPct}%"></span></span>
       </span>
+      <button
+        class="settings-btn"
+        class:active={settingsOpen}
+        onclick={() => (settingsOpen = !settingsOpen)}
+        aria-pressed={settingsOpen}
+        aria-label="Settings"
+        title="Settings"
+      >
+        <Settings size={18} aria-hidden="true" />
+      </button>
     </div>
   </div>
   </header>
 </div>
 
-<div class="app">
-  <main>
-    <WelcomeBack />
-    <SettlementPanel />
-    <CombatPanel />
-    <ResourcePanel />
-    <SettingsPanel />
-  </main>
+<div class="layout" class:settings-open={settingsOpen} style="--header-h: {headerH}px">
+  <div class="app">
+    <main>
+      <WelcomeBack />
+      <SettlementPanel />
+      <CombatPanel />
+      <ResourcePanel />
+    </main>
 
-  <footer>
-    <span>v{__APP_VERSION__}</span>
-    <span class="tag">Coin &amp; Castle</span>
-  </footer>
+    <footer>
+      <span>v{__APP_VERSION__}</span>
+      <span class="tag">Coin &amp; Castle</span>
+    </footer>
+  </div>
+
+  {#if settingsOpen}
+    <SettingsPanel onclose={() => (settingsOpen = false)} />
+  {/if}
 </div>
 
 <Toasts />
 
 <style>
+  /* Row wrapper: main content, with settings pushed in as a right-hand
+     column when open. Both are centered as a group. */
+  .layout {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: var(--space-4);
+    padding: 0 var(--space-4);
+  }
   .app {
+    flex: 1 1 var(--content-width);
     max-width: var(--content-width);
-    margin: 0 auto;
-    padding: 0 var(--space-4) var(--space-5);
+    min-width: 0;
+    padding-bottom: var(--space-5);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+  }
+  .layout > :global(.settings) {
+    flex: 0 0 340px;
+    align-self: stretch;
   }
 
   /* Explorer bar + game header stick together as one unit. */
@@ -227,6 +259,28 @@
       box-shadow: 0 0 0 12px transparent;
     }
   }
+  .settings-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    color: var(--text-on-header);
+    padding: 4px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: color var(--transition), background var(--transition);
+  }
+  .settings-btn:hover,
+  .settings-btn.active {
+    color: var(--gold);
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .settings-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
   main {
     flex: 1;
     padding-top: var(--space-4);
@@ -251,8 +305,8 @@
   }
 
   @media (max-width: 480px) {
-    .app {
-      padding: 0 var(--space-3) var(--space-5);
+    .layout {
+      padding: 0 var(--space-3);
     }
     .header-inner {
       padding: var(--space-2) var(--space-3);
