@@ -103,7 +103,9 @@ export function isBuildingMaxed(state: GameState, id: BuildingId): boolean {
 export function canBuild(state: GameState, id: BuildingId): boolean {
   if (!isBuildingAvailable(state, id)) return false;
   const next = getNextBuildingLevel(state, id);
-  return next !== null && canAfford(state, next.cost);
+  if (!next) return false;
+  if (next.requiresLevel && state.level < next.requiresLevel) return false;
+  return canAfford(state, next.cost);
 }
 
 // ---------- Settlement ----------

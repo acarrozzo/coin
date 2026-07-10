@@ -66,7 +66,7 @@ export const SETTLEMENT_TIERS: SettlementTier[] = [
   {
     level: 6,
     name: 'Large Village',
-    cost: { wood: 800, stone: 800, food: 400, mithril: 5 },
+    cost: { wood: 800, stone: 800, food: 400 },
     workersRequired: 14,
     caps: { wood: 3000, stone: 3000, food: 3000 },
     blurb: 'Prosperous — and now a target. Raiders will come.',
@@ -74,7 +74,7 @@ export const SETTLEMENT_TIERS: SettlementTier[] = [
   {
     level: 7,
     name: 'Town',
-    cost: { wood: 1600, stone: 1600, food: 800, honor: 5 },
+    cost: { wood: 1600, stone: 1600, food: 800, mithril: 5, honor: 5 },
     workersRequired: 18,
     caps: { wood: 6000, stone: 6000, food: 6000 },
     blurb: 'Walls, gates, and a name worth defending.',

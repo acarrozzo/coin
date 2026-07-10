@@ -41,6 +41,9 @@
   const gs = $derived(game.state);
   const available = $derived(getAvailableWorkers(gs));
   const total = $derived(getTotalWorkers(gs));
+  // Busy workers (total minus idle), mirrored as a storage-style gauge.
+  const working = $derived(Math.max(0, total - available));
+  const workerPct = $derived(total > 0 ? Math.min(100, (working / total) * 100) : 0);
 
   const stores = $derived(
     CORE_STORES.flatMap((s) => {
@@ -107,10 +110,11 @@
 
     <div class="hud">
       <span class="stat" class:leveled title="Settlement level">Lv {gs.level}</span>
-      <span class="stat" title="Idle / total workers"
-        >{available}/{total}
-        <PersonStanding size={16} color="var(--gold)" aria-hidden="true" /></span
-      >
+      <span class="stat" title="Working / total workers">
+        {working}/{total}
+        <PersonStanding size={16} color="var(--gold)" aria-hidden="true" />
+        <span class="store-bar"><span class="store-fill" style:width="{workerPct}%"></span></span>
+      </span>
       <button class="theme-toggle" onclick={toggleTheme} aria-label="Toggle theme">
         {#if theme === 'dark'}<Sun size={18} color="var(--gold)" aria-hidden="true" />{:else}<Moon
             size={18}

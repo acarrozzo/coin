@@ -39,7 +39,7 @@ export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
   // Base gathering (settlement-gated, pool-limited)
   wood: { output: 'wood', category: 'base', structure: 'settlement', minLevel: 1, workerCap: 'pool', outputPerCycle: 1, cycleSeconds: 1 },
   stone: { output: 'stone', category: 'base', structure: 'settlement', minLevel: 1, workerCap: 'pool', outputPerCycle: 1, cycleSeconds: 2 },
-  food: { output: 'food', category: 'base', structure: 'farm', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 2 },
+  food: { output: 'food', category: 'base', structure: 'farm', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 3 },
 
   // Deep mine — a smelting chain (food → iron → steel → mithril)
   iron: { output: 'iron', category: 'metal', structure: 'deepmine', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 2, inputs: { food: 2 } },

@@ -9,7 +9,6 @@
   import {
     unlockedResources,
     isAtCapacity,
-    getProductionRate,
     getAvailableWorkers,
     getMaxWorkers,
     getStructureLevel,
@@ -17,7 +16,7 @@
     canBuild,
     isBuildingAvailable,
   } from '../engine/selectors';
-  import { formatNumber, formatRate } from '../engine/numbers';
+  import { formatNumber, formatCycleRate } from '../engine/numbers';
 
   // Resource row icons (Lucide — approximate matches for the fantasy items).
   import TreePine from '@lucide/svelte/icons/tree-pine';
@@ -216,6 +215,7 @@
             {@const showMax = PRODUCERS[id]?.workerCap === 'level'}
             {@const starved = starvedInput(id)}
             {@const cycleSeconds = PRODUCERS[id]?.cycleSeconds ?? 1}
+            {@const outputPerCycle = PRODUCERS[id]?.outputPerCycle ?? 0}
             {@const producing = assigned > 0 && !starved && !isAtCapacity(gs, id)}
             <div class="row" transition:fly={{ y: 8, duration: 260 }}>
               <span class="ricon">
@@ -258,7 +258,7 @@
                 {#if starved}
                   <span class="warn">needs {RESOURCES[starved].name}</span>
                 {:else}
-                  +{formatRate(getProductionRate(gs, id))}
+                  +{formatCycleRate(assigned * outputPerCycle, cycleSeconds)}
                 {/if}
               </span>
 

@@ -38,11 +38,16 @@ export function formatNumber(value: Numeric): string {
   return d.toExponential(2).replace('e+', 'e');
 }
 
-/** Format a per-second rate, e.g. "2/s" or "1.5/s". */
-export function formatRate(perSec: Numeric): string {
-  const n = D(perSec).toNumber();
-  const str = Number.isInteger(n) ? n.toString() : trimZeros(n.toFixed(2));
-  return `${str}/s`;
+/**
+ * Format a production rate in the line's own cycle terms, e.g. "3/s", "2/3s".
+ * `perCycle` is the total output per cycle (workers × outputPerCycle) and
+ * `cycleSeconds` the cycle length. A 1s cycle renders as plain "/s".
+ */
+export function formatCycleRate(perCycle: Numeric, cycleSeconds: number): string {
+  const n = D(perCycle).toNumber();
+  const amount = Number.isInteger(n) ? n.toString() : trimZeros(n.toFixed(2));
+  const per = cycleSeconds === 1 ? 's' : `${trimZeros(cycleSeconds.toFixed(2))}s`;
+  return `${amount}/${per}`;
 }
 
 /** Strip trailing zeros (and a dangling decimal point) from a fixed string. */
