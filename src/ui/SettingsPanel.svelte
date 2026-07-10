@@ -72,40 +72,53 @@
     <section class="section">
       <h3 class="section-title">Look Explorer</h3>
 
-      <label class="control">
+      <div class="control" role="group" aria-label="Color palette">
         <span class="ctl-label"><Palette size={13} aria-hidden="true" /> Color</span>
-        <select bind:value={look.palette} aria-label="Color palette">
-          {#each paletteGroups as g (g.label)}
-            <optgroup label={g.label}>
-              {#each g.items as p (p.id)}
-                <option value={p.id}>{p.name}</option>
-              {/each}
-            </optgroup>
-          {/each}
-        </select>
-      </label>
+        {#each paletteGroups as g (g.label)}
+          <span class="group-label">{g.label}</span>
+          <div class="options">
+            {#each g.items as p (p.id)}
+              <button
+                type="button"
+                class="option"
+                class:selected={look.palette === p.id}
+                aria-pressed={look.palette === p.id}
+                onclick={() => (look.palette = p.id as typeof look.palette)}>{p.name}</button>
+            {/each}
+          </div>
+        {/each}
+      </div>
 
-      <label class="control">
+      <div class="control" role="group" aria-label="Font">
         <span class="ctl-label"><Type size={13} aria-hidden="true" /> Font</span>
-        <select bind:value={look.font} aria-label="Font">
-          {#each fontGroups as g (g.label)}
-            <optgroup label={g.label}>
-              {#each g.items as f (f.id)}
-                <option value={f.id}>{f.name}</option>
-              {/each}
-            </optgroup>
-          {/each}
-        </select>
-      </label>
+        {#each fontGroups as g (g.label)}
+          <span class="group-label">{g.label}</span>
+          <div class="options">
+            {#each g.items as f (f.id)}
+              <button
+                type="button"
+                class="option"
+                class:selected={look.font === f.id}
+                aria-pressed={look.font === f.id}
+                onclick={() => (look.font = f.id as typeof look.font)}>{f.name}</button>
+            {/each}
+          </div>
+        {/each}
+      </div>
 
-      <label class="control">
+      <div class="control" role="group" aria-label="Layout">
         <span class="ctl-label"><LayoutDashboard size={13} aria-hidden="true" /> Layout</span>
-        <select bind:value={look.layout} aria-label="Layout">
+        <div class="options">
           {#each layoutFlat as l (l.id)}
-            <option value={l.id}>{l.name}</option>
+            <button
+              type="button"
+              class="option"
+              class:selected={look.layout === l.id}
+              aria-pressed={look.layout === l.id}
+              onclick={() => (look.layout = l.id as typeof look.layout)}>{l.name}</button>
           {/each}
-        </select>
-      </label>
+        </div>
+      </div>
     </section>
 
     <section class="section">
@@ -224,22 +237,40 @@
     letter-spacing: 0.04em;
     white-space: nowrap;
   }
-  select {
-    width: 100%;
+  .group-label {
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+  }
+  .options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .options .option {
+    padding: 5px 10px;
     font-family: var(--font-body);
     font-size: 13px;
     color: var(--text);
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 6px 8px;
     cursor: pointer;
-    transition: border-color var(--transition);
+    transition:
+      border-color var(--transition),
+      background var(--transition);
   }
-  select:hover {
+  .options .option:hover {
     border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
-  select:focus-visible {
+  .options .option.selected {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+  .options .option:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
