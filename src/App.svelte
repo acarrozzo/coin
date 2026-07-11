@@ -16,10 +16,13 @@
   import CombatPanel from './ui/CombatPanel.svelte';
   import ResourcePanel from './ui/ResourcePanel.svelte';
   import SettingsPanel from './ui/SettingsPanel.svelte';
+  import ShopPanel from './ui/ShopPanel.svelte';
   import WelcomeBack from './ui/WelcomeBack.svelte';
   import Toasts from './ui/Toasts.svelte';
+  import { getNavSections } from './ui/sections';
   import Castle from '@lucide/svelte/icons/castle';
   import Settings from '@lucide/svelte/icons/settings';
+  import Store from '@lucide/svelte/icons/store';
   import PersonStanding from '@lucide/svelte/icons/person-standing';
   import Check from '@lucide/svelte/icons/check';
   import TreePine from '@lucide/svelte/icons/tree-pine';
@@ -35,12 +38,52 @@
   ];
 
   let leveled = $state(false);
-  let settingsOpen = $state(false);
+  // Which side panel is open, if any — only one at a time. Toggled from the
+  // icon rail between the main content and the panel column.
+  let activePanel = $state<'shop' | 'settings' | null>(null);
   // Measured so the sticky settings column can park just below the header,
   // whose height shifts with the chosen font/layout.
   let headerH = $state(0);
 
   const gs = $derived(game.state);
+  // The shop (worker recruitment) unlocks at settlement level 5.
+  const showShop = $derived(gs.level >= 5);
+
+  // Left-rail jump targets: one per visible main-content section, each with a
+  // worker count and an opportunity/danger indicator.
+  const navSections = $derived(getNavSections(gs));
+  // Which section is currently scrolled into view (highlighted in the rail).
+  let activeSection = $state<string | null>(null);
+
+  // Immediate hover/focus label for the icon rails. Positioned with `fixed` so
+  // it escapes the left rail's scroll clipping and never triggers layout shift.
+  let tip = $state<{ text: string; x: number; y: number; side: 'left' | 'right' } | null>(null);
+  function showTip(e: Event, text: string, side: 'left' | 'right') {
+    const el = e.currentTarget as HTMLElement;
+    const r = el.getBoundingClientRect();
+    tip = {
+      text,
+      x: side === 'right' ? r.right + 8 : r.left - 8,
+      y: r.top + r.height / 2,
+      side,
+    };
+  }
+  function hideTip() {
+    tip = null;
+  }
+
+  function jumpTo(id: string) {
+    const el = document.querySelector<HTMLElement>(`[data-nav="${id}"]`);
+    if (!el) return;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    // Subtle accent flash so it's obvious which section you landed on. Restart
+    // the animation cleanly if the same target is jumped to again.
+    el.classList.remove('nav-flash');
+    void el.offsetWidth;
+    el.classList.add('nav-flash');
+    window.setTimeout(() => el.classList.remove('nav-flash'), 900);
+  }
   const available = $derived(getAvailableWorkers(gs));
   const total = $derived(getTotalWorkers(gs));
   // Busy workers (total minus idle), mirrored as a storage-style gauge.
@@ -101,6 +144,34 @@
     return () => game.stop();
   });
 
+  // Scroll-spy: light up the rail button for whichever section sits just below
+  // the sticky header. Reads the DOM fresh each pass so it adapts as sections
+  // unlock, and throttles to one recompute per animation frame.
+  onMount(() => {
+    let raf = 0;
+    const recompute = () => {
+      raf = 0;
+      const line = headerH + 16;
+      const els = Array.from(document.querySelectorAll<HTMLElement>('[data-nav]'));
+      let current = els[0]?.dataset.nav ?? null;
+      for (const el of els) {
+        if (el.getBoundingClientRect().top - line <= 1) current = el.dataset.nav ?? current;
+      }
+      activeSection = current;
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(recompute);
+    };
+    recompute();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      cancelAnimationFrame(raf);
+    };
+  });
+
   // Briefly flourish the level badge whenever the settlement levels up.
   let prevLevel = -1;
   $effect(() => {
@@ -110,6 +181,11 @@
       setTimeout(() => (leveled = false), 800);
     }
     prevLevel = level;
+  });
+
+  // Don't leave the shop panel open if the shop is no longer available.
+  $effect(() => {
+    if (activePanel === 'shop' && !showShop) activePanel = null;
   });
 </script>
 
@@ -174,22 +250,41 @@
           ><span class="store-fill" style:width="{workerPct}%"></span></span
         >
       </span>
-      <button
-        class="settings-btn"
-        class:active={settingsOpen}
-        onclick={() => (settingsOpen = !settingsOpen)}
-        aria-pressed={settingsOpen}
-        aria-label="Settings"
-        title="Settings"
-      >
-        <Settings size={18} aria-hidden="true" />
-      </button>
     </div>
   </div>
   </header>
 </div>
 
-<div class="layout" class:settings-open={settingsOpen} style="--header-h: {headerH}px">
+<div class="layout" class:panel-open={activePanel !== null} style="--header-h: {headerH}px">
+  <!-- Left jump rail: one button per visible section. Clicking scrolls to it;
+       a dot flags an affordable upgrade (gold) or combat danger (red), and a
+       badge shows the workers assigned there. On mobile it floats at the left
+       edge, mirroring the panel rail on the right. -->
+  <nav class="jump-rail" aria-label="Jump to section">
+    {#each navSections as s (s.id)}
+      {@const Icon = s.icon}
+      <button
+        class="jump-btn"
+        class:active={activeSection === s.id}
+        onclick={() => jumpTo(s.id)}
+        aria-label={s.label}
+        aria-current={activeSection === s.id ? 'true' : undefined}
+        onmouseenter={(e) => showTip(e, s.label, 'right')}
+        onmouseleave={hideTip}
+        onfocus={(e) => showTip(e, s.label, 'right')}
+        onblur={hideTip}
+      >
+        <Icon size={20} aria-hidden="true" />
+        {#if s.alert}
+          <span class="dot" class:bad={s.alert === 'bad'} aria-hidden="true"></span>
+        {/if}
+        {#if s.count > 0}
+          <span class="count-badge" aria-hidden="true">{s.count}</span>
+        {/if}
+      </button>
+    {/each}
+  </nav>
+
   <div class="app">
     <main>
       <WelcomeBack />
@@ -197,6 +292,9 @@
       <CombatPanel />
       <ResourcePanel />
       <CampPanel />
+      <!-- Breathing room so the last (possibly short) section can scroll up to
+           the header line, triggering its active state in the left rail. -->
+      <div class="tail-space" aria-hidden="true"></div>
     </main>
 
     <footer>
@@ -205,16 +303,59 @@
     </footer>
   </div>
 
-  {#if settingsOpen}
-    <SettingsPanel onclose={() => (settingsOpen = false)} />
+  <!-- Icon rail between the main content and the panel column. On mobile it
+       floats at the right edge and slides left of the drawer when one opens. -->
+  <nav class="rail" aria-label="Panels">
+    {#if showShop}
+      <button
+        class="rail-btn"
+        class:active={activePanel === 'shop'}
+        onclick={() => (activePanel = activePanel === 'shop' ? null : 'shop')}
+        aria-pressed={activePanel === 'shop'}
+        aria-label="Shop"
+        onmouseenter={(e) => showTip(e, 'Shop', 'left')}
+        onmouseleave={hideTip}
+        onfocus={(e) => showTip(e, 'Shop', 'left')}
+        onblur={hideTip}
+      >
+        <Store size={20} aria-hidden="true" />
+      </button>
+    {/if}
+    <button
+      class="rail-btn"
+      class:active={activePanel === 'settings'}
+      onclick={() => (activePanel = activePanel === 'settings' ? null : 'settings')}
+      aria-pressed={activePanel === 'settings'}
+      aria-label="Settings"
+      onmouseenter={(e) => showTip(e, 'Settings', 'left')}
+      onmouseleave={hideTip}
+      onfocus={(e) => showTip(e, 'Settings', 'left')}
+      onblur={hideTip}
+    >
+      <Settings size={20} aria-hidden="true" />
+    </button>
+  </nav>
+
+  {#if activePanel === 'shop'}
+    <ShopPanel onclose={() => (activePanel = null)} />
+  {:else if activePanel === 'settings'}
+    <SettingsPanel onclose={() => (activePanel = null)} />
+  {/if}
+
+  {#if tip}
+    <span
+      class="rail-flyout {tip.side}"
+      role="tooltip"
+      style="left: {tip.x}px; top: {tip.y}px"
+    >{tip.text}</span>
   {/if}
 </div>
 
 <Toasts />
 
 <style>
-  /* Row wrapper: main content, with settings pushed in as a right-hand
-     column when open. Both are centered as a group. */
+  /* Row wrapper: main content, then the icon rail, then a side panel pushed in
+     as a right-hand column when one is open. Centered as a group. */
   .layout {
     display: flex;
     align-items: flex-start;
@@ -231,9 +372,204 @@
     display: flex;
     flex-direction: column;
   }
-  .layout > :global(.settings) {
+  .layout > :global(.side-panel) {
     flex: 0 0 340px;
     align-self: stretch;
+  }
+
+  /* Vertical strip of panel toggles, sitting between the main content and the
+     open panel. Sticks under the header alongside the panels. */
+  .rail {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    position: sticky;
+    top: calc(var(--header-h, 56px) + var(--space-3));
+    margin-top: var(--space-4);
+  }
+  .rail-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: var(--bg-panel);
+    border: var(--panel-border);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color var(--transition), background var(--transition), border-color var(--transition);
+  }
+  .rail-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .rail-btn.active {
+    color: var(--gold);
+    background: color-mix(in srgb, var(--accent) 20%, var(--bg-panel));
+    border-color: var(--accent);
+  }
+  .rail-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  /* --- Left jump rail: navigate to main-content sections --- */
+  .jump-rail {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    position: sticky;
+    top: calc(var(--header-h, 56px) + var(--space-3));
+    margin-top: var(--space-4);
+    /* Never grow past the viewport if many sections have unlocked. */
+    max-height: calc(100vh - var(--header-h, 56px) - var(--space-4));
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .jump-rail::-webkit-scrollbar {
+    display: none;
+  }
+  .jump-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+    background: var(--bg-panel);
+    border: var(--panel-border);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color var(--transition), background var(--transition), border-color var(--transition);
+  }
+  .jump-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .jump-btn.active {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 16%, var(--bg-panel));
+    border-color: var(--accent);
+  }
+  .jump-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  /* Instant hover/focus label for both icon rails. Fixed-positioned (see
+     showTip) so it clears the left rail's scroll clipping; JS supplies the
+     left/top of the anchoring edge and the side class picks which way it grows
+     and vertically centers it against the button. */
+  .rail-flyout {
+    position: fixed;
+    z-index: 50;
+    width: max-content;
+    padding: 5px 9px;
+    background: var(--bg-panel, #fff);
+    color: var(--text, inherit);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .rail-flyout.right {
+    transform: translateY(-50%);
+  }
+  .rail-flyout.left {
+    transform: translate(-100%, -50%);
+  }
+  /* Opportunity/danger dot, top-right of the icon. */
+  .dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--gold);
+    box-shadow: 0 0 0 2px var(--bg-panel);
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+  .dot.bad {
+    background: var(--bad);
+  }
+  @keyframes dotPulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 0 color-mix(in srgb, var(--gold) 55%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 5px transparent;
+    }
+  }
+  .dot.bad {
+    animation-name: dotPulseBad;
+  }
+  @keyframes dotPulseBad {
+    0%,
+    100% {
+      box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 0 color-mix(in srgb, var(--bad) 60%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 5px transparent;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dot {
+      animation: none;
+    }
+  }
+  /* Worker count: just the number, tucked in the icon's bottom-left corner. */
+  .count-badge {
+    position: absolute;
+    bottom: 2px;
+    left: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+  .jump-btn.active .count-badge {
+    color: var(--accent);
+  }
+
+  /* Sections land clear of the sticky header when jumped to. */
+  :global([data-nav]) {
+    scroll-margin-top: calc(var(--header-h, 72px) + var(--space-3));
+  }
+  /* Subtle accent ring that fades out once a section is jumped to. Uses outline
+     (not box-shadow) so it never disturbs the panels' own drop shadow. */
+  :global([data-nav].nav-flash) {
+    animation: navFlash 0.9s ease-out;
+  }
+  @keyframes navFlash {
+    0%,
+    12% {
+      outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent);
+      outline-offset: 3px;
+    }
+    100% {
+      outline: 2px solid transparent;
+      outline-offset: 3px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :global([data-nav].nav-flash) {
+      animation: none;
+    }
   }
 
   /* Explorer bar + game header stick together as one unit. */
@@ -423,34 +759,18 @@
       box-shadow: 0 0 0 12px transparent;
     }
   }
-  .settings-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: 0;
-    color: var(--text-on-header);
-    padding: 4px;
-    border-radius: var(--radius);
-    cursor: pointer;
-    transition: color var(--transition), background var(--transition);
-  }
-  .settings-btn:hover,
-  .settings-btn.active {
-    color: var(--gold);
-    background: rgba(255, 255, 255, 0.12);
-  }
-  .settings-btn:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
-  }
-
   main {
     flex: 1;
     padding-top: var(--space-4);
     display: flex;
     flex-direction: column;
     gap: var(--panel-gap);
+  }
+  /* Roughly one viewport of slack, so even a single-row final section can be
+     scrolled to the top of the page. */
+  .tail-space {
+    flex: none;
+    min-height: calc(100dvh - var(--header-h, 56px) - var(--space-5) - 200px);
   }
 
   footer {
@@ -468,10 +788,42 @@
     font-size: 15px;
   }
 
-  @media (max-width: 480px) {
+  /* At the drawer breakpoint the panel detaches into a fixed right-hand drawer.
+     The rail floats at the right edge over the content, and slides left to sit
+     just beside the drawer whenever one is open. */
+  @media (max-width: 1023px) {
+    /* Both rails detach to fixed and float over the edges, so reserve a gutter
+       the width of a rail button (44px + its edge offset + a small gap) on each
+       side. This keeps the content column clear of the icons at every width. */
     .layout {
-      padding: 0 var(--space-3);
+      padding-left: calc(44px + var(--space-2) * 2);
+      padding-right: calc(44px + var(--space-2) * 2);
     }
+    .rail {
+      position: fixed;
+      top: calc(var(--header-h, 56px) + var(--space-3));
+      right: var(--space-2);
+      margin-top: 0;
+      z-index: 31;
+      transition: right var(--transition);
+    }
+    .layout.panel-open .rail {
+      right: calc(min(380px, 92vw) + var(--space-2));
+    }
+    /* The jump rail floats at the left edge, mirroring the panel rail. */
+    .jump-rail {
+      position: fixed;
+      left: var(--space-2);
+      top: calc(var(--header-h, 56px) + var(--space-3));
+      margin-top: 0;
+      z-index: 20;
+      max-height: calc(100dvh - var(--header-h, 56px) - var(--space-4));
+    }
+  }
+
+  @media (max-width: 480px) {
+    /* Keep the rail gutters from the 1023px breakpoint (don't shrink them here)
+       or the fixed icons would overlap the content again on phones. */
     .header-inner {
       padding: var(--space-2) var(--space-3);
       gap: var(--space-2);

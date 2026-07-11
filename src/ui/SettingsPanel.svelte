@@ -61,7 +61,7 @@
   }
 </script>
 
-<aside class="settings" aria-label="Settings">
+<aside class="settings side-panel" aria-label="Settings">
   <div class="head">
     <h2>Settings</h2>
     <button class="close" onclick={onclose} title="Close settings" aria-label="Close settings">

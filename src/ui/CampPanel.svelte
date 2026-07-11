@@ -1,25 +1,18 @@
 <script lang="ts">
   import { game } from './gameStore.svelte';
   import { isAtCapacity } from '../engine/selectors';
-  import { extraWorkerCost } from '../engine/actions';
-  import { formatNumber } from '../engine/numbers';
   import Wheat from '@lucide/svelte/icons/wheat';
   import TreePine from '@lucide/svelte/icons/tree-pine';
   import Mountain from '@lucide/svelte/icons/mountain';
-  import PersonStanding from '@lucide/svelte/icons/person-standing';
 
   const gs = $derived(game.state);
   // Working by hand matters until the Farm automates food (built at settlement 3).
   const showManual = $derived(gs.buildings.farm.level === 0);
-  const showShop = $derived(gs.level >= 5);
-  const recruitCost = $derived(extraWorkerCost(gs));
-  const canRecruit = $derived(gs.resources.arrow.amount.gte(recruitCost));
 </script>
 
-{#if showManual || showShop}
+{#if showManual}
   <section class="panel">
-    {#if showManual}
-      <h2>By Hand</h2>
+    <h2>By Hand</h2>
       <p class="hint">Work the land yourself until your Farm and workforce take over.</p>
       <div class="actions">
         <button onclick={() => game.gather('food')} disabled={isAtCapacity(gs, 'food')}>
@@ -52,20 +45,6 @@
           </button>
         {/if}
       </div>
-    {/if}
-
-    {#if showShop}
-      <div class="shop" class:spaced={showManual}>
-        <h2>Shop</h2>
-        <p class="hint">Recruit an extra worker — paid in arrows, and costlier each time.</p>
-        <div class="actions">
-          <button onclick={() => game.recruit()} disabled={!canRecruit}>
-            <PersonStanding size={16} aria-hidden="true" /> Recruit worker
-            <span class="c" class:short={!canRecruit}>{formatNumber(recruitCost)} arrows</span>
-          </button>
-        </div>
-      </div>
-    {/if}
   </section>
 {/if}
 
@@ -87,11 +66,6 @@
     color: var(--text-muted);
     font-size: 14px;
     margin-bottom: var(--space-3);
-  }
-  .shop.spaced {
-    margin-top: var(--space-4);
-    padding-top: var(--space-3);
-    border-top: 1px solid var(--border);
   }
   .actions {
     display: flex;
@@ -120,8 +94,5 @@
   .c {
     color: var(--good);
     font-variant-numeric: tabular-nums;
-  }
-  .c.short {
-    color: var(--bad);
   }
 </style>

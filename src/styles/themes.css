@@ -369,6 +369,326 @@
   --wisdom: #ff71ce;
 }
 
+/* Everforest — soft, warm, low-contrast forest greens. */
+:root[data-palette='everforest'] {
+  --bg: #2d353b;
+  --bg-panel: #343f44;
+  --bg-header: #232a2e;
+  --text: #d3c6aa;
+  --text-muted: #9da9a0;
+  --text-on-header: #d3c6aa;
+  --border: #475258;
+  --accent: #a7c080;
+  --good: #83c092;
+  --bad: #e67e80;
+  --gold: #dbbc7f;
+  --wisdom: #d699b6;
+}
+
+/* Night Owl — Sarah Drasner's deep-blue theme for night owls. */
+:root[data-palette='night-owl'] {
+  --bg: #011627;
+  --bg-panel: #0b2942;
+  --bg-header: #010e1a;
+  --text: #d6deeb;
+  --text-muted: #637777;
+  --text-on-header: #d6deeb;
+  --border: #1d3b53;
+  --accent: #82aaff;
+  --good: #addb67;
+  --bad: #ef5350;
+  --gold: #ecc48d;
+  --wisdom: #c792ea;
+}
+
+/* Ayu Dark — crisp, high-contrast with a signature orange accent. */
+:root[data-palette='ayu-dark'] {
+  --bg: #0b0e14;
+  --bg-panel: #131721;
+  --bg-header: #08090e;
+  --text: #bfbdb6;
+  --text-muted: #565b66;
+  --text-on-header: #bfbdb6;
+  --border: #1f2430;
+  --accent: #ffb454;
+  --good: #aad94c;
+  --bad: #f26d78;
+  --gold: #ffd173;
+  --wisdom: #d2a6ff;
+}
+
+/* Ayu Mirage — the softer, mid-tone Ayu variant. */
+:root[data-palette='ayu-mirage'] {
+  --bg: #1f2430;
+  --bg-panel: #242936;
+  --bg-header: #171b24;
+  --text: #cccac2;
+  --text-muted: #707a8c;
+  --text-on-header: #cccac2;
+  --border: #323846;
+  --accent: #ffcc66;
+  --good: #87d96c;
+  --bad: #f28779;
+  --gold: #ffd580;
+  --wisdom: #dfbfff;
+}
+
+/* Tokyo Night — deep indigo with vivid blues and purples. */
+:root[data-palette='tokyo-night'] {
+  --bg: #1a1b26;
+  --bg-panel: #24283b;
+  --bg-header: #16161e;
+  --text: #c0caf5;
+  --text-muted: #565f89;
+  --text-on-header: #c0caf5;
+  --border: #2f334d;
+  --accent: #7aa2f7;
+  --good: #9ece6a;
+  --bad: #f7768e;
+  --gold: #e0af68;
+  --wisdom: #bb9af7;
+}
+
+/* One Dark — Atom's iconic dark theme. */
+:root[data-palette='one-dark'] {
+  --bg: #282c34;
+  --bg-panel: #31363f;
+  --bg-header: #21252b;
+  --text: #abb2bf;
+  --text-muted: #5c6370;
+  --text-on-header: #abb2bf;
+  --border: #3e4451;
+  --accent: #61afef;
+  --good: #98c379;
+  --bad: #e06c75;
+  --gold: #e5c07b;
+  --wisdom: #c678dd;
+}
+
+/* Kanagawa — inspired by Hokusai's Great Wave; muted ink and indigo. */
+:root[data-palette='kanagawa'] {
+  --bg: #1f1f28;
+  --bg-panel: #2a2a37;
+  --bg-header: #16161d;
+  --text: #dcd7ba;
+  --text-muted: #727169;
+  --text-on-header: #dcd7ba;
+  --border: #363646;
+  --accent: #7e9cd8;
+  --good: #98bb6c;
+  --bad: #e46876;
+  --gold: #e6c384;
+  --wisdom: #957fb8;
+}
+
+/* Ayu Light — bright, warm, high-contrast light variant. */
+:root[data-palette='ayu-light'] {
+  --bg: #fcfcfc;
+  --bg-panel: #ffffff;
+  --bg-header: #f3f4f5;
+  --text: #5c6166;
+  --text-muted: #8a9199;
+  --text-on-header: #5c6166;
+  --border: #e6e7e8;
+  --accent: #ff9940;
+  --good: #86b300;
+  --bad: #f07171;
+  --gold: #f2ae49;
+  --wisdom: #a37acc;
+}
+
+/* GitHub Dark — GitHub's default dark UI. */
+:root[data-palette='github-dark'] {
+  --bg: #0d1117;
+  --bg-panel: #161b22;
+  --bg-header: #010409;
+  --text: #c9d1d9;
+  --text-muted: #8b949e;
+  --text-on-header: #c9d1d9;
+  --border: #30363d;
+  --accent: #58a6ff;
+  --good: #3fb950;
+  --bad: #f85149;
+  --gold: #d29922;
+  --wisdom: #bc8cff;
+}
+
+/* GitHub Light — GitHub's default light UI. */
+:root[data-palette='github-light'] {
+  --bg: #ffffff;
+  --bg-panel: #f6f8fa;
+  --bg-header: #24292f;
+  --text: #24292f;
+  --text-muted: #57606a;
+  --text-on-header: #eaeef2;
+  --border: #d0d7de;
+  --accent: #0969da;
+  --good: #1a7f37;
+  --bad: #cf222e;
+  --gold: #9a6700;
+  --wisdom: #8250df;
+}
+
+/* Monokai — the classic vibrant TextMate/Sublime theme. */
+:root[data-palette='monokai'] {
+  --bg: #272822;
+  --bg-panel: #31322b;
+  --bg-header: #1d1e19;
+  --text: #f8f8f2;
+  --text-muted: #75715e;
+  --text-on-header: #f8f8f2;
+  --border: #414339;
+  --accent: #66d9ef;
+  --good: #a6e22e;
+  --bad: #f92672;
+  --gold: #e6db74;
+  --wisdom: #ae81ff;
+}
+
+/* Monokai Pro — the refined, muted modern Monokai. */
+:root[data-palette='monokai-pro'] {
+  --bg: #2d2a2e;
+  --bg-panel: #363338;
+  --bg-header: #221f22;
+  --text: #fcfcfa;
+  --text-muted: #939293;
+  --text-on-header: #fcfcfa;
+  --border: #48454a;
+  --accent: #78dce8;
+  --good: #a9dc76;
+  --bad: #ff6188;
+  --gold: #ffd866;
+  --wisdom: #ab9df2;
+}
+
+/* Palenight — Material's dusky, purple-tinted dark theme. */
+:root[data-palette='palenight'] {
+  --bg: #292d3e;
+  --bg-panel: #333747;
+  --bg-header: #1f2233;
+  --text: #a6accd;
+  --text-muted: #676e95;
+  --text-on-header: #a6accd;
+  --border: #3f4459;
+  --accent: #82aaff;
+  --good: #c3e88d;
+  --bad: #f07178;
+  --gold: #ffcb6b;
+  --wisdom: #c792ea;
+}
+
+/* Oceanic Next — deep teal-blue with warm accents. */
+:root[data-palette='oceanic-next'] {
+  --bg: #1b2b34;
+  --bg-panel: #22333b;
+  --bg-header: #14232b;
+  --text: #cdd3de;
+  --text-muted: #65737e;
+  --text-on-header: #cdd3de;
+  --border: #37474f;
+  --accent: #6699cc;
+  --good: #99c794;
+  --bad: #ec5f67;
+  --gold: #fac863;
+  --wisdom: #c594c5;
+}
+
+/* Cobalt2 — Wes Bos's bold blue with yellow accents. */
+:root[data-palette='cobalt2'] {
+  --bg: #193549;
+  --bg-panel: #1f4662;
+  --bg-header: #122738;
+  --text: #ffffff;
+  --text-muted: #92a3b3;
+  --text-on-header: #ffffff;
+  --border: #2a5980;
+  --accent: #ffc600;
+  --good: #3ad900;
+  --bad: #ff628c;
+  --gold: #ffc600;
+  --wisdom: #ff9d00;
+}
+
+/* Zenburn — the original low-contrast, easy-on-the-eyes theme. */
+:root[data-palette='zenburn'] {
+  --bg: #3f3f3f;
+  --bg-panel: #4a4a4a;
+  --bg-header: #2f2f2f;
+  --text: #dcdccc;
+  --text-muted: #9f9f8f;
+  --text-on-header: #dcdccc;
+  --border: #5a5a5a;
+  --accent: #8cd0d3;
+  --good: #7f9f7f;
+  --bad: #cc9393;
+  --gold: #f0dfaf;
+  --wisdom: #dc8cc3;
+}
+
+/* Synthwave '84 — neon retro-future with glowing magenta/cyan. */
+:root[data-palette='synthwave'] {
+  --bg: #262335;
+  --bg-panel: #2d2a42;
+  --bg-header: #1a1727;
+  --text: #f8f8f2;
+  --text-muted: #848098;
+  --text-on-header: #ff7edb;
+  --border: #453d63;
+  --accent: #ff7edb;
+  --good: #72f1b8;
+  --bad: #fe4450;
+  --gold: #fede5d;
+  --wisdom: #b893ce;
+}
+
+/* Poimandres — inky teal-blue with soft pastel accents. */
+:root[data-palette='poimandres'] {
+  --bg: #1b1e28;
+  --bg-panel: #252b37;
+  --bg-header: #171922;
+  --text: #a6accd;
+  --text-muted: #767c9d;
+  --text-on-header: #a6accd;
+  --border: #303340;
+  --accent: #89ddff;
+  --good: #5de4c7;
+  --bad: #d0679d;
+  --gold: #fffac2;
+  --wisdom: #add7ff;
+}
+
+/* Nightfly — a rich, deep-blue night theme. */
+:root[data-palette='nightfly'] {
+  --bg: #011627;
+  --bg-panel: #092236;
+  --bg-header: #010e1a;
+  --text: #c3ccdc;
+  --text-muted: #7c8f8f;
+  --text-on-header: #c3ccdc;
+  --border: #1d3b53;
+  --accent: #82aaff;
+  --good: #a1cd5e;
+  --bad: #fc514e;
+  --gold: #e3d18a;
+  --wisdom: #ae81ff;
+}
+
+/* Horizon — warm coral-and-purple dark theme. */
+:root[data-palette='horizon'] {
+  --bg: #1c1e26;
+  --bg-panel: #232530;
+  --bg-header: #16161c;
+  --text: #d5d8da;
+  --text-muted: #6c6f93;
+  --text-on-header: #d5d8da;
+  --border: #2e303e;
+  --accent: #e95678;
+  --good: #29d398;
+  --bad: #f43e5c;
+  --gold: #fab795;
+  --wisdom: #b877db;
+}
+
 /* ---- Environments ---- */
 
 /* Midnight — very dark, almost pure black. */

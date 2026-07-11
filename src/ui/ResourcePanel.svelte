@@ -1,152 +1,27 @@
 <script lang="ts">
-  import type { Component } from 'svelte';
   import { fly } from 'svelte/transition';
   import { game } from './gameStore.svelte';
   import { RESOURCES, type ResourceId } from '../content/resources';
-  import { PRODUCERS, resourceDecimals, type StructureId } from '../content/producers';
-  import { BUILDINGS, type BuildingId } from '../content/buildings';
+  import { PRODUCERS, resourceDecimals } from '../content/producers';
+  import { BUILDINGS } from '../content/buildings';
   import type { ResourceCost } from '../content/settlement';
   import {
-    unlockedResources,
     getAvailableWorkers,
     getMaxWorkers,
     getStructureLevel,
     getNextBuildingLevel,
     canBuild,
-    isBuildingAvailable,
-    isCombatUnlocked,
-    isHexUnlocked,
     canStartCycle,
     getNetProductionRate,
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate, formatSignedRate } from '../engine/numbers';
   import { RESOURCE_ICON } from './resourceIcons';
-
-  // Barracks group header icon (also a resource icon, sourced below).
-  import Swords from '@lucide/svelte/icons/swords';
-
-  // Structure header icons.
-  import Trees from '@lucide/svelte/icons/trees';
-  import Pickaxe from '@lucide/svelte/icons/pickaxe';
-  import Hammer from '@lucide/svelte/icons/hammer';
-  import House from '@lucide/svelte/icons/house';
-  import TowerControl from '@lucide/svelte/icons/tower-control';
-  import Castle from '@lucide/svelte/icons/castle';
-  import Landmark from '@lucide/svelte/icons/landmark';
-  import Cloud from '@lucide/svelte/icons/cloud';
+  import { getResourceGroups } from './sections';
 
   const gs = $derived(game.state);
   const available = $derived(getAvailableWorkers(gs));
-  const unlocked = $derived(unlockedResources(gs));
 
-  // Each group is a structure card: a header (name + level + upgrade), the
-  // resources it produces as single rows, and — for Core Resources — the Farm
-  // upgrade as a footer (it blends settlement gathering + the Farm).
-  interface GroupDef {
-    key: string;
-    label: string;
-    icon: Component;
-    /** Building whose upgrade this group owns (null = no upgrade, e.g. pure gathering). */
-    building: BuildingId | null;
-    /** Structures whose producers appear in this group, in row order. */
-    structures: StructureId[];
-    /** Core blends structures; its upgrade sits in a footer, not the header. */
-    upgradeInFooter?: boolean;
-  }
-
-  const GROUP_DEFS: GroupDef[] = [
-    {
-      key: 'core',
-      label: 'Core Resources',
-      icon: Trees,
-      building: 'farm',
-      structures: ['settlement', 'farm'],
-      upgradeInFooter: true,
-    },
-    {
-      key: 'hunterscabin',
-      label: "Hunter's Cabin",
-      icon: House,
-      building: 'hunterscabin',
-      structures: ['hunterscabin'],
-    },
-    {
-      key: 'blacksmith',
-      label: 'Blacksmith',
-      icon: Hammer,
-      building: 'blacksmith',
-      structures: ['blacksmith'],
-    },
-    {
-      key: 'barracks',
-      label: 'Barracks',
-      icon: Swords,
-      building: 'barracks',
-      structures: ['barracks'],
-    },
-    {
-      key: 'castle',
-      label: 'Castle',
-      icon: Castle,
-      building: 'castle',
-      structures: ['castle'],
-    },
-    {
-      key: 'wizardtower',
-      label: 'Wizard Tower',
-      icon: TowerControl,
-      building: 'wizardtower',
-      structures: ['wizardtower'],
-    },
-    {
-      key: 'deepmine',
-      label: 'Deep Mine',
-      icon: Pickaxe,
-      building: 'deepmine',
-      structures: ['deepmine'],
-    },
-    {
-      key: 'bank',
-      label: 'Bank',
-      icon: Landmark,
-      building: 'bank',
-      structures: ['bank'],
-    },
-    {
-      key: 'cloudshaman',
-      label: 'Cloud Shaman',
-      icon: Cloud,
-      building: 'cloudshaman',
-      structures: ['cloudshaman'],
-    },
-  ];
-
-  // Once assault unlocks (settlement 7), Defense leaves the Castle card and
-  // lives in the Assault panel instead — the Castle keeps its quest converters.
-  // Likewise, once hex unlocks (settlement 8), Ward leaves the Wizard Tower card
-  // and lives in the Hex panel — the Wizard Tower keeps its ether converter.
-  const combatUnlocked = $derived(isCombatUnlocked(gs));
-  const hexUnlocked = $derived(isHexUnlocked(gs));
-
-  const groups = $derived(
-    GROUP_DEFS.map((g) => ({
-      ...g,
-      ids: unlocked.filter(
-        (id) =>
-          g.structures.includes(PRODUCERS[id]?.structure as StructureId) &&
-          !(id === 'defense' && combatUnlocked) &&
-          !(id === 'ward' && hexUnlocked),
-      ),
-    })).filter(
-      // Show a group once its resources exist, or once its building can be
-      // built/upgraded (so an unbuilt structure is still reachable). Core is
-      // always present.
-      (g) =>
-        g.key === 'core' ||
-        g.ids.length > 0 ||
-        (g.building !== null && isBuildingAvailable(gs, g.building)),
-    ),
-  );
+  const groups = $derived(getResourceGroups(gs));
 
   function costEntries(cost: ResourceCost) {
     return Object.entries(cost) as [ResourceId, number][];
@@ -191,7 +66,7 @@
       {@const level = group.building ? getStructureLevel(gs, group.building) : 0}
       {@const next = group.building ? getNextBuildingLevel(gs, group.building) : null}
       {@const buildName = group.building ? BUILDINGS[group.building].name : ''}
-      <div class="group" transition:fly={{ y: 10, duration: 300 }}>
+      <div class="group" data-nav="group:{group.key}" transition:fly={{ y: 10, duration: 300 }}>
         <header class="ghead">
           <div class="gtitle">
             <GroupIcon size={22} color="var(--accent)" aria-hidden="true" />

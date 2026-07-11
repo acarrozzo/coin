@@ -25,7 +25,7 @@
   }
 </script>
 
-<section class="panel">
+<section class="panel" data-nav="settlement">
   <div class="tier">
     <div class="info">
       <span class="name"><span class="lvl">Lvl {gs.level}</span> {tier?.name ?? `Level ${gs.level}`}</span>

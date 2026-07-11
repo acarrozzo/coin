@@ -37,7 +37,7 @@
 </script>
 
 {#if isCombatUnlocked(gs)}
-  <section class="panel">
+  <section class="panel" data-nav="combat">
     <!-- Assault header: level, incoming countdown bar, honor -->
     <div class="chead">
       <h2>
