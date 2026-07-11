@@ -121,20 +121,6 @@
       upgradeInFooter: true,
     },
     {
-      key: 'deepmine',
-      label: 'Deep Mine',
-      icon: Pickaxe,
-      building: 'deepmine',
-      structures: ['deepmine'],
-    },
-    {
-      key: 'blacksmith',
-      label: 'Blacksmith',
-      icon: Hammer,
-      building: 'blacksmith',
-      structures: ['blacksmith'],
-    },
-    {
       key: 'hunterscabin',
       label: "Hunter's Cabin",
       icon: House,
@@ -142,11 +128,11 @@
       structures: ['hunterscabin'],
     },
     {
-      key: 'wizardtower',
-      label: 'Wizard Tower',
-      icon: TowerControl,
-      building: 'wizardtower',
-      structures: ['wizardtower'],
+      key: 'blacksmith',
+      label: 'Blacksmith',
+      icon: Hammer,
+      building: 'blacksmith',
+      structures: ['blacksmith'],
     },
     {
       key: 'barracks',
@@ -161,6 +147,20 @@
       icon: Castle,
       building: 'castle',
       structures: ['castle'],
+    },
+    {
+      key: 'deepmine',
+      label: 'Deep Mine',
+      icon: Pickaxe,
+      building: 'deepmine',
+      structures: ['deepmine'],
+    },
+    {
+      key: 'wizardtower',
+      label: 'Wizard Tower',
+      icon: TowerControl,
+      building: 'wizardtower',
+      structures: ['wizardtower'],
     },
     {
       key: 'bank',
@@ -229,31 +229,32 @@
                 >{/if}</span
             >
           </div>
-          {#if !group.upgradeInFooter && group.building}
-            {#if next}
-              <button
-                class="upgrade"
-                onclick={() => game.build(group.building!)}
-                disabled={!canBuild(gs, group.building)}
-              >
-                {level === 0 ? 'Build' : 'Upgrade'}
-              </button>
-            {:else}
-              <span class="maxed">MAX</span>
-            {/if}
+          {#if !group.upgradeInFooter && group.building && !next}
+            <span class="maxed">MAX</span>
           {/if}
         </header>
 
         {#if !group.upgradeInFooter && next}
-          <p class="gsummary">{next.summary}</p>
-          <p class="gcost">
-            <span class="cost-label">cost:</span>
-            {#each costEntries(next.cost) as [rid, amt] (rid)}
-              <span class="cost-num" class:short={gs.resources[rid].amount.lt(amt)}
-                >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</span
-              >
-            {/each}
-          </p>
+          <div class="upgrade-row">
+            <button
+              class="upgrade"
+              onclick={() => game.build(group.building!)}
+              disabled={!canBuild(gs, group.building)}
+            >
+              {level === 0 ? 'Build' : 'Upgrade'}
+            </button>
+            <div class="uinfo">
+              <p class="gsummary">{next.summary}</p>
+              <p class="gcost">
+                <span class="cost-label">cost:</span>
+                {#each costEntries(next.cost) as [rid, amt] (rid)}
+                  <span class="cost-num" class:short={gs.resources[rid].amount.lt(amt)}
+                    >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</span
+                  >
+                {/each}
+              </p>
+            </div>
+          </div>
         {/if}
 
         <div class="rows">
@@ -327,19 +328,6 @@
           {@const fLevel = getStructureLevel(gs, group.building)}
           {@const fNext = getNextBuildingLevel(gs, group.building)}
           <div class="footer">
-            <div class="finfo">
-              {#if fNext}
-                <p class="gsummary">{fNext.summary}</p>
-                <p class="gcost">
-                  <span class="cost-label">cost:</span>
-                  {#each costEntries(fNext.cost) as [rid, amt] (rid)}
-                    <span class="cost-num" class:short={gs.resources[rid].amount.lt(amt)}
-                      >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</span
-                    >
-                  {/each}
-                </p>
-              {/if}
-            </div>
             {#if fNext}
               <button
                 class="upgrade"
@@ -350,6 +338,17 @@
                   ? `Build ${buildName}`
                   : `Upgrade ${buildName} to Level ${fLevel + 1}`}
               </button>
+              <div class="finfo">
+                <p class="gsummary">{fNext.summary}</p>
+                <p class="gcost">
+                  <span class="cost-label">cost:</span>
+                  {#each costEntries(fNext.cost) as [rid, amt] (rid)}
+                    <span class="cost-num" class:short={gs.resources[rid].amount.lt(amt)}
+                      >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</span
+                    >
+                  {/each}
+                </p>
+              </div>
             {:else}
               <span class="maxed">MAX</span>
             {/if}
@@ -404,19 +403,37 @@
     margin-left: var(--space-2);
   }
   .gsummary {
-    color: var(--text-muted);
-    font-size: 14px;
+    color: color-mix(in srgb, var(--text-muted) 78%, var(--bg-panel));
+    font-size: 13px;
     margin-top: var(--space-1);
   }
   .gcost {
-    font-size: 14px;
+    font-size: 13px;
     margin-top: 2px;
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
   }
+  /* Header upgrade: button on the left, with cost then summary stacked to its
+     right and vertically centered against the button. */
+  .upgrade-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-top: var(--space-2);
+  }
+  .uinfo {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .uinfo .gsummary,
+  .uinfo .gcost {
+    margin: 0;
+  }
   .cost-label {
-    color: var(--text-muted);
+    color: color-mix(in srgb, var(--text-muted) 78%, var(--bg-panel));
   }
   .cost-num {
     color: var(--good);
@@ -550,7 +567,7 @@
   /* --- Core footer upgrade --- */
   .footer {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     gap: var(--space-3);
     flex-wrap: wrap;
@@ -558,12 +575,14 @@
     padding-top: var(--space-3);
     border-top: 1px solid var(--border);
   }
+  .footer .finfo {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
   .footer .gsummary,
   .footer .gcost {
-    margin-top: 0;
-  }
-  .footer .gcost {
-    margin-top: 2px;
+    margin: 0;
   }
 
   /* --- Buttons --- */

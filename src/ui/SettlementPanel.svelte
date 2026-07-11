@@ -28,7 +28,7 @@
 <section class="panel">
   <div class="tier">
     <div class="info">
-      <span class="name">{tier?.name ?? `Level ${gs.level}`}</span>
+      <span class="name"><span class="lvl">Lvl {gs.level}</span> {tier?.name ?? `Level ${gs.level}`}</span>
       <span class="blurb">{tier?.blurb ?? ''}</span>
     </div>
     {#if next}
@@ -115,6 +115,9 @@
   .name {
     font-family: var(--font-display);
     font-size: 24px;
+  }
+  .lvl {
+    color: var(--accent);
   }
   .blurb {
     color: var(--text-muted);

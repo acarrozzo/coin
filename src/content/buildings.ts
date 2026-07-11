@@ -71,7 +71,7 @@ function niceCost(x: number): number {
 function buildFarmLevels(): BuildingLevel[] {
   const levels: BuildingLevel[] = [
     { cost: { wood: 10, stone: 10 }, summary: 'Unlocks food gathering (1 farmer).' },
-    { cost: { wood: 60, stone: 40 }, summary: '+1 farmer.' },
+    { cost: { wood: 60, stone: 40 }, summary: '' },
     { cost: { wood: 200, stone: 150 }, summary: '+1 farmer.' },
   ];
   let prevReq = farmRequires(3);
@@ -81,7 +81,7 @@ function buildFarmLevels(): BuildingLevel[] {
     const req = farmRequires(level);
     // Note the settlement gate only on the first level of each new band.
     const gateName = req > prevReq ? getTier(req)?.name : undefined;
-    const summary = gateName ? `+1 farmer — requires ${gateName}.` : '+1 farmer.';
+    const summary = gateName ? `+1 farmer — requires ${gateName}.` : 'bigger farm.';
     const level_: BuildingLevel = { cost: { wood, stone }, summary };
     if (req > 0) level_.requiresLevel = req;
     levels.push(level_);

@@ -21,6 +21,7 @@
   import Castle from '@lucide/svelte/icons/castle';
   import Settings from '@lucide/svelte/icons/settings';
   import PersonStanding from '@lucide/svelte/icons/person-standing';
+  import Check from '@lucide/svelte/icons/check';
   import TreePine from '@lucide/svelte/icons/tree-pine';
   import Mountain from '@lucide/svelte/icons/mountain';
   import Wheat from '@lucide/svelte/icons/wheat';
@@ -45,6 +46,43 @@
   // Busy workers (total minus idle), mirrored as a storage-style gauge.
   const working = $derived(Math.max(0, total - available));
   const workerPct = $derived(total > 0 ? Math.min(100, (working / total) * 100) : 0);
+
+  // Quips for the idle-worker alert. {n} = idle count, {s} = "" or "s".
+  const IDLE_QUIPS = [
+    'Twiddling {n} set{s} of thumbs. Give them a job!',
+    '{n} villager{s} loafing about the square.',
+    '{n} idle hand{s} — the devil’s workshop, you know.',
+    '{n} worker{s} awaiting your royal command.',
+    '{n} pair{s} of boots collecting dust. Put them to work!',
+    'The tavern is suspiciously full: {n} slacker{s}.',
+    '{n} mouth{s} to feed, zero work being done.',
+    'Somewhere, {n} worker{s} pretend{p} to look busy.',
+  ];
+  // Praise for when every worker is busy. {n} = total workers.
+  const DONE_QUIPS = [
+    'Every last worker is busy. A well-run realm!',
+    'Not an idle hand in sight. Bravo, sire!',
+    'All {n} hard at work. The kingdom hums along.',
+    'Full employment! The crown smiles upon you.',
+    'Nobody’s slacking. Your subjects adore you.',
+    'A productive settlement is a happy settlement.',
+    'All hands on deck. Nothing to fret about here.',
+  ];
+  // Re-roll whenever the worker counts change, so a fresh line greets each nudge.
+  const workerQuip = $derived.by(() => {
+    if (total <= 0) return '';
+    if (available <= 0) {
+      return DONE_QUIPS[Math.floor(Math.random() * DONE_QUIPS.length)].replaceAll(
+        '{n}',
+        formatNumber(total),
+      );
+    }
+    const plural = available === 1;
+    return IDLE_QUIPS[Math.floor(Math.random() * IDLE_QUIPS.length)]
+      .replaceAll('{n}', formatNumber(available))
+      .replaceAll('{s}', plural ? '' : 's')
+      .replaceAll('{p}', plural ? 's' : '');
+  });
 
   const stores = $derived(
     CORE_STORES.flatMap((s) => {
@@ -78,7 +116,10 @@
 <div class="topstack" bind:clientHeight={headerH}>
   <header>
     <div class="header-inner">
-    <h1><Castle size={24} color="var(--gold)" aria-hidden="true" /> Coin &amp; Castle</h1>
+    <h1>
+      <Castle size={24} color="var(--gold)" aria-hidden="true" /> Coin &amp; Castle
+      <span class="stat level-badge" class:leveled title="Settlement level">Lv {gs.level}</span>
+    </h1>
 
     {#if stores.length > 0}
       <div class="stores">
@@ -99,8 +140,34 @@
     {/if}
 
     <div class="hud">
-      <span class="stat" class:leveled title="Settlement level">Lv {gs.level}</span>
-      <span class="stat" title="Working / total workers">
+      <span class="stat worker-stat" title="Working / total workers">
+        {#if total > 0}
+          <span
+            class="worker-badge"
+            class:idle={available > 0}
+            class:done={available === 0}
+            role="status"
+            aria-label={available > 0
+              ? `${available} idle worker${available === 1 ? '' : 's'}`
+              : 'All workers assigned'}
+          >
+            {#if available > 0}
+              {formatNumber(available)}
+            {:else}
+              <Check size={12} strokeWidth={3.5} aria-hidden="true" />
+            {/if}
+            <span class="idle-flyout" role="tooltip">
+              <strong>
+                {#if available > 0}
+                  {available} worker{available === 1 ? '' : 's'} standing around
+                {:else}
+                  All workers assigned
+                {/if}
+              </strong>
+              <span class="idle-quip">{workerQuip}</span>
+            </span>
+          </span>
+        {/if}
         {working}/{total}
         <PersonStanding size={16} color="var(--gold)" aria-hidden="true" />
         <span class="store-bar" class:alert={available > 0}
@@ -127,9 +194,9 @@
     <main>
       <WelcomeBack />
       <SettlementPanel />
-      <CampPanel />
       <CombatPanel />
       <ResourcePanel />
+      <CampPanel />
     </main>
 
     <footer>
@@ -253,6 +320,95 @@
   .stat.leveled {
     color: var(--gold);
     animation: levelPulse 0.8s ease;
+  }
+  /* Level badge sitting beside the logo text. */
+  .level-badge {
+    font-size: 13px;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--gold);
+  }
+
+  /* Positioning context for the worker-status badge's flyout. */
+  .worker-stat {
+    position: relative;
+  }
+  /* Status circle to the left of the worker count: red count when idle,
+     green check when everyone is assigned. */
+  .worker-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    border-radius: 999px;
+    box-shadow: 0 0 0 2px var(--bg-header);
+    cursor: default;
+  }
+  .worker-badge.idle {
+    background: var(--bad);
+    animation: idlePulse 2s ease-in-out infinite;
+  }
+  .worker-badge.done {
+    background: var(--good, #16a34a);
+  }
+  @keyframes idlePulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 2px var(--bg-header), 0 0 0 0 color-mix(in srgb, var(--bad) 60%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 2px var(--bg-header), 0 0 0 5px transparent;
+    }
+  }
+  /* Hover flyout with the count + a quip. */
+  .idle-flyout {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 10;
+    width: max-content;
+    max-width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    background: var(--bg-panel, #fff);
+    color: var(--text, inherit);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    font-size: 12px;
+    font-weight: 400;
+    text-align: left;
+    white-space: normal;
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  .worker-badge:hover .idle-flyout,
+  .worker-badge:focus-visible .idle-flyout {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .idle-flyout strong {
+    font-size: 12px;
+  }
+  .worker-badge.idle .idle-flyout strong {
+    color: var(--bad);
+  }
+  .worker-badge.done .idle-flyout strong {
+    color: var(--good, #16a34a);
+  }
+  .idle-quip {
+    color: var(--text-muted);
   }
   @keyframes levelPulse {
     0% {
