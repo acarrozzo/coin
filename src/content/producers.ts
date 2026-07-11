@@ -93,3 +93,30 @@ export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
 
 /** Ids of producible resources (honor/wisdom excluded — they come from combat). */
 export const PRODUCER_IDS = Object.keys(PRODUCERS) as ResourceId[];
+
+/**
+ * Resources allowed to hold decimal amounts — the "handful". Derived, not a
+ * hand-kept list: a resource is fractional iff its producer emits less than one
+ * whole unit per cycle (the metals iron→adamantium at 0.1…0.0001, and coin at
+ * 0.00001). Every other line emits whole units per cycle, so with atomic cycles
+ * its amount never leaves the integers. Used by the save migration to know which
+ * resources to floor.
+ */
+export const FRACTIONAL_RESOURCE_IDS = new Set<ResourceId>(
+  PRODUCER_IDS.filter((id) => (PRODUCERS[id]?.outputPerCycle ?? 1) < 1),
+);
+
+export const isFractionalResource = (id: ResourceId): boolean =>
+  FRACTIONAL_RESOURCE_IDS.has(id);
+
+/**
+ * How many decimal places a fractional resource is gathered in — its display
+ * precision. Derived from the producer's per-cycle step (iron 0.1 → 1, steel
+ * 0.01 → 2, mithril 0.001 → 3, adamantium 0.0001 → 4, coin 0.00001 → 5).
+ * Whole-unit producers (and non-producers) return 0.
+ */
+export function resourceDecimals(id: ResourceId): number {
+  const step = PRODUCERS[id]?.outputPerCycle ?? 1;
+  if (step >= 1) return 0;
+  return Math.round(-Math.log10(step));
+}

@@ -1,66 +1,91 @@
-import { D } from '../engine/numbers';
+import { D, type Decimal } from '../engine/numbers';
 import type { GameState, ResourceId } from '../engine/state';
-import { getCapacity, isResourceUnlocked } from '../engine/selectors';
+import { getCapacity, canStartCycle } from '../engine/selectors';
 import { PRODUCERS, PRODUCER_IDS } from '../content/producers';
 
-/**
- * Advance every production line by `dt` seconds.
- *
- * Each line wants to make `workers × rate × dt` of its output, but is limited by:
- *   1. remaining storage capacity of the output, and
- *   2. available inputs (crafting is throttled to what the inputs can supply).
- * Inputs are consumed in proportion to what was actually produced.
- *
- * Producers run in dependency order (upstream before downstream), so within a
- * single small tick a chain like food → iron → steel behaves correctly.
- */
-export function runProduction(state: GameState, dt: number): void {
-  for (const id of PRODUCER_IDS) {
-    const workers = state.workers.assigned[id];
-    if (workers <= 0 || !isResourceUnlocked(state, id)) continue;
+/** Notified with each completed cycle's output — see tick's `onGain`. */
+export type GainHandler = (id: ResourceId, amount: Decimal) => void;
 
+/**
+ * Advance every production line by `dt` seconds — atomic-cycle model.
+ *
+ * A line does not trickle output. It accumulates elapsed time toward one
+ * `cycleSeconds`-long cycle and only ever emits a whole cycle's worth at once:
+ * `workers × outputPerCycle`. This keeps integer resources on the integers
+ * (metals and coin emit fractions per cycle by design and stay decimal).
+ *
+ * A cycle is gated by `canStartCycle` at its START only — full ingredients for
+ * every worker, and some capacity headroom. Once a cycle is committed it runs to
+ * completion regardless of what happens to the inputs in the meantime; the input
+ * deduction lands at completion and is allowed to go negative (we never clamp —
+ * the negative is shown as-is and recovers as upstream lines refill).
+ *
+ * Producers run upstream → downstream, so a chain like food → iron settles in
+ * order within one tick.
+ */
+export function runProduction(state: GameState, dt: number, onGain?: GainHandler): void {
+  for (const id of PRODUCER_IDS) {
     const p = PRODUCERS[id];
     if (!p) continue;
-    const perWorkerPerSec = p.outputPerCycle / p.cycleSeconds;
-    let output = D(workers * perWorkerPerSec * dt);
-    if (output.lte(0)) continue;
+    const workers = state.workers.assigned[id];
+    const cs = p.cycleSeconds;
 
-    // Capacity limit.
-    const cap = getCapacity(state, id);
-    if (cap !== null) {
-      const remaining = cap.minus(state.resources[id].amount);
-      if (remaining.lte(0)) continue;
-      if (output.gt(remaining)) output = remaining;
+    // An unstaffed (or locked) line holds no progress.
+    if (workers <= 0) {
+      state.production.progress[id] = 0;
+      continue;
     }
 
-    // Input limit — throttle output to what inputs can supply.
-    if (p.inputs) {
-      for (const [rid, qty] of Object.entries(p.inputs) as [ResourceId, number][]) {
-        const perOutput = qty / p.outputPerCycle;
-        const maxByInput = state.resources[rid].amount.div(perOutput);
-        if (maxByInput.lt(output)) output = maxByInput;
+    let t = state.production.progress[id];
+    let budget = dt;
+
+    while (budget > 0) {
+      // At the start of a cycle (t === 0) the line must pass the gate; if it
+      // can't, it sits idle and no time accrues (bar stays empty).
+      if (t === 0 && !canStartCycle(state, id)) break;
+
+      const need = cs - t;
+      if (budget >= need) {
+        completeCycle(state, id, workers, onGain);
+        t = 0;
+        budget -= need;
+      } else {
+        t += budget;
+        budget = 0;
       }
     }
 
-    if (output.lte(0)) continue;
-
-    // Consume inputs proportional to actual output.
-    if (p.inputs) {
-      for (const [rid, qty] of Object.entries(p.inputs) as [ResourceId, number][]) {
-        const perOutput = qty / p.outputPerCycle;
-        state.resources[rid].amount = state.resources[rid].amount.minus(output.times(perOutput));
-      }
-    }
-
-    state.resources[id].amount = state.resources[id].amount.plus(output);
+    state.production.progress[id] = t;
   }
-
-  clampNegatives(state);
 }
 
-/** Guard against tiny floating drift pushing an input just below zero. */
-function clampNegatives(state: GameState): void {
-  for (const id of PRODUCER_IDS) {
-    if (state.resources[id].amount.lt(0)) state.resources[id].amount = D(0);
+/**
+ * Emit one committed cycle: add `workers × outputPerCycle` (clamped to remaining
+ * capacity so we never overflow) and subtract the full ingredient cost. The
+ * input subtraction may drive a resource negative — that is intentional and left
+ * unclamped.
+ */
+function completeCycle(
+  state: GameState,
+  id: ResourceId,
+  workers: number,
+  onGain?: GainHandler,
+): void {
+  const p = PRODUCERS[id];
+  if (!p) return;
+
+  let output = D(workers * p.outputPerCycle);
+  const cap = getCapacity(state, id);
+  if (cap !== null) {
+    const remaining = cap.minus(state.resources[id].amount);
+    if (output.gt(remaining)) output = remaining;
+  }
+  state.resources[id].amount = state.resources[id].amount.plus(output);
+  if (onGain && output.gt(0)) onGain(id, output);
+
+  if (p.inputs) {
+    for (const [rid, qty] of Object.entries(p.inputs) as [ResourceId, number][]) {
+      state.resources[rid].amount = state.resources[rid].amount.minus(workers * qty);
+    }
   }
 }

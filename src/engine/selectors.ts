@@ -2,7 +2,7 @@ import { Decimal, D } from './numbers';
 import type { GameState, ResourceId, BuildingId } from './state';
 import { RESOURCE_IDS } from '../content/resources';
 import { BUILDINGS } from '../content/buildings';
-import { PRODUCERS, type StructureId } from '../content/producers';
+import { PRODUCERS, PRODUCER_IDS, type StructureId } from '../content/producers';
 import { getTier, SETTLEMENT_TIERS, type ResourceCost } from '../content/settlement';
 import { ASSAULT, HEX, type ThreatConfig } from '../content/combat';
 
@@ -53,12 +53,62 @@ export function isAtCapacity(state: GameState, id: ResourceId): boolean {
   return cap !== null && state.resources[id].amount.gte(cap);
 }
 
+/**
+ * Whether a production line may BEGIN a fresh cycle right now.
+ *
+ * Two gates, both checked only at cycle start (the atomic model):
+ *  1. Inputs — all-or-nothing: every ingredient must be present in full for all
+ *     N assigned workers (N × inputs[rid]); a partially-fed line makes nothing.
+ *  2. Capacity — there must be at least some room for the output; a line at cap
+ *     stays idle rather than burning inputs for nothing.
+ *
+ * The check is start-only: once a cycle is committed it runs to completion even
+ * if inputs are spent elsewhere in the meantime (that deduction is allowed to go
+ * negative — see production.ts).
+ */
+export function canStartCycle(state: GameState, id: ResourceId): boolean {
+  const p = PRODUCERS[id];
+  if (!p) return false;
+  const workers = state.workers.assigned[id];
+  if (workers <= 0 || !isResourceUnlocked(state, id)) return false;
+
+  const cap = getCapacity(state, id);
+  if (cap !== null && cap.minus(state.resources[id].amount).lte(0)) return false;
+
+  if (p.inputs) {
+    for (const [rid, qty] of Object.entries(p.inputs) as [ResourceId, number][]) {
+      if (state.resources[rid].amount.lt(workers * qty)) return false;
+    }
+  }
+  return true;
+}
+
 /** Nominal production per second (workers × rate; ignores inputs and caps). */
 export function getProductionRate(state: GameState, id: ResourceId): Decimal {
   const p = PRODUCERS[id];
   if (!p || !isResourceUnlocked(state, id)) return D(0);
   const perWorker = p.outputPerCycle / p.cycleSeconds;
   return D(state.workers.assigned[id]).times(perWorker);
+}
+
+/**
+ * Net nominal rate for a resource per second: what its own line produces minus
+ * what every staffed line across the economy consumes it as an input. Nominal —
+ * it counts each staffed worker at full throughput, ignoring input starvation and
+ * capacity gating, so it reads as the intended running balance rather than the
+ * instantaneous gated rate. Used by the Core Resources rows to show the overall
+ * +/- rate of wood/stone/food as production and consumption shift.
+ */
+export function getNetProductionRate(state: GameState, id: ResourceId): Decimal {
+  let rate = getProductionRate(state, id);
+  for (const pid of PRODUCER_IDS) {
+    const qty = PRODUCERS[pid]?.inputs?.[id];
+    if (!qty) continue;
+    const workers = state.workers.assigned[pid];
+    if (workers <= 0) continue;
+    rate = rate.minus(D(workers).times(qty).div(PRODUCERS[pid]!.cycleSeconds));
+  }
+  return rate;
 }
 
 // ---------- Workers ----------

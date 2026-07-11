@@ -1,4 +1,5 @@
 import { createInitialState, type GameState, type ResourceId, type BuildingId } from '../engine/state';
+import { D, type Decimal } from '../engine/numbers';
 import { tick } from '../engine/tick';
 import { applyOffline, type OfflineSummary } from '../engine/offline';
 import {
@@ -30,11 +31,22 @@ const TICK_STEP = 0.1;
 const AUTOSAVE_MS = 30_000;
 /** Only greet the player if they were away at least this long. */
 const WELCOME_THRESHOLD_S = 60;
+/** How long a "+X" gain pop lives before it's dropped (matches the CSS float). */
+const POP_MS = 1000;
+
+/** A transient "+X gained" marker anchored to a resource row. */
+export interface GainPop {
+  seq: number;
+  id: ResourceId;
+  amount: number;
+}
 
 function createGameStore() {
   const bootNow = Date.now();
   const state = $state<GameState>(loadFromStorage(bootNow) ?? createInitialState(bootNow));
   let welcomeBack = $state<OfflineSummary | null>(null);
+  let pops = $state<GainPop[]>([]);
+  let popSeq = 0;
 
   let running = false;
   let rafId = 0;
@@ -65,6 +77,15 @@ function createGameStore() {
     }
   }
 
+  /** Queue a floating "+X" marker for a resource; it self-removes after POP_MS. */
+  function pushPop(id: ResourceId, amount: Decimal): void {
+    const seq = ++popSeq;
+    pops.push({ seq, id, amount: amount.toNumber() });
+    setTimeout(() => {
+      pops = pops.filter((p) => p.seq !== seq);
+    }, POP_MS);
+  }
+
   function frame(ts: number): void {
     if (!running) return;
     if (lastFrame === 0) lastFrame = ts;
@@ -75,11 +96,20 @@ function createGameStore() {
 
     accumulator += dt;
     const events: CombatEvent[] = [];
+    // Sum each resource's cycle completions across this frame's fixed steps into
+    // one pop, so a frame that ran several ticks doesn't stack duplicate markers.
+    const gains: Partial<Record<ResourceId, Decimal>> = {};
+    const onGain = (id: ResourceId, amount: Decimal) => {
+      gains[id] = (gains[id] ?? D(0)).plus(amount);
+    };
     while (accumulator >= TICK_STEP) {
-      events.push(...tick(state, TICK_STEP));
+      events.push(...tick(state, TICK_STEP, { onGain }));
       accumulator -= TICK_STEP;
     }
     for (const e of events) announceCombat(e);
+    for (const [id, amount] of Object.entries(gains) as [ResourceId, Decimal][]) {
+      pushPop(id, amount);
+    }
 
     sinceSaveMs += dt * 1000;
     if (sinceSaveMs >= AUTOSAVE_MS) {
@@ -139,6 +169,9 @@ function createGameStore() {
     },
     get welcomeBack() {
       return welcomeBack;
+    },
+    get pops() {
+      return pops;
     },
     dismissWelcome(): void {
       welcomeBack = null;

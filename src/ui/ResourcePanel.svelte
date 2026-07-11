@@ -3,12 +3,11 @@
   import { fly } from 'svelte/transition';
   import { game } from './gameStore.svelte';
   import { RESOURCES, type ResourceId } from '../content/resources';
-  import { PRODUCERS, type StructureId } from '../content/producers';
+  import { PRODUCERS, resourceDecimals, type StructureId } from '../content/producers';
   import { BUILDINGS, type BuildingId } from '../content/buildings';
   import type { ResourceCost } from '../content/settlement';
   import {
     unlockedResources,
-    isAtCapacity,
     getAvailableWorkers,
     getMaxWorkers,
     getStructureLevel,
@@ -16,8 +15,11 @@
     canBuild,
     isBuildingAvailable,
     isCombatUnlocked,
+    isHexUnlocked,
+    canStartCycle,
+    getNetProductionRate,
   } from '../engine/selectors';
-  import { formatNumber, formatCycleRate } from '../engine/numbers';
+  import { formatNumber, formatCycleRate, formatSignedRate } from '../engine/numbers';
   import { RESOURCE_ICON } from './resourceIcons';
 
   // Barracks group header icon (also a resource icon, sourced below).
@@ -121,7 +123,10 @@
 
   // Once assault unlocks (settlement 7), Defense leaves the Castle card and
   // lives in the Assault panel instead — the Castle keeps its quest converters.
+  // Likewise, once hex unlocks (settlement 8), Ward leaves the Wizard Tower card
+  // and lives in the Hex panel — the Wizard Tower keeps its ether converter.
   const combatUnlocked = $derived(isCombatUnlocked(gs));
+  const hexUnlocked = $derived(isHexUnlocked(gs));
 
   const groups = $derived(
     GROUP_DEFS.map((g) => ({
@@ -129,7 +134,8 @@
       ids: unlocked.filter(
         (id) =>
           g.structures.includes(PRODUCERS[id]?.structure as StructureId) &&
-          !(id === 'defense' && combatUnlocked),
+          !(id === 'defense' && combatUnlocked) &&
+          !(id === 'ward' && hexUnlocked),
       ),
     })).filter(
       // Show a group once its resources exist, or once its building can be
@@ -150,12 +156,14 @@
     return Object.entries(PRODUCERS[id]?.inputs ?? {}) as [ResourceId, number][];
   }
 
-  // A crafting line with workers but a completely empty input is "starved".
+  // A crafting line with workers that can't muster a full batch of some input
+  // (needs workers × qty of every ingredient, all-or-nothing) is "starved".
   function starvedInput(id: ResourceId): ResourceId | null {
     const p = PRODUCERS[id];
-    if (!p?.inputs || gs.workers.assigned[id] === 0) return null;
-    for (const rid of Object.keys(p.inputs) as ResourceId[]) {
-      if (gs.resources[rid].amount.lte(0)) return rid;
+    const workers = gs.workers.assigned[id];
+    if (!p?.inputs || workers === 0) return null;
+    for (const [rid, qty] of Object.entries(p.inputs) as [ResourceId, number][]) {
+      if (gs.resources[rid].amount.lt(workers * qty)) return rid;
     }
     return null;
   }
@@ -234,7 +242,7 @@
             {@const starved = starvedInput(id)}
             {@const cycleSeconds = PRODUCERS[id]?.cycleSeconds ?? 1}
             {@const outputPerCycle = PRODUCERS[id]?.outputPerCycle ?? 0}
-            {@const producing = assigned > 0 && !starved && !isAtCapacity(gs, id)}
+            {@const producing = assigned > 0 && canStartCycle(gs, id)}
             <div class="row" data-res={id} transition:fly={{ y: 8, duration: 260 }}>
               <span class="ricon">
                 {#if Icon}<Icon size={18} color="var(--text-muted)" aria-hidden="true" />{/if}
@@ -252,8 +260,11 @@
               </div>
 
               <span class="label">
-                <span class="amount">{formatNumber(gs.resources[id].amount)}</span>
+                <span class="amount">{formatNumber(gs.resources[id].amount, resourceDecimals(id))}</span>
                 <span class="name" class:jumped={highlighted === id}>{RESOURCES[id].name}</span>
+                {#each game.pops.filter((p) => p.id === id) as p (p.seq)}
+                  <span class="pop">+{formatNumber(p.amount)}</span>
+                {/each}
               </span>
 
               <div class="workers">
@@ -281,13 +292,24 @@
               </span>
 
               <span class="rcost">
-                {#each inputEntries(id) as [rid, amt] (rid)}
-                  <span class="pill" class:short={gs.resources[rid].amount.lt(amt)}>
-                    <button type="button" class="req jump" onclick={() => jumpTo(rid)}
-                      >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
-                    ><span class="held">/{formatNumber(gs.resources[rid].amount)}</span>
-                  </span>
-                {/each}
+                {#if group.key === 'core'}
+                  {@const net = getNetProductionRate(gs, id)}
+                  <span
+                    class="netrate"
+                    class:pos={net.gt(0)}
+                    class:neg={net.lt(0)}
+                    title="Overall {RESOURCES[id].name.toLowerCase()} rate — production minus everything that consumes it"
+                    >{formatSignedRate(net)}</span
+                  >
+                {:else}
+                  {#each inputEntries(id) as [rid, amt] (rid)}
+                    <span class="pill" class:short={gs.resources[rid].amount.lt(amt)}>
+                      <button type="button" class="req jump" onclick={() => jumpTo(rid)}
+                        >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
+                      ><span class="held">/{formatNumber(gs.resources[rid].amount, resourceDecimals(rid))}</span>
+                    </span>
+                  {/each}
+                {/if}
               </span>
             </div>
           {/each}
@@ -448,8 +470,11 @@
     justify-content: center;
     gap: 3px;
   }
-  /* Cycle bar: a cosmetic loop timed to the line's base cycleSeconds, running
-     only while the line is actively producing. */
+  /* Cycle bar: a smooth loop timed to the line's cycleSeconds, running only
+     while the line is actively producing. It's decoupled from the discrete
+     0.1s simulation step on purpose — binding the width to the real per-tick
+     progress makes it lurch in 10% jumps. The `producing` gate (canStartCycle)
+     still stops it the instant a line can't run. */
   .cyc {
     height: 6px;
     background: color-mix(in srgb, var(--border) 40%, transparent);
@@ -480,6 +505,7 @@
     }
   }
   .label {
+    position: relative;
     display: inline-flex;
     align-items: baseline;
     gap: 4px;
@@ -488,6 +514,47 @@
   }
   .amount {
     font-size: 17px;
+  }
+
+  /* Floating "+X" that rises off the amount each time a cycle completes. */
+  .pop {
+    position: absolute;
+    left: 0;
+    bottom: 100%;
+    color: var(--good);
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
+    animation: gainPop 1s ease-out forwards;
+  }
+  @keyframes gainPop {
+    0% {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    18% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-16px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pop {
+      animation: gainPopFade 1s ease-out forwards;
+    }
+    @keyframes gainPopFade {
+      0%,
+      70% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0;
+      }
+    }
   }
   .name {
     margin-left: 2px;
@@ -542,6 +609,22 @@
   .pill .held {
     color: var(--text-muted);
     font-size: 11px;
+  }
+
+  /* Core rows: the running net rate (production − consumption) for wood/stone/
+     food, sitting where crafting rows show their input pills — far right. */
+  .netrate {
+    color: var(--text-muted);
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .netrate.pos {
+    color: var(--good);
+  }
+  .netrate.neg {
+    color: var(--bad);
   }
 
   /* Clickable cost/recipe entry — the whole container jumps to that resource's

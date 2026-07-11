@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createInitialState } from '../src/engine/state';
-import { D } from '../src/engine/numbers';
+import { createInitialState, SAVE_VERSION } from '../src/engine/state';
+import { D, formatNumber, setRoundingSource } from '../src/engine/numbers';
 import { tick } from '../src/engine/tick';
 import { assignWorker, trainWorker } from '../src/engine/actions';
 import { buildBuilding } from '../src/systems/buildings';
@@ -52,11 +52,13 @@ describe('crafting', () => {
     const s = createInitialState(0);
     s.buildings.deepmine.level = 2; // unlock iron + steel
     s.resources.food.amount = D(100);
-    assignWorker(s, 'iron', 1); // 0.1 iron/s, food-fed
-    assignWorker(s, 'steel', 1); // 0.005 steel/s, also food-fed (not iron-fed)
-    tick(s, 1);
-    expect(s.resources.iron.amount.toNumber()).toBeCloseTo(0.1, 6); // iron NOT eaten by steel
-    expect(s.resources.steel.amount.toNumber()).toBeCloseTo(0.005, 6);
+    assignWorker(s, 'iron', 1); // 0.1 iron / 1s cycle, food-fed
+    assignWorker(s, 'steel', 1); // 0.01 steel / 2s cycle, also food-fed (not iron-fed)
+    // Atomic cycles: steel only emits after a full 2s cycle. Run two so both
+    // lines complete at least one cycle.
+    tick(s, 2);
+    expect(s.resources.iron.amount.toNumber()).toBeCloseTo(0.2, 6); // 2 cycles, iron NOT eaten by steel
+    expect(s.resources.steel.amount.toNumber()).toBeCloseTo(0.01, 6); // 1 cycle
   });
 
   it('does not craft a locked resource', () => {
@@ -64,6 +66,71 @@ describe('crafting', () => {
     expect(isResourceUnlocked(s, 'iron')).toBe(false);
     assignWorker(s, 'iron', 1); // ignored
     expect(s.workers.assigned.iron).toBe(0);
+  });
+});
+
+describe('atomic cycles', () => {
+  it('emits nothing until a whole cycle completes, then a whole unit', () => {
+    const s = createInitialState(0);
+    s.level = 5; // lift caps
+    assignWorker(s, 'wood', 1); // 1 wood / 1s cycle
+    tick(s, 0.5); // mid-cycle
+    expect(s.resources.wood.amount.toNumber()).toBe(0);
+    tick(s, 0.5); // cycle completes at t=1
+    expect(s.resources.wood.amount.toNumber()).toBe(1);
+    // Never fractional along the way.
+    tick(s, 0.7);
+    expect(Number.isInteger(s.resources.wood.amount.toNumber())).toBe(true);
+    expect(s.resources.wood.amount.toNumber()).toBe(1);
+  });
+
+  it('does not start a cycle without full ingredients (all-or-nothing)', () => {
+    const s = createInitialState(0);
+    s.level = 6;
+    s.buildings.blacksmith.level = 3; // unlock sword (10 wood + 2 iron / 10s)
+    assignWorker(s, 'sword', 1);
+    s.resources.wood.amount = D(100);
+    s.resources.iron.amount = D(1); // short: needs 2
+    tick(s, 20); // two cycles' worth of time
+    expect(s.resources.sword.amount.toNumber()).toBe(0); // never started
+    expect(s.resources.wood.amount.toNumber()).toBe(100); // inputs untouched
+    expect(s.resources.iron.amount.toNumber()).toBe(1);
+  });
+
+  it('all-or-nothing across workers: N workers need N× of every input', () => {
+    const s = createInitialState(0);
+    s.workers.trained = 4; // enough pool to staff all 4 slots
+    s.buildings.deepmine.level = 4; // 4 slots
+    s.resources.food.amount = D(2); // only 2 food; 4 workers need 4/cycle
+    assignWorker(s, 'iron', 4);
+    expect(s.workers.assigned.iron).toBe(4);
+    tick(s, 1);
+    expect(s.resources.iron.amount.toNumber()).toBe(0); // batch can't start
+    expect(s.resources.food.amount.toNumber()).toBe(2); // untouched
+  });
+
+  it('deducts inputs at cycle END and does not clamp a transient negative', () => {
+    const s = createInitialState(0);
+    s.buildings.deepmine.level = 1; // iron: 1 food/cycle, 1s
+    assignWorker(s, 'iron', 1);
+    s.resources.food.amount = D(1); // exactly enough to START one cycle
+    // Spend the food elsewhere mid-cycle, then let the committed cycle finish.
+    tick(s, 0.5); // cycle committed, still mid-flight
+    s.resources.food.amount = D(0); // player spent it
+    tick(s, 0.5); // cycle completes: deduct 1 food → -1, shown as-is
+    expect(s.resources.iron.amount.toNumber()).toBeCloseTo(0.1, 6);
+    expect(s.resources.food.amount.toNumber()).toBe(-1); // negative, NOT clamped
+  });
+
+  it('keeps integer resources whole with many workers', () => {
+    const s = createInitialState(0);
+    s.level = 5;
+    s.buildings.blacksmith.level = 3; // arrow: 2 wood + 1 stone / 0.5s; 3 worker slots
+    s.resources.wood.amount = D(1000);
+    s.resources.stone.amount = D(1000);
+    assignWorker(s, 'arrow', 3);
+    tick(s, 3.3); // spans several 0.5s cycles
+    expect(Number.isInteger(s.resources.arrow.amount.toNumber())).toBe(true);
   });
 });
 
@@ -261,7 +328,7 @@ describe('save', () => {
     expect(restored.workers.trained).toBe(2); // fresh default (coin-old start)
   });
 
-  it('migrates a v3 save to v4, resetting progression but keeping base materials', () => {
+  it('migrates a v3 save forward, resetting progression but keeping base materials', () => {
     const v3 = JSON.stringify({
       version: 3,
       createdAt: 500,
@@ -271,7 +338,7 @@ describe('save', () => {
       combat: { assault: { wave: 12, wins: 12 } },
     });
     const restored = deserialize(v3, 0);
-    expect(restored.version).toBe(4);
+    expect(restored.version).toBe(SAVE_VERSION); // chained all the way up (v5)
     expect(restored.level).toBe(1); // reset
     expect(restored.resources.wood.amount.toNumber()).toBe(999); // kept
     expect(restored.resources.food.amount.toNumber()).toBe(3); // kept
@@ -279,9 +346,56 @@ describe('save', () => {
     expect(restored.playtime).toBe(42);
   });
 
+  it('floors integer resources on the v4→v5 migration, keeping metals fractional', () => {
+    const v4 = JSON.stringify({
+      version: 4,
+      createdAt: 1,
+      playtime: 1,
+      level: 5,
+      resources: {
+        wood: { amount: '12.7' }, // integer resource → floored
+        arrow: { amount: '3.9' }, // integer resource → floored
+        iron: { amount: '0.35' }, // fractional handful → kept
+        coin: { amount: '0.00042' }, // fractional handful → kept
+      },
+    });
+    const restored = deserialize(v4, 0);
+    expect(restored.resources.wood.amount.toNumber()).toBe(12);
+    expect(restored.resources.arrow.amount.toNumber()).toBe(3);
+    expect(restored.resources.iron.amount.toNumber()).toBeCloseTo(0.35, 6);
+    expect(restored.resources.coin.amount.toNumber()).toBeCloseTo(0.00042, 8);
+  });
+
   it('falls back to a fresh state on garbage', () => {
     const restored = deserialize('not json', 500);
     expect(restored.level).toBe(1);
     expect(restored.createdAt).toBe(500);
+  });
+});
+
+describe('formatNumber rounding toggle', () => {
+  it('renders full digits by default (rounding off)', () => {
+    expect(formatNumber(1112)).toBe('1112');
+    expect(formatNumber(1_234_567)).toBe('1234567');
+    expect(formatNumber(D('1.2e18'))).toBe('1200000000000000000');
+    // below 1000 is unaffected by the toggle
+    expect(formatNumber(950)).toBe('950');
+  });
+
+  it('collapses to K/M/B… suffixes when rounding is enabled', () => {
+    let rounding = false;
+    setRoundingSource(() => rounding);
+    try {
+      rounding = true;
+      expect(formatNumber(1112)).toBe('1.11K');
+      expect(formatNumber(1_500_000)).toBe('1.50M');
+    } finally {
+      // restore the module default so other tests see full digits
+      setRoundingSource(() => false);
+    }
+  });
+
+  it('keeps fractional gather precision on large fractional stacks (rounding off)', () => {
+    expect(formatNumber(1234.5, 2)).toBe('1234.50');
   });
 });

@@ -6,7 +6,7 @@ import { ASSAULT, HEX } from '../content/combat';
 export type { ResourceId, BuildingId };
 
 /** Bumped whenever the save shape changes; drives migrations (see save.ts). */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 /** Trained workers the player starts with (coin-old set workers=2 at the shack). */
 export const STARTING_WORKERS = 2;
@@ -35,6 +35,15 @@ export interface GameState {
     assigned: Record<ResourceId, number>;
   };
   buildings: Record<BuildingId, { level: number }>;
+  /**
+   * Per-line cycle progress in seconds toward the current cycle. Production is
+   * atomic: a line accumulates time here and only emits when a whole cycle
+   * completes. Transient runtime state — deliberately not persisted (cycles are
+   * ≤60s, so losing in-flight progress on reload is negligible).
+   */
+  production: {
+    progress: Record<ResourceId, number>;
+  };
   combat: {
     /** Assault track: seconds to next attack, current wave, and tallies. */
     assault: ThreatState;
@@ -56,9 +65,11 @@ export interface ThreatState {
 export function createInitialState(now: number): GameState {
   const resources = {} as Record<ResourceId, ResourceState>;
   const assigned = {} as Record<ResourceId, number>;
+  const progress = {} as Record<ResourceId, number>;
   for (const id of RESOURCE_IDS) {
     resources[id] = { amount: D(0) };
     assigned[id] = 0;
+    progress[id] = 0;
   }
 
   const buildings = {} as Record<BuildingId, { level: number }>;
@@ -75,6 +86,7 @@ export function createInitialState(now: number): GameState {
     resources,
     workers: { trained: STARTING_WORKERS, bonus: 0, assigned },
     buildings,
+    production: { progress },
     combat: {
       assault: { timer: ASSAULT.intervalSeconds, wave: 0, wins: 0, losses: 0 },
       hex: { timer: HEX.intervalSeconds, wave: 0, wins: 0, losses: 0 },

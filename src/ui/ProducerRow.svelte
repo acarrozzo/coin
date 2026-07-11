@@ -3,7 +3,7 @@
   import { RESOURCES, type ResourceId } from '../content/resources';
   import { PRODUCERS } from '../content/producers';
   import {
-    isAtCapacity,
+    canStartCycle,
     getAvailableWorkers,
     getMaxWorkers,
     getCapacity,
@@ -29,16 +29,17 @@
   const outputPerCycle = $derived(PRODUCERS[id]?.outputPerCycle ?? 0);
   const cap = $derived(showCap ? getCapacity(gs, id) : null);
 
-  // A crafting line with workers but a fully empty input is "starved".
+  // A crafting line that can't muster a full batch of some input (needs
+  // workers × qty of every ingredient, all-or-nothing) is "starved".
   const starved = $derived.by<ResourceId | null>(() => {
     const p = PRODUCERS[id];
     if (!p?.inputs || assigned === 0) return null;
-    for (const rid of Object.keys(p.inputs) as ResourceId[]) {
-      if (gs.resources[rid].amount.lte(0)) return rid;
+    for (const [rid, qty] of Object.entries(p.inputs) as [ResourceId, number][]) {
+      if (gs.resources[rid].amount.lt(assigned * qty)) return rid;
     }
     return null;
   });
-  const producing = $derived(assigned > 0 && !starved && !isAtCapacity(gs, id));
+  const producing = $derived(assigned > 0 && canStartCycle(gs, id));
 
   function inputEntries(): [ResourceId, number][] {
     return Object.entries(PRODUCERS[id]?.inputs ?? {}) as [ResourceId, number][];
@@ -75,6 +76,9 @@
     <span class="amount">{formatNumber(gs.resources[id].amount)}</span>
     {#if cap && cap.gt(0)}<span class="cap">/ {formatNumber(cap)}</span>{/if}
     <span class="name" class:jumped={highlighted === id}>{RESOURCES[id].name}</span>
+    {#each game.pops.filter((p) => p.id === id) as p (p.seq)}
+      <span class="pop">+{formatNumber(p.amount)}</span>
+    {/each}
   </span>
 
   <div class="workers">
@@ -160,6 +164,7 @@
     }
   }
   .label {
+    position: relative;
     display: inline-flex;
     align-items: baseline;
     gap: 4px;
@@ -168,6 +173,47 @@
   }
   .amount {
     font-size: 17px;
+  }
+
+  /* Floating "+X" that rises off the amount each time a cycle completes. */
+  .pop {
+    position: absolute;
+    left: 0;
+    bottom: 100%;
+    color: var(--good);
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
+    animation: gainPop 1s ease-out forwards;
+  }
+  @keyframes gainPop {
+    0% {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    18% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-16px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pop {
+      animation: gainPopFade 1s ease-out forwards;
+    }
+    @keyframes gainPopFade {
+      0%,
+      70% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0;
+      }
+    }
   }
   .cap {
     color: var(--text-muted);

@@ -1,10 +1,16 @@
 import type { GameState } from './state';
-import { runProduction } from '../systems/production';
+import { runProduction, type GainHandler } from '../systems/production';
 import { runCombat, type CombatEvent } from '../systems/combat';
 
 export interface TickOptions {
   /** Whether combat resolves this tick. Off during offline catch-up. */
   combat?: boolean;
+  /**
+   * Called once per completed production cycle with the resource and the amount
+   * emitted. Used by the live loop to float a "+X" pop; left unset during
+   * offline catch-up so long absences don't build a huge event list.
+   */
+  onGain?: GainHandler;
 }
 
 /**
@@ -14,7 +20,7 @@ export interface TickOptions {
  */
 export function tick(state: GameState, dt: number, opts: TickOptions = {}): CombatEvent[] {
   if (dt <= 0) return [];
-  runProduction(state, dt);
+  runProduction(state, dt, opts.onGain);
   state.playtime += dt;
   return opts.combat === false ? [] : runCombat(state, dt);
 }

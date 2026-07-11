@@ -76,7 +76,6 @@ export const FONTS = [
 
 export const LAYOUTS = [
   { id: 'classic', name: 'Classic', group: 'Layout' },
-  { id: 'wide', name: 'Wide', group: 'Layout' },
   { id: 'flat', name: 'Flat', group: 'Layout' },
   { id: 'soft', name: 'Soft Cards', group: 'Layout' },
   { id: 'elevated', name: 'Elevated', group: 'Layout' },

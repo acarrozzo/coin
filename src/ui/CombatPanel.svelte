@@ -91,7 +91,11 @@
         {/if}
         <span class="tally">· {gs.combat.hex.wins}W / {gs.combat.hex.losses}L</span>
       </p>
-      <p class="hint">Wards are woven in the Wizard Tower.</p>
+
+      <div class="def-row">
+        <ProducerRow id="ward" showCap />
+      </div>
+      <p class="hint">Dedicate a mage to weave wards (up to your Wizard Tower's cap).</p>
     {/if}
   </section>
 {/if}

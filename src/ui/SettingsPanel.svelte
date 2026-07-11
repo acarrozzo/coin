@@ -1,6 +1,7 @@
 <script lang="ts">
   import { game } from './gameStore.svelte';
   import { sound } from './sound.svelte';
+  import { format } from './format.svelte';
   import { look, PALETTES, FONTS, LAYOUTS, type Option } from './theme.svelte';
   import Palette from '@lucide/svelte/icons/palette';
   import Type from '@lucide/svelte/icons/type';
@@ -127,6 +128,11 @@
       <label class="row toggle">
         <span>Sound effects</span>
         <input type="checkbox" checked={sound.enabled} onchange={() => sound.toggle()} />
+      </label>
+
+      <label class="row toggle">
+        <span>Round large numbers<small>Show 1.1K instead of 1112</small></span>
+        <input type="checkbox" checked={format.rounding} onchange={() => format.toggle()} />
       </label>
 
       <div class="row">
@@ -320,6 +326,15 @@
   .toggle input {
     width: 18px;
     height: 18px;
+  }
+  .toggle span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .toggle span small {
+    color: var(--text-muted);
+    font-size: 11px;
   }
   .reset {
     background: transparent;

@@ -1,7 +1,8 @@
 import { D } from './numbers';
 import { createInitialState, SAVE_VERSION, type GameState } from './state';
-import { RESOURCE_IDS } from '../content/resources';
+import { RESOURCE_IDS, type ResourceId } from '../content/resources';
 import { BUILDING_IDS } from '../content/buildings';
+import { isFractionalResource } from '../content/producers';
 
 export const STORAGE_KEY = 'cc:save';
 
@@ -48,6 +49,22 @@ const migrations: Record<number, (data: RawSave) => RawSave> = {
         food: resources.food,
       },
     };
+  },
+  // v4 → v5 (atomic production): resources now only tick at whole integers,
+  // except the fractional handful (metals + coin). Floor any decimal amounts a
+  // continuous-model save left behind so integer resources start clean.
+  4: (data) => {
+    const resources = data.resources as Record<string, { amount?: unknown }> | undefined;
+    if (resources) {
+      for (const id of Object.keys(resources)) {
+        if (isFractionalResource(id as ResourceId)) continue;
+        const a = resources[id]?.amount;
+        if (typeof a === 'string' || typeof a === 'number') {
+          resources[id]!.amount = D(a).floor().toString();
+        }
+      }
+    }
+    return { ...data, version: 5 };
   },
 };
 

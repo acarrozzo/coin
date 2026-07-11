@@ -624,11 +624,6 @@
   --content-width: 980px;
 }
 
-/* Wide — roomy single column. */
-:root[data-layout='wide'] {
-  --content-width: 960px;
-}
-
 /* Flat — borderless, sharp corners, slim header. */
 :root[data-layout='flat'] {
   --radius: 0px;
@@ -641,7 +636,6 @@
 /* Soft — rounded floating cards with soft shadows. */
 :root[data-layout='soft'] {
   --radius: 10px;
-  --content-width: 760px;
   --panel-border: 1px solid transparent;
   --panel-radius: 14px;
   --panel-shadow: 0 6px 22px rgba(0, 0, 0, 0.12);
@@ -652,7 +646,6 @@
 /* Elevated — borderless cards that float on strong drop shadows. */
 :root[data-layout='elevated'] {
   --radius: 6px;
-  --content-width: 760px;
   --panel-border: 1px solid transparent;
   --panel-radius: 6px;
   --panel-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
