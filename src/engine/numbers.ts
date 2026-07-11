@@ -42,15 +42,20 @@ export function formatNumber(value: Numeric): string {
 }
 
 /**
- * Format a production rate in the line's own cycle terms, e.g. "3/s", "2/3s".
- * `perCycle` is the total output per cycle (workers × outputPerCycle) and
- * `cycleSeconds` the cycle length. A 1s cycle renders as plain "/s".
+ * Format a production rate in the line's own cycle terms, e.g. "3 gold / sec",
+ * "2 iron / 3 sec". `perCycle` is the total output per cycle
+ * (workers × outputPerCycle), `resourceName` the produced resource's name, and
+ * `cycleSeconds` the cycle length. A 1s cycle renders as plain "/ sec".
  */
-export function formatCycleRate(perCycle: Numeric, cycleSeconds: number): string {
+export function formatCycleRate(
+  perCycle: Numeric,
+  resourceName: string,
+  cycleSeconds: number,
+): string {
   const n = D(perCycle).toNumber();
   const amount = Number.isInteger(n) ? n.toString() : trimZeros(n.toFixed(2));
-  const per = cycleSeconds === 1 ? 's' : `${trimZeros(cycleSeconds.toFixed(2))}s`;
-  return `${amount}/${per}`;
+  const per = cycleSeconds === 1 ? 'sec' : `${trimZeros(cycleSeconds.toFixed(2))} sec`;
+  return `${amount} ${resourceName} / ${per}`;
 }
 
 /** Strip trailing zeros (and a dangling decimal point) from a fixed string. */

@@ -621,7 +621,7 @@
 
 /* Classic — matches the :root defaults; listed for completeness. */
 :root[data-layout='classic'] {
-  --content-width: 720px;
+  --content-width: 980px;
 }
 
 /* Wide — roomy single column. */

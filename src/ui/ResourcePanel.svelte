@@ -307,7 +307,7 @@
                 {#if starved}
                   <span class="warn">needs {RESOURCES[starved].name}</span>
                 {:else}
-                  +{formatCycleRate(assigned * outputPerCycle, cycleSeconds)}
+                  +{formatCycleRate(assigned * outputPerCycle, RESOURCES[id].name.toLowerCase(), cycleSeconds)}
                 {/if}
               </span>
 
@@ -517,6 +517,7 @@
   }
   .rate {
     color: var(--good);
+    font-size: 0.9em;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     text-align: left;

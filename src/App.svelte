@@ -103,7 +103,9 @@
       <span class="stat" title="Working / total workers">
         {working}/{total}
         <PersonStanding size={16} color="var(--gold)" aria-hidden="true" />
-        <span class="store-bar"><span class="store-fill" style:width="{workerPct}%"></span></span>
+        <span class="store-bar" class:alert={available > 0}
+          ><span class="store-fill" style:width="{workerPct}%"></span></span
+        >
       </span>
       <button
         class="settings-btn"
@@ -227,6 +229,10 @@
     background: var(--gold);
     border-radius: 999px;
     transition: width 0.2s linear;
+  }
+  /* Idle workers: the unfilled remainder glows red as a nudge to assign them. */
+  .store-bar.alert {
+    background: color-mix(in srgb, var(--bad) 55%, transparent);
   }
   .hud {
     display: flex;

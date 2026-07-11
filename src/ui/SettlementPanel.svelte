@@ -50,6 +50,14 @@
               /> trained
             </span>
           {/if}
+          {#if next.requires}
+            {#each costEntries(next.requires) as [rid, amt] (rid)}
+              {@const met = gs.resources[rid].amount.gte(amt)}
+              <span class="cost-item" class:short={!met} class:met>
+                {formatNumber(amt)} {RESOURCES[rid].name}
+              </span>
+            {/each}
+          {/if}
         </span>
         <button onclick={() => game.upgradeSettlement()} disabled={!canUpgradeSettlement(gs)}>
           Upgrade → {next.name}

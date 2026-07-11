@@ -31,7 +31,7 @@
    * without touching component markup. These are the defaults (the "Classic"
    * layout); every layout preset overrides a subset.
    */
-  --content-width: 720px;
+  --content-width: 980px;
   --panel-gap: var(--space-4); /* spacing between panels */
   --panel-pad: var(--space-4); /* spacing inside a panel */
   --panel-border: 1px solid var(--border);
