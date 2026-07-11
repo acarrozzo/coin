@@ -3,7 +3,7 @@ import { createInitialState } from '../src/engine/state';
 import { D } from '../src/engine/numbers';
 import { runCombat } from '../src/systems/combat';
 import { tick } from '../src/engine/tick';
-import { getArmyPower, getNextAssaultPower } from '../src/engine/selectors';
+import { getNextAssaultPower, willRepelAssault } from '../src/engine/selectors';
 import { serialize, deserialize } from '../src/engine/save';
 import { ASSAULT } from '../src/content/combat';
 
@@ -13,16 +13,7 @@ function primeAssault(s: ReturnType<typeof createInitialState>) {
   s.combat.assault.timer = 0.01;
 }
 
-describe('army power', () => {
-  it('sums unit counts × power', () => {
-    const s = createInitialState(0);
-    s.resources.archer.amount = D(3); // 3 × 2 = 6
-    s.resources.mage.amount = D(1); // 1 × 8 = 8
-    expect(getArmyPower(s).toNumber()).toBe(14);
-  });
-});
-
-describe('assault resolution', () => {
+describe('assault resolution (deterministic, defense-based)', () => {
   it('does nothing before combat unlocks', () => {
     const s = createInitialState(0); // level 1
     s.combat.assault.timer = 0.01;
@@ -31,11 +22,11 @@ describe('assault resolution', () => {
     expect(s.combat.assault.wave).toBe(0);
   });
 
-  it('repels an assault when the army is strong enough, gaining honor', () => {
+  it('repels an assault when defense meets the attack power, gaining honor', () => {
     const s = createInitialState(0);
     primeAssault(s);
-    s.resources.warrior.amount = D(100); // huge army
-    expect(getArmyPower(s).gte(getNextAssaultPower(s))).toBe(true);
+    s.resources.defense.amount = D(100); // plenty
+    expect(willRepelAssault(s)).toBe(true);
 
     const events = runCombat(s, 1);
     expect(events).toEqual([{ kind: 'assault', won: true, wave: 1 }]);
@@ -44,24 +35,43 @@ describe('assault resolution', () => {
     expect(s.resources.honor.amount.toNumber()).toBe(1);
   });
 
-  it('takes casualties and holds the wave on defeat', () => {
+  it('loses defense and resets the wave to 0 on defeat', () => {
     const s = createInitialState(0);
     primeAssault(s);
-    s.resources.archer.amount = D(1); // power 2, threat is 6
+    s.combat.assault.wave = 20; // attack power far exceeds any early defense
+    s.resources.defense.amount = D(5);
+    s.resources.wood.amount = D(50); // untouched — defense did not hit 0
 
     const events = runCombat(s, 1);
-    expect(events[0]).toMatchObject({ kind: 'assault', won: false });
-    expect(s.combat.assault.wave).toBe(0); // did not escalate
+    expect(events[0]).toMatchObject({ kind: 'assault', won: false, breached: false });
+    expect(s.combat.assault.wave).toBe(0); // attacker reset to the start
     expect(s.combat.assault.losses).toBe(1);
-    // 30% casualty rate, floored: 1 → 0
-    expect(s.resources.archer.amount.toNumber()).toBe(0);
+    expect(s.resources.defense.amount.toNumber()).toBe(4); // lost lossAmount (1)
+    expect(s.resources.wood.amount.toNumber()).toBe(50); // core resources safe
     expect(s.resources.honor.amount.toNumber()).toBe(0);
+  });
+
+  it('wipes core resources when defense is breached (hits 0)', () => {
+    const s = createInitialState(0);
+    primeAssault(s);
+    s.combat.assault.wave = 20;
+    s.resources.defense.amount = D(1); // will drop to 0
+    s.resources.wood.amount = D(50);
+    s.resources.stone.amount = D(50);
+    s.resources.food.amount = D(50);
+
+    const events = runCombat(s, 1);
+    expect(events[0]).toMatchObject({ kind: 'assault', won: false, breached: true });
+    expect(s.resources.defense.amount.toNumber()).toBe(0);
+    expect(s.resources.wood.amount.toNumber()).toBe(0);
+    expect(s.resources.stone.amount.toNumber()).toBe(0);
+    expect(s.resources.food.amount.toNumber()).toBe(0);
   });
 
   it('resolves through tick() live, but not during offline (combat:false)', () => {
     const s = createInitialState(0);
     primeAssault(s);
-    s.resources.warrior.amount = D(1000);
+    s.resources.defense.amount = D(100);
 
     // Offline-style tick: production only, no combat.
     const offlineEvents = tick(s, 1, { combat: false });
@@ -78,14 +88,34 @@ describe('assault resolution', () => {
     const s = createInitialState(0);
     primeAssault(s);
     const first = getNextAssaultPower(s).toNumber();
-    s.resources.warrior.amount = D(1000);
+    s.resources.defense.amount = D(1000);
     runCombat(s, 1); // clears wave 0
     const second = getNextAssaultPower(s).toNumber();
     expect(second).toBeGreaterThan(first);
   });
 });
 
-describe('save v3', () => {
+describe('assault loop over live time (escalate → wall → reset)', () => {
+  it('climbs until the Castle-capped defense fails, then resets the wave', () => {
+    const s = createInitialState(0);
+    s.level = ASSAULT.unlockLevel; // 7
+    s.buildings.castle.level = 1; // Watchtower → defenseMax 5
+    s.resources.defense.amount = D(5); // maxed for this tier
+
+    // ASSAULT interval is 100s; attackPower = 1.5^wave. Defense 5 holds waves
+    // 0–3 (1.5^3 ≈ 3.4) but fails wave 4 (1.5^4 ≈ 5.06). 610s → 6 assaults:
+    // win, win, win, win, LOSE (wave resets, -1 defense), win.
+    for (let i = 0; i < 610; i++) tick(s, 1);
+
+    expect(s.combat.assault.wins).toBe(5);
+    expect(s.combat.assault.losses).toBe(1);
+    expect(s.resources.honor.amount.toNumber()).toBe(5);
+    expect(s.resources.defense.amount.toNumber()).toBe(4); // lost 1 on the breach
+    expect(s.combat.assault.wave).toBe(1); // reset to 0, then cleared wave 0 again
+  });
+});
+
+describe('save v4', () => {
   it('round-trips combat state', () => {
     const s = createInitialState(0);
     s.combat.assault.wave = 4;
@@ -100,7 +130,7 @@ describe('save v3', () => {
     expect(restored.resources.honor.amount.toNumber()).toBe(7);
   });
 
-  it('gives a v2 save fresh combat defaults', () => {
+  it('gives a legacy v2 save fresh combat defaults', () => {
     const legacy = JSON.stringify({
       version: 2,
       level: 3,

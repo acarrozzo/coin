@@ -37,12 +37,26 @@
   import ShieldHalf from '@lucide/svelte/icons/shield-half';
   import WandSparkles from '@lucide/svelte/icons/wand-sparkles';
 
+  import Coins from '@lucide/svelte/icons/coins';
+  import Skull from '@lucide/svelte/icons/skull';
+  import Bone from '@lucide/svelte/icons/bone';
+  import Orbit from '@lucide/svelte/icons/orbit';
+  import Diamond from '@lucide/svelte/icons/diamond';
+  import Star from '@lucide/svelte/icons/star';
+  import Droplet from '@lucide/svelte/icons/droplet';
+  import Leaf from '@lucide/svelte/icons/leaf';
+  import Crown from '@lucide/svelte/icons/crown';
+  import Flag from '@lucide/svelte/icons/flag';
+
   // Structure header icons.
   import Trees from '@lucide/svelte/icons/trees';
   import Pickaxe from '@lucide/svelte/icons/pickaxe';
   import Hammer from '@lucide/svelte/icons/hammer';
   import House from '@lucide/svelte/icons/house';
   import TowerControl from '@lucide/svelte/icons/tower-control';
+  import Castle from '@lucide/svelte/icons/castle';
+  import Landmark from '@lucide/svelte/icons/landmark';
+  import Cloud from '@lucide/svelte/icons/cloud';
 
   const RESOURCE_ICON: Partial<Record<ResourceId, Component>> = {
     wood: TreePine,
@@ -51,17 +65,31 @@
     iron: Blocks,
     steel: Layers,
     mithril: Gem,
+    adamantium: Diamond,
     arrow: Feather,
     spear: Swords,
     sword: Sword,
     staff: Wand2,
+    gladius: Sword,
+    claymore: Swords,
     leather: Shirt,
     fur: PawPrint,
+    trollskull: Skull,
+    dragonbone: Bone,
     ether: Sparkles,
     ward: Shield,
     archer: Target,
     warrior: ShieldHalf,
     mage: WandSparkles,
+    centurion: Crown,
+    wargeneral: Flag,
+    magicorb: Orbit,
+    soulgem: Gem,
+    starmetal: Star,
+    holywater: Droplet,
+    dreamleaf: Leaf,
+    coin: Coins,
+    defense: Shield,
   };
 
   const gs = $derived(game.state);
@@ -126,6 +154,27 @@
       icon: Swords,
       building: 'barracks',
       structures: ['barracks'],
+    },
+    {
+      key: 'castle',
+      label: 'Castle',
+      icon: Castle,
+      building: 'castle',
+      structures: ['castle'],
+    },
+    {
+      key: 'bank',
+      label: 'Bank',
+      icon: Landmark,
+      building: 'bank',
+      structures: ['bank'],
+    },
+    {
+      key: 'cloudshaman',
+      label: 'Cloud Shaman',
+      icon: Cloud,
+      building: 'cloudshaman',
+      structures: ['cloudshaman'],
     },
   ];
 

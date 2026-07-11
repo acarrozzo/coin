@@ -12,6 +12,7 @@
   import { RESOURCES, type ResourceId } from './content/resources';
   import { formatNumber } from './engine/numbers';
   import SettlementPanel from './ui/SettlementPanel.svelte';
+  import CampPanel from './ui/CampPanel.svelte';
   import CombatPanel from './ui/CombatPanel.svelte';
   import ResourcePanel from './ui/ResourcePanel.svelte';
   import SettingsPanel from './ui/SettingsPanel.svelte';
@@ -124,6 +125,7 @@
     <main>
       <WelcomeBack />
       <SettlementPanel />
+      <CampPanel />
       <CombatPanel />
       <ResourcePanel />
     </main>

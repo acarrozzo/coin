@@ -23,9 +23,12 @@ export function formatNumber(value: Numeric): string {
   if (d.lt(1000)) {
     const n = d.toNumber();
     if (Number.isInteger(n)) return n.toString();
-    // Show a couple of decimals for small fractional values (e.g. metals),
-    // but floor once the whole part dominates.
-    if (n < 10) return trimZeros(n.toFixed(2));
+    // Show extra precision for the tiny fractional metals (iron 0.1 … adamantium
+    // 0.0001) so they don't read as "0", but floor once the whole part dominates.
+    if (n < 10) {
+      const decimals = n < 0.001 ? 5 : n < 0.01 ? 4 : n < 1 ? 3 : 2;
+      return trimZeros(n.toFixed(decimals));
+    }
     return Math.floor(n).toString();
   }
 

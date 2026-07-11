@@ -32,6 +32,23 @@ const migrations: Record<number, (data: RawSave) => RawSave> = {
   // v2 → v3 (Phase 4): combat state added. Nothing to transform — the new
   // fields fall back to fresh defaults in deserialize.
   2: (data) => ({ ...data, version: 3 }),
+  // v3 → v4 (faithful coin-old port): resources, buildings, tiers, and combat
+  // were overhauled, so old progression can't carry forward. Reset it, but keep
+  // the raw base materials and the playtime/createdAt the player accumulated.
+  3: (data) => {
+    const resources = (data.resources as Record<string, unknown>) ?? {};
+    return {
+      version: 4,
+      createdAt: data.createdAt,
+      playtime: data.playtime,
+      level: 1,
+      resources: {
+        wood: resources.wood,
+        stone: resources.stone,
+        food: resources.food,
+      },
+    };
+  },
 };
 
 function migrate(data: RawSave): RawSave {
@@ -64,6 +81,7 @@ export function serialize(state: GameState): string {
     workers: state.workers,
     buildings: state.buildings,
     combat: state.combat,
+    flags: state.flags,
   });
 }
 
@@ -128,6 +146,12 @@ export function deserialize(raw: string, now: number): GameState {
   if (combat) {
     reviveThreat(combat.assault, state.combat.assault);
     reviveThreat(combat.hex, state.combat.hex);
+  }
+
+  const flags = data.flags as { hatchet?: unknown; pickaxe?: unknown } | undefined;
+  if (flags) {
+    if (typeof flags.hatchet === 'boolean') state.flags.hatchet = flags.hatchet;
+    if (typeof flags.pickaxe === 'boolean') state.flags.pickaxe = flags.pickaxe;
   }
 
   return state;

@@ -5,14 +5,23 @@
  * no inputs.
  *
  * Rates below are per worker. `outputPerCycle / cycleSeconds` = output/sec/worker.
- * Not every resource is producible (honor/wisdom come from combat), so this map
- * is partial.
+ * Ported verbatim from coin-old: metals are food-fed and fractional; the
+ * defense/ward stats and the quest items are single-slot "converters" that
+ * consume units. honor/wisdom are not produced (they come from combat).
  */
 import type { ResourceId, ResourceCategory } from './resources';
 import type { BuildingId } from './buildings';
 
 /** Which structure gates a producer's worker count and availability. */
 export type StructureId = 'settlement' | BuildingId;
+
+/**
+ * Worker cap model:
+ * - 'pool': limited only by the global worker pool
+ * - 'level': limited by the gating structure's level
+ * - number: a fixed maximum (single-slot converters use 1)
+ */
+export type WorkerCap = 'pool' | 'level' | number;
 
 export interface ProducerDef {
   output: ResourceId;
@@ -21,12 +30,7 @@ export interface ProducerDef {
   structure: StructureId;
   /** Structure level at which this line unlocks. */
   minLevel: number;
-  /**
-   * Worker cap model:
-   * - 'pool': limited only by the global worker pool
-   * - 'level': limited by the gating structure's level
-   */
-  workerCap: 'pool' | 'level';
+  workerCap: WorkerCap;
   /** Output produced per cycle per worker. */
   outputPerCycle: number;
   /** Seconds per production cycle. */
@@ -35,35 +39,56 @@ export interface ProducerDef {
   inputs?: Partial<Record<ResourceId, number>>;
 }
 
+// Ordered upstream → downstream so a chain settles within a single small tick.
 export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
-  // Base gathering (settlement-gated, pool-limited)
+  // Base gathering
   wood: { output: 'wood', category: 'base', structure: 'settlement', minLevel: 1, workerCap: 'pool', outputPerCycle: 1, cycleSeconds: 1 },
   stone: { output: 'stone', category: 'base', structure: 'settlement', minLevel: 1, workerCap: 'pool', outputPerCycle: 1, cycleSeconds: 2 },
   food: { output: 'food', category: 'base', structure: 'farm', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 3 },
 
-  // Deep mine — a smelting chain (food → iron → steel → mithril)
-  iron: { output: 'iron', category: 'metal', structure: 'deepmine', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 2, inputs: { food: 2 } },
-  steel: { output: 'steel', category: 'metal', structure: 'deepmine', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 4, inputs: { iron: 2 } },
-  mithril: { output: 'mithril', category: 'metal', structure: 'deepmine', minLevel: 3, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 8, inputs: { steel: 2 } },
+  // Deep Mine — metals smelted directly from food, fractional yields (coin-old)
+  iron: { output: 'iron', category: 'metal', structure: 'deepmine', minLevel: 1, workerCap: 'level', outputPerCycle: 0.1, cycleSeconds: 1, inputs: { food: 1 } },
+  steel: { output: 'steel', category: 'metal', structure: 'deepmine', minLevel: 2, workerCap: 'level', outputPerCycle: 0.01, cycleSeconds: 2, inputs: { food: 2 } },
+  mithril: { output: 'mithril', category: 'metal', structure: 'deepmine', minLevel: 3, workerCap: 'level', outputPerCycle: 0.001, cycleSeconds: 3, inputs: { food: 3 } },
+  adamantium: { output: 'adamantium', category: 'metal', structure: 'deepmine', minLevel: 4, workerCap: 'level', outputPerCycle: 0.0001, cycleSeconds: 4, inputs: { food: 4 } },
 
-  // Blacksmith — weapons
-  arrow: { output: 'arrow', category: 'weapon', structure: 'blacksmith', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 1, inputs: { wood: 2, stone: 1 } },
-  sword: { output: 'sword', category: 'weapon', structure: 'blacksmith', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 5, inputs: { wood: 10, iron: 2 } },
-  staff: { output: 'staff', category: 'weapon', structure: 'blacksmith', minLevel: 3, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 8, inputs: { wood: 20, steel: 1 } },
+  // Blacksmith — weapons (arrow @1, sword @3, staff @4, gladius @5, claymore @6)
+  arrow: { output: 'arrow', category: 'weapon', structure: 'blacksmith', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 0.5, inputs: { wood: 2, stone: 1 } },
+  sword: { output: 'sword', category: 'weapon', structure: 'blacksmith', minLevel: 3, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { wood: 10, iron: 2 } },
+  staff: { output: 'staff', category: 'weapon', structure: 'blacksmith', minLevel: 4, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { wood: 50, steel: 1 } },
+  gladius: { output: 'gladius', category: 'weapon', structure: 'blacksmith', minLevel: 5, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 30, inputs: { dragonbone: 5, mithril: 1 } },
+  claymore: { output: 'claymore', category: 'weapon', structure: 'blacksmith', minLevel: 6, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 45, inputs: { starmetal: 5, adamantium: 1 } },
 
-  // Hunter's Cabin — spears and goods
+  // Hunter's Cabin — spears, goods, hunt trophies
   spear: { output: 'spear', category: 'weapon', structure: 'hunterscabin', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 2, inputs: { wood: 8, stone: 4 } },
   leather: { output: 'leather', category: 'good', structure: 'hunterscabin', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 5, inputs: { spear: 1 } },
   fur: { output: 'fur', category: 'good', structure: 'hunterscabin', minLevel: 3, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 5, inputs: { spear: 1 } },
+  trollskull: { output: 'trollskull', category: 'good', structure: 'hunterscabin', minLevel: 4, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 30, inputs: { sword: 1, spear: 10 } },
+  dragonbone: { output: 'dragonbone', category: 'good', structure: 'hunterscabin', minLevel: 5, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 30, inputs: { staff: 1, ether: 10 } },
 
-  // Wizard Tower — arcane
-  ether: { output: 'ether', category: 'magic', structure: 'wizardtower', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 2, inputs: { wood: 50 } },
-  ward: { output: 'ward', category: 'magic', structure: 'wizardtower', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 5, inputs: { ether: 5 } },
+  // Wizard Tower — ward stat (@1) and ether (@2)
+  ward: { output: 'ward', category: 'magic', structure: 'wizardtower', minLevel: 1, workerCap: 1, outputPerCycle: 1, cycleSeconds: 5, inputs: { mage: 1, trollskull: 10 } },
+  ether: { output: 'ether', category: 'magic', structure: 'wizardtower', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 1, inputs: { wood: 100 } },
+
+  // Bank — coin
+  coin: { output: 'coin', category: 'currency', structure: 'bank', minLevel: 1, workerCap: 'level', outputPerCycle: 0.00001, cycleSeconds: 1 },
 
   // Barracks — the standing army
-  archer: { output: 'archer', category: 'unit', structure: 'barracks', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 5, inputs: { arrow: 10, leather: 2 } },
-  warrior: { output: 'warrior', category: 'unit', structure: 'barracks', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 8, inputs: { sword: 1, fur: 3 } },
-  mage: { output: 'mage', category: 'unit', structure: 'barracks', minLevel: 3, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { staff: 1, ether: 3 } },
+  archer: { output: 'archer', category: 'unit', structure: 'barracks', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { arrow: 50, leather: 10 } },
+  warrior: { output: 'warrior', category: 'unit', structure: 'barracks', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { sword: 1, fur: 8 } },
+  mage: { output: 'mage', category: 'unit', structure: 'barracks', minLevel: 3, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 20, inputs: { staff: 1, magicorb: 5 } },
+  centurion: { output: 'centurion', category: 'unit', structure: 'barracks', minLevel: 4, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 30, inputs: { gladius: 1, coin: 0.1 } },
+  wargeneral: { output: 'wargeneral', category: 'unit', structure: 'barracks', minLevel: 5, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 45, inputs: { claymore: 1, trollskull: 300 } },
+
+  // Castle-gated converters & quests
+  defense: { output: 'defense', category: 'stat', structure: 'castle', minLevel: 1, workerCap: 1, outputPerCycle: 1, cycleSeconds: 1, inputs: { archer: 1 } },
+  magicorb: { output: 'magicorb', category: 'quest', structure: 'castle', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 15, inputs: { archer: 2, warrior: 3 } },
+  soulgem: { output: 'soulgem', category: 'quest', structure: 'castle', minLevel: 3, workerCap: 1, outputPerCycle: 1, cycleSeconds: 30, inputs: { mage: 1, warrior: 2 } },
+  starmetal: { output: 'starmetal', category: 'quest', structure: 'castle', minLevel: 4, workerCap: 1, outputPerCycle: 1, cycleSeconds: 45, inputs: { centurion: 1, mage: 5 } },
+  holywater: { output: 'holywater', category: 'quest', structure: 'castle', minLevel: 5, workerCap: 1, outputPerCycle: 1, cycleSeconds: 60, inputs: { wargeneral: 1, centurion: 5 } },
+
+  // Cloud Shaman — dream leaf
+  dreamleaf: { output: 'dreamleaf', category: 'quest', structure: 'cloudshaman', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 30, inputs: { starmetal: 1, ether: 10 } },
 };
 
 /** Ids of producible resources (honor/wisdom excluded — they come from combat). */

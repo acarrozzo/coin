@@ -6,10 +6,10 @@ import { ASSAULT, HEX } from '../content/combat';
 export type { ResourceId, BuildingId };
 
 /** Bumped whenever the save shape changes; drives migrations (see save.ts). */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
-/** Trained workers the player starts with. */
-export const STARTING_WORKERS = 3;
+/** Trained workers the player starts with (coin-old set workers=2 at the shack). */
+export const STARTING_WORKERS = 2;
 
 export interface ResourceState {
   amount: Decimal;
@@ -41,6 +41,8 @@ export interface GameState {
     /** Hex track. */
     hex: ThreatState;
   };
+  /** One-off early-game tools/unlocks. */
+  flags: { hatchet: boolean; pickaxe: boolean };
 }
 
 export interface ThreatState {
@@ -77,5 +79,6 @@ export function createInitialState(now: number): GameState {
       assault: { timer: ASSAULT.intervalSeconds, wave: 0, wins: 0, losses: 0 },
       hex: { timer: HEX.intervalSeconds, wave: 0, wins: 0, losses: 0 },
     },
+    flags: { hatchet: false, pickaxe: false },
   };
 }

@@ -8,7 +8,15 @@ import {
   serialize,
   deserialize,
 } from '../engine/save';
-import { assignWorker, trainWorker } from '../engine/actions';
+import {
+  assignWorker,
+  trainWorker,
+  forage,
+  chopWood,
+  mineStone,
+  buyTool,
+  buyExtraWorker,
+} from '../engine/actions';
 import { buildBuilding } from '../systems/buildings';
 import { upgradeSettlement } from '../systems/settlement';
 import type { CombatEvent } from '../systems/combat';
@@ -141,6 +149,24 @@ function createGameStore() {
     train(): void {
       if (trainWorker(state)) {
         notify.push('Worker trained', 'info');
+        sound.play.train();
+        persist();
+      }
+    },
+    gather(kind: 'wood' | 'stone' | 'food'): void {
+      const ok = kind === 'food' ? forage(state) : kind === 'wood' ? chopWood(state) : mineStone(state);
+      if (ok) sound.play.build();
+    },
+    buyTool(tool: 'hatchet' | 'pickaxe'): void {
+      if (buyTool(state, tool)) {
+        notify.push(`You fashion a ${tool}.`, 'good');
+        sound.play.build();
+        persist();
+      }
+    },
+    recruit(): void {
+      if (buyExtraWorker(state)) {
+        notify.push('You recruit an extra worker with arrows.', 'good');
         sound.play.train();
         persist();
       }

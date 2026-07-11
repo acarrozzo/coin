@@ -225,6 +225,33 @@ Using `coin-old` as the spec, express the base game as content data:
   enhancements.
 - **Done when:** combat is a real, escalating subsystem that drives progression.
 
+### Phase 4.5 — Faithful port of the original coin-old content  *(done)*
+Superseded the Phase 4 simplifications: the game now matches the original
+coin-old mechanics closely while keeping the new engine (offline, save
+versioning, data-driven content, the finished 51-level Farm).
+- **Restored content:** the full metal chain (iron→**adamantium**, food-fed and
+  fractional), weapon tiers (arrow→**gladius/claymore**), unit ladder
+  (archer→**centurion/war general**), the **quest-item web** (magic orb / soul
+  gem / star metal / holy water) + **Cloud Shaman → dream leaf**, **coin + Bank**,
+  the **Castle** (5 tiers → `defenseMax`), and **10 settlement tiers**
+  (Small Shack → Kingdom) with the original caps/costs.
+- **Combat reworked to defense-based, deterministic:** assaults are repelled by
+  the **defense** stat (archers dedicated to the walls, capped by Castle
+  `defenseMax`), hexes by **ward** (Wizard Tower `wardMax`).
+  `defense ≥ basePower·growth^wave` → repelled + honor and the wave escalates;
+  fall short → lose `lossAmount` defense (core resources looted at 0) **and the
+  attacker resets to wave 0**. Castle upgrades raise the ceiling you defend to.
+- **Engine additions:** numeric/single-slot `workerCap` for converters
+  (defense/ward/quests), building-derived caps (`defenseMax`/`wardMax`/`coinMax`)
+  in `getCapacity`, tier `requires` thresholds (defense/honor/ward/wisdom, checked
+  but not consumed) vs deducted `cost`, `flags` for the manual early game, and a
+  v3→v4 save migration.
+- **Manual early game + Shop:** forage/chop/mine by hand (hatchet/pickaxe gates)
+  before the Farm automates food; recruit extra workers with arrows.
+- **Bugs fixed from the original:** the inverted hex chance (`25 − ward/2`), tier
+  costs that were checked-but-never-deducted, and the unimplemented multi-level
+  Farm.
+
 ### Phase 5 — Prestige  *(2–4 days)*
 - **G1:** reset for a permanent multiplier currency (Honor-based), with a
   "welcome back stronger" loop.

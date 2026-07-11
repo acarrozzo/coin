@@ -1,48 +1,37 @@
+import { D } from '../engine/numbers';
 import type { GameState, ThreatState } from '../engine/state';
-import {
-  isCombatUnlocked,
-  isHexUnlocked,
-  getArmyPower,
-  getWardPower,
-  getNextAssaultPower,
-  getNextHexPower,
-} from '../engine/selectors';
-import {
-  ASSAULT,
-  HEX,
-  UNIT_IDS,
-  HONOR_PER_WIN,
-  WISDOM_PER_WIN,
-  ASSAULT_CASUALTY_RATE,
-  HEX_WARD_LOSS_RATE,
-} from '../content/combat';
+import { isCombatUnlocked, isHexUnlocked, getThreatPower } from '../engine/selectors';
+import { ASSAULT, HEX, WIPE_ON_BREACH, type ThreatConfig } from '../content/combat';
 
 export interface CombatEvent {
   kind: 'assault' | 'hex';
   won: boolean;
   /** Wave number that was fought. */
   wave: number;
+  /** True when the defense stat hit zero and core resources were looted. */
+  breached?: boolean;
 }
 
 /**
  * Advance the combat timers by `dt` and resolve any attacks that come due.
- * Deterministic power-vs-power: meet the threat → win, it escalates, you gain
- * honor/wisdom; fall short → you take casualties and face the same wave again.
+ * Deterministic: if the defending stat (defense / ward) meets the wave's attack
+ * power you repel it, it escalates, and you gain honor/wisdom. Fall short and
+ * you lose `lossAmount` of the stat — and if it hits zero, core resources are
+ * looted — while the attacker resets to wave 0.
  * Runs only in the live loop (see tick/offline), never during offline catch-up.
  */
 export function runCombat(state: GameState, dt: number): CombatEvent[] {
   const events: CombatEvent[] = [];
 
   if (isCombatUnlocked(state)) {
-    advance(
-      state.combat.assault,
-      dt,
-      ASSAULT.intervalSeconds,
-      () => resolveAssault(state, events),
+    advance(state.combat.assault, dt, ASSAULT.intervalSeconds, () =>
+      resolve(state, state.combat.assault, ASSAULT, 'assault', events),
     );
   }
   if (isHexUnlocked(state)) {
-    advance(state.combat.hex, dt, HEX.intervalSeconds, () => resolveHex(state, events));
+    advance(state.combat.hex, dt, HEX.intervalSeconds, () =>
+      resolve(state, state.combat.hex, HEX, 'hex', events),
+    );
   }
 
   return events;
@@ -58,35 +47,34 @@ function advance(track: ThreatState, dt: number, interval: number, resolve: () =
   }
 }
 
-function resolveAssault(state: GameState, events: CombatEvent[]): void {
-  const track = state.combat.assault;
-  const won = getArmyPower(state).gte(getNextAssaultPower(state));
-  events.push({ kind: 'assault', won, wave: track.wave + 1 });
+function resolve(
+  state: GameState,
+  track: ThreatState,
+  cfg: ThreatConfig,
+  kind: CombatEvent['kind'],
+  events: CombatEvent[],
+): void {
+  const stat = state.resources[cfg.defenseStat];
+  const attackPower = getThreatPower(cfg, track.wave);
+  const won = stat.amount.gte(attackPower);
 
   if (won) {
     track.wins += 1;
     track.wave += 1;
-    state.resources.honor.amount = state.resources.honor.amount.plus(HONOR_PER_WIN);
-  } else {
-    track.losses += 1;
-    for (const id of UNIT_IDS) {
-      const survivors = state.resources[id].amount.times(1 - ASSAULT_CASUALTY_RATE).floor();
-      state.resources[id].amount = survivors;
-    }
+    state.resources[cfg.reward].amount = state.resources[cfg.reward].amount.plus(1);
+    events.push({ kind, won: true, wave: track.wave });
+    return;
   }
-}
 
-function resolveHex(state: GameState, events: CombatEvent[]): void {
-  const track = state.combat.hex;
-  const won = getWardPower(state).gte(getNextHexPower(state));
-  events.push({ kind: 'hex', won, wave: track.wave + 1 });
-
-  if (won) {
-    track.wins += 1;
-    track.wave += 1;
-    state.resources.wisdom.amount = state.resources.wisdom.amount.plus(WISDOM_PER_WIN);
-  } else {
-    track.losses += 1;
-    state.resources.ward.amount = state.resources.ward.amount.times(1 - HEX_WARD_LOSS_RATE).floor();
+  track.losses += 1;
+  stat.amount = stat.amount.minus(cfg.lossAmount);
+  let breached = false;
+  if (stat.amount.lte(0)) {
+    stat.amount = D(0);
+    breached = true;
+    for (const id of WIPE_ON_BREACH) state.resources[id].amount = D(0);
   }
+  // A failed defense sends the attacker back to the start.
+  track.wave = 0;
+  events.push({ kind, won: false, wave: track.wave, breached });
 }

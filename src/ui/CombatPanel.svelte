@@ -1,23 +1,24 @@
 <script lang="ts">
   import { game } from './gameStore.svelte';
-  import { RESOURCES } from '../content/resources';
-  import { UNIT_IDS } from '../content/combat';
   import {
     isCombatUnlocked,
     isHexUnlocked,
-    getArmyPower,
-    getWardPower,
+    getCapacity,
     getNextAssaultPower,
     getNextHexPower,
     willRepelAssault,
     willBreakHex,
   } from '../engine/selectors';
   import { formatNumber } from '../engine/numbers';
-  import Swords from '@lucide/svelte/icons/swords';
+  import ShieldPlus from '@lucide/svelte/icons/shield-plus';
   import Trophy from '@lucide/svelte/icons/trophy';
   import Sparkles from '@lucide/svelte/icons/sparkles';
 
   const gs = $derived(game.state);
+  const defense = $derived(gs.resources.defense.amount);
+  const defenseMax = $derived(getCapacity(gs, 'defense'));
+  const ward = $derived(gs.resources.ward.amount);
+  const wardMax = $derived(getCapacity(gs, 'ward'));
 
   function countdown(seconds: number): string {
     const s = Math.max(0, Math.ceil(seconds));
@@ -31,13 +32,13 @@
     <h2>Defense</h2>
 
     <div class="army">
-      <span class="label">Standing army</span>
-      <span class="power"><Swords size={15} color="var(--gold)" aria-hidden="true" /> {formatNumber(getArmyPower(gs))} power</span>
+      <span class="label"><ShieldPlus size={15} color="var(--gold)" aria-hidden="true" /> Defense</span>
+      <span class="power"
+        >{formatNumber(defense)}{#if defenseMax} / {formatNumber(defenseMax)}{/if}</span
+      >
     </div>
     <div class="units">
-      {#each UNIT_IDS as id (id)}
-        <span class="unit">{formatNumber(gs.resources[id].amount)} {RESOURCES[id].name}</span>
-      {/each}
+      <span class="unit">Dedicate archers to the walls to raise defense (up to your Castle's cap).</span>
     </div>
 
     <!-- Assault track -->
@@ -70,7 +71,11 @@
           <span class="sub">in {countdown(gs.combat.hex.timer)}</span>
         </div>
         <div class="verdict">
-          <span class="req">wards {formatNumber(getWardPower(gs))} / {formatNumber(getNextHexPower(gs))}</span>
+          <span class="req"
+            >ward {formatNumber(ward)}{#if wardMax} / {formatNumber(wardMax)}{/if} · needs {formatNumber(
+              getNextHexPower(gs),
+            )}</span
+          >
           {#if willBreakHex(gs)}
             <span class="ok">will resist</span>
           {:else}
