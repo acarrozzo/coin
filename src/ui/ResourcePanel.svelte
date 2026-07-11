@@ -210,6 +210,21 @@
     }
     return null;
   }
+
+  // Clicking a resource name inside a recipe/build cost scrolls to that
+  // resource's producer row and briefly calls it out.
+  let highlighted = $state<ResourceId | null>(null);
+  let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function jumpTo(rid: ResourceId) {
+    const el = document.querySelector<HTMLElement>(`[data-res="${rid}"]`);
+    if (!el) return;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+    highlighted = rid;
+    clearTimeout(highlightTimer);
+    highlightTimer = setTimeout(() => (highlighted = null), 1600);
+  }
 </script>
 
 <section class="panel">
@@ -248,8 +263,12 @@
               <p class="gcost">
                 <span class="cost-label">cost:</span>
                 {#each costEntries(next.cost) as [rid, amt] (rid)}
-                  <span class="cost-num" class:short={gs.resources[rid].amount.lt(amt)}
-                    >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</span
+                  <button
+                    type="button"
+                    class="cost-num jump"
+                    class:short={gs.resources[rid].amount.lt(amt)}
+                    onclick={() => jumpTo(rid)}
+                    >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
                   >
                 {/each}
               </p>
@@ -267,7 +286,7 @@
             {@const cycleSeconds = PRODUCERS[id]?.cycleSeconds ?? 1}
             {@const outputPerCycle = PRODUCERS[id]?.outputPerCycle ?? 0}
             {@const producing = assigned > 0 && !starved && !isAtCapacity(gs, id)}
-            <div class="row" transition:fly={{ y: 8, duration: 260 }}>
+            <div class="row" data-res={id} transition:fly={{ y: 8, duration: 260 }}>
               <span class="ricon">
                 {#if Icon}<Icon size={18} color="var(--text-muted)" aria-hidden="true" />{/if}
               </span>
@@ -285,7 +304,7 @@
 
               <span class="label">
                 <span class="amount">{formatNumber(gs.resources[id].amount)}</span>
-                <span class="name">{RESOURCES[id].name}</span>
+                <span class="name" class:jumped={highlighted === id}>{RESOURCES[id].name}</span>
               </span>
 
               <div class="workers">
@@ -315,8 +334,9 @@
               <span class="rcost">
                 {#each inputEntries(id) as [rid, amt] (rid)}
                   <span class="pill" class:short={gs.resources[rid].amount.lt(amt)}>
-                    {formatNumber(amt)}
-                    {RESOURCES[rid].name}
+                    <button type="button" class="req jump" onclick={() => jumpTo(rid)}
+                      >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
+                    ><span class="held">/{formatNumber(gs.resources[rid].amount)}</span>
                   </span>
                 {/each}
               </span>
@@ -343,8 +363,12 @@
                 <p class="gcost">
                   <span class="cost-label">cost:</span>
                   {#each costEntries(fNext.cost) as [rid, amt] (rid)}
-                    <span class="cost-num" class:short={gs.resources[rid].amount.lt(amt)}
-                      >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</span
+                    <button
+                      type="button"
+                      class="cost-num jump"
+                      class:short={gs.resources[rid].amount.lt(amt)}
+                      onclick={() => jumpTo(rid)}
+                      >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
                     >
                   {/each}
                 </p>
@@ -551,17 +575,83 @@
     justify-content: flex-end;
   }
   .pill {
-    background: color-mix(in srgb, var(--good) 22%, transparent);
     color: var(--good);
-    border-radius: var(--radius);
-    padding: 2px 8px;
     font-size: 13px;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
+  .pill .req {
+    border-bottom: 1px solid var(--good);
+    padding-bottom: 1px;
+  }
   .pill.short {
-    background: color-mix(in srgb, var(--bad) 22%, transparent);
     color: var(--bad);
+  }
+  .pill.short .req {
+    border-bottom-color: var(--bad);
+  }
+  .pill .held {
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  /* Clickable cost/recipe entry — the whole container jumps to that resource's
+     row. Inherits its container's text color; hover/focus tints it accent. */
+  button.jump {
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    cursor: pointer;
+  }
+  button.req.jump {
+    color: inherit;
+  }
+  button.jump:hover,
+  button.jump:focus-visible {
+    color: var(--accent);
+    outline: none;
+  }
+  /* cost-num has no underline of its own, so add one on hover as the affordance. */
+  button.cost-num.jump:hover,
+  button.cost-num.jump:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  /* .req already carries a bottom border; recolor it to match on hover. */
+  button.req.jump:hover,
+  button.req.jump:focus-visible {
+    border-bottom-color: var(--accent);
+  }
+
+  /* --- Jump target call-out ---
+     A row scrolled-to via a recipe link flashes a marker highlight on its
+     name label, fading over ~1.6s. */
+  .row {
+    /* Land clear of the sticky header (--header-h set on the layout). */
+    scroll-margin-block: calc(var(--header-h, 72px) + var(--space-3));
+  }
+  .name.jumped {
+    border-radius: 3px;
+    animation: nameMark 1.6s ease-out;
+  }
+  @keyframes nameMark {
+    0%,
+    25% {
+      background: color-mix(in srgb, var(--gold) 60%, transparent);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 60%, transparent);
+    }
+    100% {
+      background: transparent;
+      box-shadow: 0 0 0 2px transparent;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .name.jumped {
+      animation: none;
+      background: color-mix(in srgb, var(--gold) 45%, transparent);
+    }
   }
 
   /* --- Core footer upgrade --- */
