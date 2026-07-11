@@ -9,16 +9,23 @@
     willRepelAssault,
     willBreakHex,
   } from '../engine/selectors';
+  import { ASSAULT, HEX } from '../content/combat';
   import { formatNumber } from '../engine/numbers';
-  import ShieldPlus from '@lucide/svelte/icons/shield-plus';
-  import Trophy from '@lucide/svelte/icons/trophy';
+  import ProducerRow from './ProducerRow.svelte';
+  import Star from '@lucide/svelte/icons/star';
   import Sparkles from '@lucide/svelte/icons/sparkles';
 
   const gs = $derived(game.state);
-  const defense = $derived(gs.resources.defense.amount);
-  const defenseMax = $derived(getCapacity(gs, 'defense'));
   const ward = $derived(gs.resources.ward.amount);
   const wardMax = $derived(getCapacity(gs, 'ward'));
+
+  // Fraction of the interval elapsed — the bar fills as the next attack nears.
+  const assaultProgressPct = $derived(
+    Math.max(0, Math.min(100, (1 - gs.combat.assault.timer / ASSAULT.intervalSeconds) * 100)),
+  );
+  const hexProgressPct = $derived(
+    Math.max(0, Math.min(100, (1 - gs.combat.hex.timer / HEX.intervalSeconds) * 100)),
+  );
 
   function countdown(seconds: number): string {
     const s = Math.max(0, Math.ceil(seconds));
@@ -29,66 +36,62 @@
 
 {#if isCombatUnlocked(gs)}
   <section class="panel">
-    <h2>Defense</h2>
-
-    <div class="army">
-      <span class="label"><ShieldPlus size={15} color="var(--gold)" aria-hidden="true" /> Defense</span>
-      <span class="power"
-        >{formatNumber(defense)}{#if defenseMax} / {formatNumber(defenseMax)}{/if}</span
-      >
-    </div>
-    <div class="units">
-      <span class="unit">Dedicate archers to the walls to raise defense (up to your Castle's cap).</span>
-    </div>
-
-    <!-- Assault track -->
-    <div class="threat">
-      <div class="info">
-        <span class="name">Next assault · wave {gs.combat.assault.wave + 1}</span>
-        <span class="sub">in {countdown(gs.combat.assault.timer)}</span>
+    <!-- Assault header: level, incoming countdown bar, honor -->
+    <div class="chead">
+      <h2>Assault <span class="lvl">Lvl {gs.combat.assault.wave + 1}</span></h2>
+      <div class="incoming" title="Time until the next assault">
+        <span class="in-label">Incoming in {countdown(gs.combat.assault.timer)}</span>
+        <span class="bar"><span class="bar-fill" style:width="{assaultProgressPct}%"></span></span>
       </div>
-      <div class="verdict">
-        <span class="req">needs {formatNumber(getNextAssaultPower(gs))}</span>
-        {#if willRepelAssault(gs)}
-          <span class="ok">will hold</span>
-        {:else}
-          <span class="bad">will fall</span>
-        {/if}
-      </div>
+      <span class="honor" title="Honor won from repelled assaults">
+        <Star size={16} color="var(--gold)" aria-hidden="true" />
+        {formatNumber(gs.resources.honor.amount)} Honor
+      </span>
     </div>
-    <div class="tally">
-      <Trophy size={14} color="var(--gold)" aria-hidden="true" /> {formatNumber(
-        gs.resources.honor.amount,
-      )} honor · {gs
-        .combat.assault.wins}W / {gs.combat.assault.losses}L
+
+    <p class="verdict-line">
+      <span class="req">Wave {gs.combat.assault.wave + 1} hits for {formatNumber(getNextAssaultPower(gs))} —</span>
+      {#if willRepelAssault(gs)}
+        <span class="ok">your walls will hold</span>
+      {:else}
+        <span class="bad">your walls will fall</span>
+      {/if}
+      <span class="tally">· {gs.combat.assault.wins}W / {gs.combat.assault.losses}L</span>
+    </p>
+
+    <div class="def-row">
+      <ProducerRow id="defense" showCap />
     </div>
+    <p class="hint">Dedicate an archer to the walls to raise defense (up to your Castle's cap).</p>
 
     <!-- Hex track -->
     {#if isHexUnlocked(gs)}
-      <div class="threat hex">
-        <div class="info">
-          <span class="name">Next hex · trial {gs.combat.hex.wave + 1}</span>
-          <span class="sub">in {countdown(gs.combat.hex.timer)}</span>
+      <div class="chead hex-head">
+        <h2>Hex <span class="lvl">Trial {gs.combat.hex.wave + 1}</span></h2>
+        <div class="incoming" title="Time until the next hex">
+          <span class="in-label">Incoming in {countdown(gs.combat.hex.timer)}</span>
+          <span class="bar"><span class="bar-fill" style:width="{hexProgressPct}%"></span></span>
         </div>
-        <div class="verdict">
-          <span class="req"
-            >ward {formatNumber(ward)}{#if wardMax} / {formatNumber(wardMax)}{/if} · needs {formatNumber(
-              getNextHexPower(gs),
-            )}</span
-          >
-          {#if willBreakHex(gs)}
-            <span class="ok">will resist</span>
-          {:else}
-            <span class="bad">will land</span>
-          {/if}
-        </div>
+        <span class="honor" title="Wisdom won from resisted hexes">
+          <Sparkles size={16} color="var(--wisdom)" aria-hidden="true" />
+          {formatNumber(gs.resources.wisdom.amount)} Wisdom
+        </span>
       </div>
-      <div class="tally">
-        <Sparkles size={14} color="var(--wisdom)" aria-hidden="true" /> {formatNumber(
-          gs.resources.wisdom.amount,
-        )} wisdom ·
-        {gs.combat.hex.wins}W / {gs.combat.hex.losses}L
-      </div>
+
+      <p class="verdict-line">
+        <span class="req"
+          >Trial {gs.combat.hex.wave + 1} hits for {formatNumber(getNextHexPower(gs))} · ward {formatNumber(
+            ward,
+          )}{#if wardMax} / {formatNumber(wardMax)}{/if} —</span
+        >
+        {#if willBreakHex(gs)}
+          <span class="ok">your wards will resist</span>
+        {:else}
+          <span class="bad">the hex will land</span>
+        {/if}
+        <span class="tally">· {gs.combat.hex.wins}W / {gs.combat.hex.losses}L</span>
+      </p>
+      <p class="hint">Wards are woven in the Wizard Tower.</p>
     {/if}
   </section>
 {/if}
@@ -97,69 +100,74 @@
   .panel {
     background: var(--bg-panel);
     border: var(--panel-border);
+    border-top: 3px solid var(--bad);
     border-radius: var(--panel-radius);
     box-shadow: var(--panel-shadow);
     padding: var(--panel-pad);
     animation: fadeIn var(--fade-in);
   }
-  h2 {
-    font-size: 28px;
-    margin-bottom: var(--space-3);
-  }
-  .army {
+  .chead {
     display: flex;
-    justify-content: space-between;
-    align-items: baseline;
+    align-items: center;
+    gap: var(--space-4);
+    flex-wrap: wrap;
   }
-  .label {
-    font-size: 17px;
+  .hex-head {
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
   }
-  .power {
+  h2 {
+    font-family: var(--font-display);
+    font-size: 26px;
+    white-space: nowrap;
+  }
+  .lvl {
+    color: var(--bad);
+    font-size: 0.7em;
+  }
+  /* Incoming countdown: label + a bar that drains as the attack nears. */
+  .incoming {
+    flex: 1 1 200px;
+    min-width: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .in-label {
+    color: var(--text-muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .bar {
+    display: block;
+    height: 8px;
+    background: color-mix(in srgb, var(--border) 45%, transparent);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    display: block;
+    height: 100%;
+    background: var(--bad);
+    border-radius: 999px;
+    transition: width 0.2s linear;
+  }
+  .honor {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     color: var(--gold);
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
-  .units {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-3);
-    color: var(--text-muted);
+  .verdict-line {
+    margin-top: var(--space-2);
     font-size: 14px;
-    margin-top: var(--space-1);
-  }
-  .threat {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--space-3);
-    margin-top: var(--space-4);
-    padding-top: var(--space-3);
-    border-top: 1px solid var(--border);
-    flex-wrap: wrap;
-  }
-  .info {
-    display: flex;
-    flex-direction: column;
-  }
-  .name {
-    font-size: 16px;
-  }
-  .sub {
-    color: var(--text-muted);
-    font-size: 14px;
-    font-variant-numeric: tabular-nums;
-  }
-  .verdict {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
     font-variant-numeric: tabular-nums;
   }
   .req {
     color: var(--text-muted);
-    font-size: 14px;
   }
   .ok {
     color: var(--good);
@@ -168,12 +176,19 @@
     color: var(--bad);
   }
   .tally {
-    display: flex;
-    align-items: center;
-    gap: 4px;
+    color: var(--text-muted);
+  }
+  .def-row {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+    /* Establish a query container so the Defense row can stack on narrow cards,
+       exactly like ResourcePanel's rows do. */
+    container-type: inline-size;
+  }
+  .hint {
     margin-top: var(--space-2);
     color: var(--text-muted);
-    font-size: 14px;
-    font-variant-numeric: tabular-nums;
+    font-size: 13px;
   }
 </style>

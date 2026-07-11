@@ -15,38 +15,13 @@
     getNextBuildingLevel,
     canBuild,
     isBuildingAvailable,
+    isCombatUnlocked,
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate } from '../engine/numbers';
+  import { RESOURCE_ICON } from './resourceIcons';
 
-  // Resource row icons (Lucide — approximate matches for the fantasy items).
-  import TreePine from '@lucide/svelte/icons/tree-pine';
-  import Mountain from '@lucide/svelte/icons/mountain';
-  import Wheat from '@lucide/svelte/icons/wheat';
-  import Blocks from '@lucide/svelte/icons/blocks';
-  import Layers from '@lucide/svelte/icons/layers';
-  import Gem from '@lucide/svelte/icons/gem';
-  import Feather from '@lucide/svelte/icons/feather';
+  // Barracks group header icon (also a resource icon, sourced below).
   import Swords from '@lucide/svelte/icons/swords';
-  import Sword from '@lucide/svelte/icons/sword';
-  import Wand2 from '@lucide/svelte/icons/wand-2';
-  import Shirt from '@lucide/svelte/icons/shirt';
-  import PawPrint from '@lucide/svelte/icons/paw-print';
-  import Sparkles from '@lucide/svelte/icons/sparkles';
-  import Shield from '@lucide/svelte/icons/shield';
-  import Target from '@lucide/svelte/icons/target';
-  import ShieldHalf from '@lucide/svelte/icons/shield-half';
-  import WandSparkles from '@lucide/svelte/icons/wand-sparkles';
-
-  import Coins from '@lucide/svelte/icons/coins';
-  import Skull from '@lucide/svelte/icons/skull';
-  import Bone from '@lucide/svelte/icons/bone';
-  import Orbit from '@lucide/svelte/icons/orbit';
-  import Diamond from '@lucide/svelte/icons/diamond';
-  import Star from '@lucide/svelte/icons/star';
-  import Droplet from '@lucide/svelte/icons/droplet';
-  import Leaf from '@lucide/svelte/icons/leaf';
-  import Crown from '@lucide/svelte/icons/crown';
-  import Flag from '@lucide/svelte/icons/flag';
 
   // Structure header icons.
   import Trees from '@lucide/svelte/icons/trees';
@@ -57,40 +32,6 @@
   import Castle from '@lucide/svelte/icons/castle';
   import Landmark from '@lucide/svelte/icons/landmark';
   import Cloud from '@lucide/svelte/icons/cloud';
-
-  const RESOURCE_ICON: Partial<Record<ResourceId, Component>> = {
-    wood: TreePine,
-    stone: Mountain,
-    food: Wheat,
-    iron: Blocks,
-    steel: Layers,
-    mithril: Gem,
-    adamantium: Diamond,
-    arrow: Feather,
-    spear: Swords,
-    sword: Sword,
-    staff: Wand2,
-    gladius: Sword,
-    claymore: Swords,
-    leather: Shirt,
-    fur: PawPrint,
-    trollskull: Skull,
-    dragonbone: Bone,
-    ether: Sparkles,
-    ward: Shield,
-    archer: Target,
-    warrior: ShieldHalf,
-    mage: WandSparkles,
-    centurion: Crown,
-    wargeneral: Flag,
-    magicorb: Orbit,
-    soulgem: Gem,
-    starmetal: Star,
-    holywater: Droplet,
-    dreamleaf: Leaf,
-    coin: Coins,
-    defense: Shield,
-  };
 
   const gs = $derived(game.state);
   const available = $derived(getAvailableWorkers(gs));
@@ -149,18 +90,18 @@
       structures: ['castle'],
     },
     {
-      key: 'deepmine',
-      label: 'Deep Mine',
-      icon: Pickaxe,
-      building: 'deepmine',
-      structures: ['deepmine'],
-    },
-    {
       key: 'wizardtower',
       label: 'Wizard Tower',
       icon: TowerControl,
       building: 'wizardtower',
       structures: ['wizardtower'],
+    },
+    {
+      key: 'deepmine',
+      label: 'Deep Mine',
+      icon: Pickaxe,
+      building: 'deepmine',
+      structures: ['deepmine'],
     },
     {
       key: 'bank',
@@ -178,10 +119,18 @@
     },
   ];
 
+  // Once assault unlocks (settlement 7), Defense leaves the Castle card and
+  // lives in the Assault panel instead — the Castle keeps its quest converters.
+  const combatUnlocked = $derived(isCombatUnlocked(gs));
+
   const groups = $derived(
     GROUP_DEFS.map((g) => ({
       ...g,
-      ids: unlocked.filter((id) => g.structures.includes(PRODUCERS[id]?.structure as StructureId)),
+      ids: unlocked.filter(
+        (id) =>
+          g.structures.includes(PRODUCERS[id]?.structure as StructureId) &&
+          !(id === 'defense' && combatUnlocked),
+      ),
     })).filter(
       // Show a group once its resources exist, or once its building can be
       // built/upgraded (so an unbuilt structure is still reachable). Core is
@@ -254,7 +203,7 @@
             <button
               class="upgrade"
               onclick={() => game.build(group.building!)}
-              disabled={!canBuild(gs, group.building)}
+              disabled={!canBuild(gs, group.building!)}
             >
               {level === 0 ? 'Build' : 'Upgrade'}
             </button>
