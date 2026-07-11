@@ -117,7 +117,7 @@
   <header>
     <div class="header-inner">
     <h1>
-      <Castle size={24} color="var(--gold)" aria-hidden="true" /> Coin &amp; Castle
+      <Castle size={18} color="var(--gold)" aria-hidden="true" /> Coin &amp; Castle
       <span class="stat level-badge" class:leveled title="Settlement level">Lv {gs.level}</span>
     </h1>
 
@@ -258,7 +258,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    font-size: 26px;
+    font-size: 20px;
     color: var(--text-on-header);
   }
 

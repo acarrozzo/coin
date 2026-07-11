@@ -14,6 +14,8 @@
   import ProducerRow from './ProducerRow.svelte';
   import Star from '@lucide/svelte/icons/star';
   import Sparkles from '@lucide/svelte/icons/sparkles';
+  import Swords from '@lucide/svelte/icons/swords';
+  import Skull from '@lucide/svelte/icons/skull';
 
   const gs = $derived(game.state);
   const ward = $derived(gs.resources.ward.amount);
@@ -38,7 +40,10 @@
   <section class="panel">
     <!-- Assault header: level, incoming countdown bar, honor -->
     <div class="chead">
-      <h2>Assault <span class="lvl">Lvl {gs.combat.assault.wave + 1}</span></h2>
+      <h2>
+        <Swords size={22} color="var(--bad)" aria-hidden="true" />
+        Assault <span class="lvl">Lvl {gs.combat.assault.wave + 1}</span>
+      </h2>
       <div class="incoming" title="Time until the next assault">
         <span class="in-label">Incoming in {countdown(gs.combat.assault.timer)}</span>
         <span class="bar"><span class="bar-fill" style:width="{assaultProgressPct}%"></span></span>
@@ -67,7 +72,10 @@
     <!-- Hex track -->
     {#if isHexUnlocked(gs)}
       <div class="chead hex-head">
-        <h2>Hex <span class="lvl">Trial {gs.combat.hex.wave + 1}</span></h2>
+        <h2>
+          <Skull size={22} color="var(--wisdom)" aria-hidden="true" />
+          Hex <span class="lvl">Trial {gs.combat.hex.wave + 1}</span>
+        </h2>
         <div class="incoming" title="Time until the next hex">
           <span class="in-label">Incoming in {countdown(gs.combat.hex.timer)}</span>
           <span class="bar"><span class="bar-fill" style:width="{hexProgressPct}%"></span></span>
@@ -125,10 +133,20 @@
     font-family: var(--font-display);
     font-size: 26px;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
   }
   .lvl {
     color: var(--bad);
     font-size: 0.7em;
+  }
+  /* The hex track reads as arcane, not martial — recolor it purple. */
+  .hex-head .lvl {
+    color: var(--wisdom);
+  }
+  .hex-head .bar-fill {
+    background: var(--wisdom);
   }
   /* Incoming countdown: label + a bar that drains as the attack nears. */
   .incoming {

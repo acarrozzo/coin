@@ -77,7 +77,7 @@ export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
   archer: { output: 'archer', category: 'unit', structure: 'barracks', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { arrow: 50, leather: 10 } },
   warrior: { output: 'warrior', category: 'unit', structure: 'barracks', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { sword: 1, fur: 8 } },
   mage: { output: 'mage', category: 'unit', structure: 'barracks', minLevel: 3, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 20, inputs: { staff: 1, magicorb: 5 } },
-  centurion: { output: 'centurion', category: 'unit', structure: 'barracks', minLevel: 4, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 30, inputs: { gladius: 1, coin: 0.1 } },
+  centurion: { output: 'centurion', category: 'unit', structure: 'barracks', minLevel: 4, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 30, inputs: { gladius: 1, soulgem: 5 } },
   wargeneral: { output: 'wargeneral', category: 'unit', structure: 'barracks', minLevel: 5, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 45, inputs: { claymore: 1, trollskull: 300 } },
 
   // Castle-gated converters & quests

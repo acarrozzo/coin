@@ -116,6 +116,11 @@
     font-family: var(--font-display);
     font-size: 24px;
   }
+  /* Only the settlement's own name is enlarged — the Workers header keeps the
+     base size. */
+  .tier .name {
+    font-size: 32px;
+  }
   .lvl {
     color: var(--accent);
   }
