@@ -15,34 +15,32 @@
 // their array order within a group.
 export type Option = { id: string; name: string; group: string };
 
+// Within each group, dark palettes are listed first, then light ones.
 export const PALETTES = [
-  // Core
+  // Core — dark
   { id: 'modern-dark', name: 'Modern Dark', group: 'Core' },
-  { id: 'modern-light', name: 'Modern Light', group: 'Core' },
   { id: 'nord', name: 'Nord (dark)', group: 'Core' },
-  { id: 'paper', name: 'Paper (light)', group: 'Core' },
-  { id: 'parchment', name: 'Parchment', group: 'Core' },
   { id: 'dungeon', name: 'Dungeon', group: 'Core' },
   { id: 'terminal', name: 'Terminal Green', group: 'Core' },
   { id: 'amber', name: 'Amber CRT', group: 'Core' },
-  // Popular editor themes
+  // Core — light
+  { id: 'modern-light', name: 'Modern Light', group: 'Core' },
+  { id: 'paper', name: 'Paper (light)', group: 'Core' },
+  { id: 'parchment', name: 'Parchment', group: 'Core' },
+  // Popular editor themes — dark
   { id: 'solarized-dark', name: 'Solarized Dark', group: 'Popular themes' },
-  { id: 'solarized-light', name: 'Solarized Light', group: 'Popular themes' },
   { id: 'gruvbox', name: 'Gruvbox', group: 'Popular themes' },
   { id: 'dracula', name: 'Dracula', group: 'Popular themes' },
   { id: 'rose-pine', name: 'Rosé Pine', group: 'Popular themes' },
   { id: 'catppuccin-mocha', name: 'Catppuccin Mocha', group: 'Popular themes' },
-  { id: 'catppuccin-latte', name: 'Catppuccin Latte', group: 'Popular themes' },
   { id: 'tokyo-night', name: 'Tokyo Night', group: 'Popular themes' },
   { id: 'everforest', name: 'Everforest', group: 'Popular themes' },
   { id: 'night-owl', name: 'Night Owl', group: 'Popular themes' },
   { id: 'ayu-dark', name: 'Ayu Dark', group: 'Popular themes' },
   { id: 'ayu-mirage', name: 'Ayu Mirage', group: 'Popular themes' },
-  { id: 'ayu-light', name: 'Ayu Light', group: 'Popular themes' },
   { id: 'one-dark', name: 'One Dark', group: 'Popular themes' },
   { id: 'kanagawa', name: 'Kanagawa', group: 'Popular themes' },
   { id: 'github-dark', name: 'GitHub Dark', group: 'Popular themes' },
-  { id: 'github-light', name: 'GitHub Light', group: 'Popular themes' },
   { id: 'monokai', name: 'Monokai', group: 'Popular themes' },
   { id: 'monokai-pro', name: 'Monokai Pro', group: 'Popular themes' },
   { id: 'palenight', name: 'Palenight', group: 'Popular themes' },
@@ -55,19 +53,25 @@ export const PALETTES = [
   { id: 'horizon', name: 'Horizon', group: 'Popular themes' },
   { id: 'royal', name: 'Royal', group: 'Popular themes' },
   { id: 'blood-moon', name: 'Blood Moon', group: 'Popular themes' },
+  { id: 'vaporwave', name: 'Vaporwave', group: 'Popular themes' },
+  // Popular editor themes — light
+  { id: 'solarized-light', name: 'Solarized Light', group: 'Popular themes' },
+  { id: 'catppuccin-latte', name: 'Catppuccin Latte', group: 'Popular themes' },
+  { id: 'ayu-light', name: 'Ayu Light', group: 'Popular themes' },
+  { id: 'github-light', name: 'GitHub Light', group: 'Popular themes' },
   { id: 'frost', name: 'Frost', group: 'Popular themes' },
   { id: 'sepia', name: 'Sepia', group: 'Popular themes' },
   { id: 'high-contrast', name: 'High Contrast', group: 'Popular themes' },
   { id: 'mono-grey', name: 'Mono Grey', group: 'Popular themes' },
-  { id: 'vaporwave', name: 'Vaporwave', group: 'Popular themes' },
-  // Environments
+  // Environments — dark
   { id: 'midnight', name: 'Midnight (near-black)', group: 'Environments' },
   { id: 'forest', name: 'Forest', group: 'Environments' },
+  { id: 'ocean', name: 'Ocean', group: 'Environments' },
+  { id: 'autumn', name: 'Autumn', group: 'Environments' },
+  // Environments — light
   { id: 'desert', name: 'Desert', group: 'Environments' },
   { id: 'alpine', name: 'Snowy Mountain', group: 'Environments' },
   { id: 'meadow', name: 'Grassy Field', group: 'Environments' },
-  { id: 'ocean', name: 'Ocean', group: 'Environments' },
-  { id: 'autumn', name: 'Autumn', group: 'Environments' },
 ] as const satisfies readonly Option[];
 
 export const FONTS = [

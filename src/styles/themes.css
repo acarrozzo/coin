@@ -17,7 +17,7 @@
 
 /* ============================== PALETTES ============================== */
 
-:root[data-palette='nord'] {
+:root[data-palette='nord'], [data-palette='nord'] {
   --bg: #2e3440;
   --bg-panel: #373e4d;
   --bg-header: #373e4d;
@@ -32,7 +32,7 @@
   --wisdom: #b48ead;
 }
 
-:root[data-palette='paper'] {
+:root[data-palette='paper'], [data-palette='paper'] {
   --bg: #f7f7f7;
   --bg-panel: #ffffff;
   --bg-header: #373e4d;
@@ -48,7 +48,7 @@
 }
 
 /* Warm medieval light — sun-bleached parchment and terracotta. */
-:root[data-palette='parchment'] {
+:root[data-palette='parchment'], [data-palette='parchment'] {
   --bg: #efe6d0;
   --bg-panel: #f8f1de;
   --bg-header: #5c4326;
@@ -64,7 +64,7 @@
 }
 
 /* Dark stone keep lit by torchlight. */
-:root[data-palette='dungeon'] {
+:root[data-palette='dungeon'], [data-palette='dungeon'] {
   --bg: #1c1a17;
   --bg-panel: #262320;
   --bg-header: #17140f;
@@ -80,7 +80,7 @@
 }
 
 /* Green phosphor CRT. */
-:root[data-palette='terminal'] {
+:root[data-palette='terminal'], [data-palette='terminal'] {
   --bg: #0a0f0a;
   --bg-panel: #0f160f;
   --bg-header: #0f160f;
@@ -96,7 +96,7 @@
 }
 
 /* Amber CRT. */
-:root[data-palette='amber'] {
+:root[data-palette='amber'], [data-palette='amber'] {
   --bg: #100b02;
   --bg-panel: #171004;
   --bg-header: #171004;
@@ -112,7 +112,7 @@
 }
 
 /* Clean modern light — indigo accent. */
-:root[data-palette='modern-light'] {
+:root[data-palette='modern-light'], [data-palette='modern-light'] {
   --bg: #f4f5f7;
   --bg-panel: #ffffff;
   --bg-header: #1e293b;
@@ -128,7 +128,7 @@
 }
 
 /* Clean modern dark — slate with cyan accent. */
-:root[data-palette='modern-dark'] {
+:root[data-palette='modern-dark'], [data-palette='modern-dark'] {
   --bg: #0f172a;
   --bg-panel: #1e293b;
   --bg-header: #1e293b;
@@ -146,7 +146,7 @@
 /* ---- Popular editor themes ---- */
 
 /* Solarized Dark — Ethan Schoonover's low-strain classic. */
-:root[data-palette='solarized-dark'] {
+:root[data-palette='solarized-dark'], [data-palette='solarized-dark'] {
   --bg: #002b36;
   --bg-panel: #073642;
   --bg-header: #001f27;
@@ -162,7 +162,7 @@
 }
 
 /* Solarized Light. */
-:root[data-palette='solarized-light'] {
+:root[data-palette='solarized-light'], [data-palette='solarized-light'] {
   --bg: #fdf6e3;
   --bg-panel: #eee8d5;
   --bg-header: #073642;
@@ -178,7 +178,7 @@
 }
 
 /* Gruvbox — warm, retro, earthy. */
-:root[data-palette='gruvbox'] {
+:root[data-palette='gruvbox'], [data-palette='gruvbox'] {
   --bg: #282828;
   --bg-panel: #3c3836;
   --bg-header: #1d2021;
@@ -194,7 +194,7 @@
 }
 
 /* Dracula — dark with vivid neon accents. */
-:root[data-palette='dracula'] {
+:root[data-palette='dracula'], [data-palette='dracula'] {
   --bg: #282a36;
   --bg-panel: #343746;
   --bg-header: #21222c;
@@ -210,7 +210,7 @@
 }
 
 /* Rosé Pine — muted, cozy, dusky. */
-:root[data-palette='rose-pine'] {
+:root[data-palette='rose-pine'], [data-palette='rose-pine'] {
   --bg: #191724;
   --bg-panel: #1f1d2e;
   --bg-header: #16141f;
@@ -226,7 +226,7 @@
 }
 
 /* Catppuccin Mocha — soft pastel dark. */
-:root[data-palette='catppuccin-mocha'] {
+:root[data-palette='catppuccin-mocha'], [data-palette='catppuccin-mocha'] {
   --bg: #1e1e2e;
   --bg-panel: #313244;
   --bg-header: #181825;
@@ -242,7 +242,7 @@
 }
 
 /* Catppuccin Latte — soft pastel light. */
-:root[data-palette='catppuccin-latte'] {
+:root[data-palette='catppuccin-latte'], [data-palette='catppuccin-latte'] {
   --bg: #eff1f5;
   --bg-panel: #ffffff;
   --bg-header: #4c4f69;
@@ -258,7 +258,7 @@
 }
 
 /* Royal — heraldic navy, gold, and crimson. */
-:root[data-palette='royal'] {
+:root[data-palette='royal'], [data-palette='royal'] {
   --bg: #101a3a;
   --bg-panel: #182552;
   --bg-header: #0a1128;
@@ -274,7 +274,7 @@
 }
 
 /* Blood Moon — near-black with deep reds. */
-:root[data-palette='blood-moon'] {
+:root[data-palette='blood-moon'], [data-palette='blood-moon'] {
   --bg: #140a0a;
   --bg-panel: #1f1010;
   --bg-header: #0d0606;
@@ -290,7 +290,7 @@
 }
 
 /* Frost — cool whites and pale ice blues (light). */
-:root[data-palette='frost'] {
+:root[data-palette='frost'], [data-palette='frost'] {
   --bg: #eef4f8;
   --bg-panel: #ffffff;
   --bg-header: #2c4a5e;
@@ -306,7 +306,7 @@
 }
 
 /* Sepia — warm, easy-reading e-reader light. */
-:root[data-palette='sepia'] {
+:root[data-palette='sepia'], [data-palette='sepia'] {
   --bg: #f4ecd8;
   --bg-panel: #faf3e0;
   --bg-header: #5b4636;
@@ -322,7 +322,7 @@
 }
 
 /* High Contrast — bold black-on-white for accessibility. */
-:root[data-palette='high-contrast'] {
+:root[data-palette='high-contrast'], [data-palette='high-contrast'] {
   --bg: #ffffff;
   --bg-panel: #ffffff;
   --bg-header: #000000;
@@ -338,7 +338,7 @@
 }
 
 /* Mono Grey — grayscale minimalist. */
-:root[data-palette='mono-grey'] {
+:root[data-palette='mono-grey'], [data-palette='mono-grey'] {
   --bg: #f2f2f2;
   --bg-panel: #ffffff;
   --bg-header: #2b2b2b;
@@ -354,7 +354,7 @@
 }
 
 /* Vaporwave — dreamy pink, cyan, and purple. */
-:root[data-palette='vaporwave'] {
+:root[data-palette='vaporwave'], [data-palette='vaporwave'] {
   --bg: #2a1b3d;
   --bg-panel: #362449;
   --bg-header: #1c1229;
@@ -370,7 +370,7 @@
 }
 
 /* Everforest — soft, warm, low-contrast forest greens. */
-:root[data-palette='everforest'] {
+:root[data-palette='everforest'], [data-palette='everforest'] {
   --bg: #2d353b;
   --bg-panel: #343f44;
   --bg-header: #232a2e;
@@ -386,7 +386,7 @@
 }
 
 /* Night Owl — Sarah Drasner's deep-blue theme for night owls. */
-:root[data-palette='night-owl'] {
+:root[data-palette='night-owl'], [data-palette='night-owl'] {
   --bg: #011627;
   --bg-panel: #0b2942;
   --bg-header: #010e1a;
@@ -402,7 +402,7 @@
 }
 
 /* Ayu Dark — crisp, high-contrast with a signature orange accent. */
-:root[data-palette='ayu-dark'] {
+:root[data-palette='ayu-dark'], [data-palette='ayu-dark'] {
   --bg: #0b0e14;
   --bg-panel: #131721;
   --bg-header: #08090e;
@@ -418,7 +418,7 @@
 }
 
 /* Ayu Mirage — the softer, mid-tone Ayu variant. */
-:root[data-palette='ayu-mirage'] {
+:root[data-palette='ayu-mirage'], [data-palette='ayu-mirage'] {
   --bg: #1f2430;
   --bg-panel: #242936;
   --bg-header: #171b24;
@@ -434,7 +434,7 @@
 }
 
 /* Tokyo Night — deep indigo with vivid blues and purples. */
-:root[data-palette='tokyo-night'] {
+:root[data-palette='tokyo-night'], [data-palette='tokyo-night'] {
   --bg: #1a1b26;
   --bg-panel: #24283b;
   --bg-header: #16161e;
@@ -450,7 +450,7 @@
 }
 
 /* One Dark — Atom's iconic dark theme. */
-:root[data-palette='one-dark'] {
+:root[data-palette='one-dark'], [data-palette='one-dark'] {
   --bg: #282c34;
   --bg-panel: #31363f;
   --bg-header: #21252b;
@@ -466,7 +466,7 @@
 }
 
 /* Kanagawa — inspired by Hokusai's Great Wave; muted ink and indigo. */
-:root[data-palette='kanagawa'] {
+:root[data-palette='kanagawa'], [data-palette='kanagawa'] {
   --bg: #1f1f28;
   --bg-panel: #2a2a37;
   --bg-header: #16161d;
@@ -482,7 +482,7 @@
 }
 
 /* Ayu Light — bright, warm, high-contrast light variant. */
-:root[data-palette='ayu-light'] {
+:root[data-palette='ayu-light'], [data-palette='ayu-light'] {
   --bg: #fcfcfc;
   --bg-panel: #ffffff;
   --bg-header: #f3f4f5;
@@ -498,7 +498,7 @@
 }
 
 /* GitHub Dark — GitHub's default dark UI. */
-:root[data-palette='github-dark'] {
+:root[data-palette='github-dark'], [data-palette='github-dark'] {
   --bg: #0d1117;
   --bg-panel: #161b22;
   --bg-header: #010409;
@@ -514,7 +514,7 @@
 }
 
 /* GitHub Light — GitHub's default light UI. */
-:root[data-palette='github-light'] {
+:root[data-palette='github-light'], [data-palette='github-light'] {
   --bg: #ffffff;
   --bg-panel: #f6f8fa;
   --bg-header: #24292f;
@@ -530,7 +530,7 @@
 }
 
 /* Monokai — the classic vibrant TextMate/Sublime theme. */
-:root[data-palette='monokai'] {
+:root[data-palette='monokai'], [data-palette='monokai'] {
   --bg: #272822;
   --bg-panel: #31322b;
   --bg-header: #1d1e19;
@@ -546,7 +546,7 @@
 }
 
 /* Monokai Pro — the refined, muted modern Monokai. */
-:root[data-palette='monokai-pro'] {
+:root[data-palette='monokai-pro'], [data-palette='monokai-pro'] {
   --bg: #2d2a2e;
   --bg-panel: #363338;
   --bg-header: #221f22;
@@ -562,7 +562,7 @@
 }
 
 /* Palenight — Material's dusky, purple-tinted dark theme. */
-:root[data-palette='palenight'] {
+:root[data-palette='palenight'], [data-palette='palenight'] {
   --bg: #292d3e;
   --bg-panel: #333747;
   --bg-header: #1f2233;
@@ -578,7 +578,7 @@
 }
 
 /* Oceanic Next — deep teal-blue with warm accents. */
-:root[data-palette='oceanic-next'] {
+:root[data-palette='oceanic-next'], [data-palette='oceanic-next'] {
   --bg: #1b2b34;
   --bg-panel: #22333b;
   --bg-header: #14232b;
@@ -594,7 +594,7 @@
 }
 
 /* Cobalt2 — Wes Bos's bold blue with yellow accents. */
-:root[data-palette='cobalt2'] {
+:root[data-palette='cobalt2'], [data-palette='cobalt2'] {
   --bg: #193549;
   --bg-panel: #1f4662;
   --bg-header: #122738;
@@ -610,7 +610,7 @@
 }
 
 /* Zenburn — the original low-contrast, easy-on-the-eyes theme. */
-:root[data-palette='zenburn'] {
+:root[data-palette='zenburn'], [data-palette='zenburn'] {
   --bg: #3f3f3f;
   --bg-panel: #4a4a4a;
   --bg-header: #2f2f2f;
@@ -626,7 +626,7 @@
 }
 
 /* Synthwave '84 — neon retro-future with glowing magenta/cyan. */
-:root[data-palette='synthwave'] {
+:root[data-palette='synthwave'], [data-palette='synthwave'] {
   --bg: #262335;
   --bg-panel: #2d2a42;
   --bg-header: #1a1727;
@@ -642,7 +642,7 @@
 }
 
 /* Poimandres — inky teal-blue with soft pastel accents. */
-:root[data-palette='poimandres'] {
+:root[data-palette='poimandres'], [data-palette='poimandres'] {
   --bg: #1b1e28;
   --bg-panel: #252b37;
   --bg-header: #171922;
@@ -658,7 +658,7 @@
 }
 
 /* Nightfly — a rich, deep-blue night theme. */
-:root[data-palette='nightfly'] {
+:root[data-palette='nightfly'], [data-palette='nightfly'] {
   --bg: #011627;
   --bg-panel: #092236;
   --bg-header: #010e1a;
@@ -674,7 +674,7 @@
 }
 
 /* Horizon — warm coral-and-purple dark theme. */
-:root[data-palette='horizon'] {
+:root[data-palette='horizon'], [data-palette='horizon'] {
   --bg: #1c1e26;
   --bg-panel: #232530;
   --bg-header: #16161c;
@@ -692,7 +692,7 @@
 /* ---- Environments ---- */
 
 /* Midnight — very dark, almost pure black. */
-:root[data-palette='midnight'] {
+:root[data-palette='midnight'], [data-palette='midnight'] {
   --bg: #050506;
   --bg-panel: #0e0e11;
   --bg-header: #000000;
@@ -708,7 +708,7 @@
 }
 
 /* Forest — deep woodland greens and bark. */
-:root[data-palette='forest'] {
+:root[data-palette='forest'], [data-palette='forest'] {
   --bg: #14201a;
   --bg-panel: #1d2d24;
   --bg-header: #0e1712;
@@ -724,7 +724,7 @@
 }
 
 /* Desert — sun-baked sand and terracotta (light). */
-:root[data-palette='desert'] {
+:root[data-palette='desert'], [data-palette='desert'] {
   --bg: #efe0c4;
   --bg-panel: #f6ecd6;
   --bg-header: #7a5230;
@@ -740,7 +740,7 @@
 }
 
 /* Alpine — snowy peaks, slate rock, and pine (light). */
-:root[data-palette='alpine'] {
+:root[data-palette='alpine'], [data-palette='alpine'] {
   --bg: #eef1f4;
   --bg-panel: #ffffff;
   --bg-header: #33414f;
@@ -756,7 +756,7 @@
 }
 
 /* Meadow — bright grass, sky, and wildflowers (light). */
-:root[data-palette='meadow'] {
+:root[data-palette='meadow'], [data-palette='meadow'] {
   --bg: #eaf3df;
   --bg-panel: #f4faec;
   --bg-header: #3f6b2e;
@@ -772,7 +772,7 @@
 }
 
 /* Ocean — deep sea blues and teal. */
-:root[data-palette='ocean'] {
+:root[data-palette='ocean'], [data-palette='ocean'] {
   --bg: #071a26;
   --bg-panel: #0d2734;
   --bg-header: #04121a;
@@ -788,7 +788,7 @@
 }
 
 /* Autumn — warm foliage, ember, and bark. */
-:root[data-palette='autumn'] {
+:root[data-palette='autumn'], [data-palette='autumn'] {
   --bg: #241611;
   --bg-panel: #31201a;
   --bg-header: #1a0f0b;

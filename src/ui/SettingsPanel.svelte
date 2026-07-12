@@ -81,10 +81,19 @@
             {#each g.items as p (p.id)}
               <button
                 type="button"
-                class="option"
+                class="option swatch-option"
                 class:selected={look.palette === p.id}
                 aria-pressed={look.palette === p.id}
-                onclick={() => (look.palette = p.id as typeof look.palette)}>{p.name}</button>
+                data-palette={p.id}
+                onclick={() => (look.palette = p.id as typeof look.palette)}>
+                <span class="swatches" aria-hidden="true">
+                  <span class="swatch" style="background: var(--accent)"></span>
+                  <span class="swatch" style="background: var(--good)"></span>
+                  <span class="swatch" style="background: var(--bad)"></span>
+                  <span class="swatch" style="background: var(--gold)"></span>
+                </span>
+                <span class="swatch-name">{p.name}</span>
+              </button>
             {/each}
           </div>
         {/each}
@@ -279,6 +288,42 @@
   .options .option:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
+  }
+
+  /* Palette buttons preview their own theme: because each carries its own
+     data-palette, the .option rules above resolve --bg/--text/--accent/--border
+     from that theme, not the active one. The swatch dots surface the rest of
+     the palette at a glance. */
+  .swatch-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 9px;
+  }
+  .swatch-option.selected {
+    /* Ring in the theme's own accent, but keep the theme's own bg so the
+       preview stays faithful rather than tinting toward the accent. */
+    background: var(--bg);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .swatch-option:hover {
+    background: var(--bg);
+    border-color: var(--accent);
+  }
+  .swatches {
+    display: inline-flex;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .swatch {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 20%, transparent);
+  }
+  .swatch-name {
+    white-space: nowrap;
   }
 
   .row {
