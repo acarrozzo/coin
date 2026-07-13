@@ -9,6 +9,7 @@
     canTrainWorker,
     getTotalWorkers,
     getAvailableWorkers,
+    splitCost,
   } from '../engine/selectors';
   import { formatNumber } from '../engine/numbers';
   import PersonStanding from '@lucide/svelte/icons/person-standing';
@@ -32,31 +33,43 @@
       <span class="blurb">{tier?.blurb ?? ''}</span>
     </div>
     {#if next}
+      {@const parts = splitCost(next.cost)}
+      {@const hasReqs = parts.required.length > 0 || !!next.workersRequired || !!next.requires}
       <div class="action">
         <span class="cost">
-          {#each costEntries(next.cost) as [rid, amt] (rid)}
+          {#each parts.consumed as [rid, amt] (rid)}
             {@const met = gs.resources[rid].amount.gte(amt)}
             <span class="cost-item" class:short={!met} class:met>
               {formatNumber(amt)} {RESOURCES[rid].name}
             </span>
           {/each}
-          {#if next.workersRequired}
-            {@const met = gs.workers.trained >= next.workersRequired}
-            <span class="cost-item" class:short={!met} class:met>
-              {next.workersRequired} <PersonStanding
-                size={13}
-                color="var(--gold)"
-                aria-hidden="true"
-              /> trained
-            </span>
-          {/if}
-          {#if next.requires}
-            {#each costEntries(next.requires) as [rid, amt] (rid)}
+
+          {#if hasReqs}
+            {#if parts.consumed.length}<span class="cost-sep" aria-hidden="true">•</span>{/if}
+            {#each parts.required as [rid, amt] (rid)}
               {@const met = gs.resources[rid].amount.gte(amt)}
-              <span class="cost-item" class:short={!met} class:met>
+              <span class="cost-item req-only" class:short={!met} class:met>
                 {formatNumber(amt)} {RESOURCES[rid].name}
               </span>
             {/each}
+            {#if next.workersRequired}
+              {@const met = gs.workers.trained >= next.workersRequired}
+              <span class="cost-item req-only" class:short={!met} class:met>
+                {next.workersRequired} <PersonStanding
+                  size={13}
+                  color="var(--gold)"
+                  aria-hidden="true"
+                /> trained
+              </span>
+            {/if}
+            {#if next.requires}
+              {#each costEntries(next.requires) as [rid, amt] (rid)}
+                {@const met = gs.resources[rid].amount.gte(amt)}
+                <span class="cost-item req-only" class:short={!met} class:met>
+                  {formatNumber(amt)} {RESOURCES[rid].name}
+                </span>
+              {/each}
+            {/if}
           {/if}
         </span>
         <button onclick={() => game.upgradeSettlement()} disabled={!canUpgradeSettlement(gs)}>
@@ -154,6 +167,13 @@
   }
   .cost-item.met {
     color: var(--good);
+  }
+  /* Bullet separating the spent cost from the held-requirement resources.
+     Requirements share the same met (green) / short (red) coloring as the cost. */
+  .cost-sep {
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
   }
   button {
     padding: 6px 16px;

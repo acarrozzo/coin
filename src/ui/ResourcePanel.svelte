@@ -13,6 +13,7 @@
     canBuild,
     canStartCycle,
     getNetProductionRate,
+    splitCost,
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate, formatSignedRate } from '../engine/numbers';
   import { RESOURCE_ICON } from './resourceIcons';
@@ -22,10 +23,6 @@
   const available = $derived(getAvailableWorkers(gs));
 
   const groups = $derived(getResourceGroups(gs));
-
-  function costEntries(cost: ResourceCost) {
-    return Object.entries(cost) as [ResourceId, number][];
-  }
 
   function inputEntries(id: ResourceId) {
     return Object.entries(PRODUCERS[id]?.inputs ?? {}) as [ResourceId, number][];
@@ -58,6 +55,38 @@
     highlightTimer = setTimeout(() => (highlighted = null), 1600);
   }
 </script>
+
+<!-- Cost line: consumed resources (spent on build) first, then — after a
+     bullet — the higher-end resources that are only required to be held. -->
+{#snippet costLine(cost: ResourceCost)}
+  {@const parts = splitCost(cost)}
+  <p class="gcost">
+    {#if parts.consumed.length}
+      <span class="cost-label">cost:</span>
+      {#each parts.consumed as [rid, amt] (rid)}
+        <button
+          type="button"
+          class="cost-num jump"
+          class:short={gs.resources[rid].amount.lt(amt)}
+          onclick={() => jumpTo(rid)}
+          >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
+        >
+      {/each}
+    {/if}
+    {#if parts.required.length}
+      {#if parts.consumed.length}<span class="cost-sep" aria-hidden="true">•</span>{/if}
+      {#each parts.required as [rid, amt] (rid)}
+        <button
+          type="button"
+          class="cost-num req-only jump"
+          class:short={gs.resources[rid].amount.lt(amt)}
+          onclick={() => jumpTo(rid)}
+          >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
+        >
+      {/each}
+    {/if}
+  </p>
+{/snippet}
 
 <section class="panel">
   <div class="stack">
@@ -92,18 +121,7 @@
             </button>
             <div class="uinfo">
               <p class="gsummary">{next.summary}</p>
-              <p class="gcost">
-                <span class="cost-label">cost:</span>
-                {#each costEntries(next.cost) as [rid, amt] (rid)}
-                  <button
-                    type="button"
-                    class="cost-num jump"
-                    class:short={gs.resources[rid].amount.lt(amt)}
-                    onclick={() => jumpTo(rid)}
-                    >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
-                  >
-                {/each}
-              </p>
+              {@render costLine(next.cost)}
             </div>
           </div>
         {/if}
@@ -206,18 +224,7 @@
               </button>
               <div class="finfo">
                 <p class="gsummary">{fNext.summary}</p>
-                <p class="gcost">
-                  <span class="cost-label">cost:</span>
-                  {#each costEntries(fNext.cost) as [rid, amt] (rid)}
-                    <button
-                      type="button"
-                      class="cost-num jump"
-                      class:short={gs.resources[rid].amount.lt(amt)}
-                      onclick={() => jumpTo(rid)}
-                      >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
-                    >
-                  {/each}
-                </p>
+                {@render costLine(fNext.cost)}
               </div>
             {:else}
               <span class="maxed">MAX</span>
@@ -312,6 +319,10 @@
   }
   .cost-num.short {
     color: var(--bad);
+  }
+  /* Bullet between the spent cost and the held-requirement list. */
+  .cost-sep {
+    color: var(--text-muted);
   }
 
   /* --- Resource rows ---

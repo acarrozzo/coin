@@ -1,6 +1,6 @@
 import { Decimal, D } from './numbers';
 import type { GameState, ResourceId, BuildingId } from './state';
-import { RESOURCE_IDS } from '../content/resources';
+import { RESOURCE_IDS, isConsumableResource } from '../content/resources';
 import { BUILDINGS } from '../content/buildings';
 import { PRODUCERS, PRODUCER_IDS, type StructureId } from '../content/producers';
 import { getTier, SETTLEMENT_TIERS, type ResourceCost } from '../content/settlement';
@@ -152,6 +152,23 @@ export function canAfford(state: GameState, cost: ResourceCost): boolean {
     if (state.resources[rid].amount.lt(amount)) return false;
   }
   return true;
+}
+
+/**
+ * Partition a cost into what is spent vs. what is only required to be held.
+ * Consumed entries are deducted on purchase; required entries are gated by
+ * canAfford but never removed from inventory.
+ */
+export function splitCost(cost: ResourceCost): {
+  consumed: [ResourceId, number][];
+  required: [ResourceId, number][];
+} {
+  const consumed: [ResourceId, number][] = [];
+  const required: [ResourceId, number][] = [];
+  for (const entry of Object.entries(cost) as [ResourceId, number][]) {
+    (isConsumableResource(entry[0]) ? consumed : required).push(entry);
+  }
+  return { consumed, required };
 }
 
 // ---------- Buildings ----------

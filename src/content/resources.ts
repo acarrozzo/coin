@@ -115,3 +115,17 @@ export const RESOURCES: Record<ResourceId, ResourceDef> = {
 };
 
 export const RESOURCE_IDS = Object.keys(RESOURCES) as ResourceId[];
+
+/**
+ * Categories whose resources are actually SPENT when paying a cost. Everything
+ * else that appears in a cost (metals, units, quest items, etc.) is treated as
+ * a standing requirement: you must hold enough to build/upgrade, but it is not
+ * removed from your inventory. Keeping this category-driven means new high-end
+ * resources are requirement-only by default.
+ */
+export const CONSUMABLE_CATEGORIES: ResourceCategory[] = ['base'];
+
+/** Whether a resource is spent (true) or merely required (false) to pay a cost. */
+export function isConsumableResource(id: ResourceId): boolean {
+  return CONSUMABLE_CATEGORIES.includes(RESOURCES[id].category);
+}

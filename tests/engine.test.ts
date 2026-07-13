@@ -175,6 +175,24 @@ describe('buildings', () => {
     expect(isResourceUnlocked(s, 'arrow')).toBe(true);
     expect(s.resources.wood.amount.toNumber()).toBe(900); // 100 spent
   });
+
+  it('requires a high-end resource in a cost without consuming it', () => {
+    // Blacksmith L3 costs { stone: 400, iron: 1 }. Stone (base) is spent; iron
+    // (a metal) must be held but is not removed from inventory.
+    const s = createInitialState(0);
+    s.level = 6;
+    s.buildings.blacksmith.level = 2; // next level is the { stone: 400, iron: 1 } one
+    s.resources.stone.amount = D(1000);
+
+    s.resources.iron.amount = D(0);
+    expect(buildBuilding(s, 'blacksmith')).toBe(false); // iron requirement unmet
+
+    s.resources.iron.amount = D(1);
+    expect(buildBuilding(s, 'blacksmith')).toBe(true);
+    expect(s.buildings.blacksmith.level).toBe(3);
+    expect(s.resources.stone.amount.toNumber()).toBe(600); // 400 stone spent
+    expect(s.resources.iron.amount.toNumber()).toBe(1); // iron required, not consumed
+  });
 });
 
 describe('settlement', () => {
