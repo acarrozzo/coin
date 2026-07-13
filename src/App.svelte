@@ -86,9 +86,8 @@
   }
   const available = $derived(getAvailableWorkers(gs));
   const total = $derived(getTotalWorkers(gs));
-  // Busy workers (total minus idle), mirrored as a storage-style gauge.
+  // Busy workers (total minus idle).
   const working = $derived(Math.max(0, total - available));
-  const workerPct = $derived(total > 0 ? Math.min(100, (working / total) * 100) : 0);
 
   // Quips for the idle-worker alert. {n} = idle count, {s} = "" or "s".
   const IDLE_QUIPS = [
@@ -244,11 +243,8 @@
             </span>
           </span>
         {/if}
-        {working}/{total}
         <PersonStanding size={16} color="var(--gold)" aria-hidden="true" />
-        <span class="store-bar" class:alert={available > 0}
-          ><span class="store-fill" style:width="{workerPct}%"></span></span
-        >
+        {working}/{total}
       </span>
     </div>
   </div>
@@ -688,18 +684,24 @@
     cursor: default;
   }
   .worker-badge.idle {
-    background: var(--bad);
+    background: transparent;
+    color: var(--bad);
+    border: 1px solid var(--bad);
     animation: idlePulse 2s ease-in-out infinite;
   }
   .worker-badge.done {
-    background: var(--good, #16a34a);
+    background: transparent;
+    color: var(--good, #16a34a);
+    border: 1px solid var(--good, #16a34a);
   }
   @keyframes idlePulse {
     0%,
     100% {
+      border-color: var(--bad);
       box-shadow: 0 0 0 2px var(--bg-header), 0 0 0 0 color-mix(in srgb, var(--bad) 60%, transparent);
     }
     50% {
+      border-color: color-mix(in srgb, var(--bad) 35%, transparent);
       box-shadow: 0 0 0 2px var(--bg-header), 0 0 0 5px transparent;
     }
   }
@@ -821,7 +823,7 @@
     }
   }
 
-  @media (max-width: 480px) {
+  @media (max-width: 768px) {
     /* Keep the rail gutters from the 1023px breakpoint (don't shrink them here)
        or the fixed icons would overlap the content again on phones. */
     .header-inner {
@@ -830,9 +832,17 @@
     }
     header h1 {
       font-size: 20px;
+      /* Shrink so the worker display always shares the top row instead of
+         wrapping the HUD to a new line. */
+      flex: 1 1 auto;
+      min-width: 0;
     }
     .hud {
       gap: var(--space-2);
+      /* Pin the worker display to the very top-right of the header. */
+      order: 0;
+      margin-left: auto;
+      flex: 0 0 auto;
     }
     .stores {
       gap: var(--space-3);

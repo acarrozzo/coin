@@ -17,6 +17,8 @@ import {
   canUpgradeSettlement,
   getWorkerCost,
   canTrainWorker,
+  getNetProductionRate,
+  getLiveNetProductionRate,
 } from '../src/engine/selectors';
 
 describe('gathering', () => {
@@ -415,5 +417,67 @@ describe('formatNumber rounding toggle', () => {
 
   it('keeps fractional gather precision on large fractional stacks (rounding off)', () => {
     expect(formatNumber(1234.5, 2)).toBe('1234.50');
+  });
+});
+
+describe('net production rate — live vs nominal', () => {
+  // A staffed consumer that can't actually run (starved on a non-wood input)
+  // is counted by the nominal rate but not the live one, which then matches the
+  // wood the simulation really moves. This is the "-3/s yet pinned at cap" bug.
+  it('excludes starved consumers from the live rate but not the nominal', () => {
+    const s = createInitialState(0);
+    s.level = 9; // lift wood cap well above the amounts here
+    s.workers.trained = 100;
+    s.buildings.blacksmith.level = 6;
+    s.buildings.hunterscabin.level = 6;
+
+    s.workers.assigned.wood = 20; // +20 wood/s
+    s.workers.assigned.spear = 4; // 8 wood/2s ×4 = 16/s nominal, needs stone
+    s.workers.assigned.staff = 1; // 50 wood/10s = 5/s nominal, needs steel
+    s.resources.stone.amount = D(0); // starves spear
+    s.resources.steel.amount = D(0); // starves staff
+    s.resources.wood.amount = D(5000); // mid-range, not at cap
+
+    // Nominal: 20 − 16 − 5 = −1/s. Live: nothing consumes (both starved) → +20/s.
+    expect(getNetProductionRate(s, 'wood').toNumber()).toBe(-1);
+    expect(getLiveNetProductionRate(s, 'wood').toNumber()).toBe(20);
+
+    // The live rate is the truth: 10s of ticks add ~200 wood, not drain it.
+    const start = s.resources.wood.amount;
+    tick(s, 10, { combat: false });
+    const perSec = s.resources.wood.amount.minus(start).div(10).toNumber();
+    expect(perSec).toBeCloseTo(20, 5);
+  });
+
+  // A surplus that can't be stored (resource at cap) reads as holding steady,
+  // not as the "+X" its producers would nominally add.
+  it('reports 0/s when a surplus resource sits at its cap', () => {
+    const s = createInitialState(0);
+    s.level = 9;
+    s.workers.trained = 100;
+    s.workers.assigned.wood = 20; // would nominally add +20/s
+    s.resources.wood.amount = getCapacity(s, 'wood')!; // pinned at cap
+
+    expect(getNetProductionRate(s, 'wood').toNumber()).toBe(20); // nominal ignores cap
+    expect(getLiveNetProductionRate(s, 'wood').toNumber()).toBe(0); // live: stable at cap
+
+    const start = s.resources.wood.amount;
+    tick(s, 10, { combat: false });
+    expect(s.resources.wood.amount.eq(start)).toBe(true); // truly doesn't move
+  });
+
+  // A genuine deficit at cap (demand outpaces production capacity) still shows
+  // the negative rate it will fall at.
+  it('shows a real deficit even at cap', () => {
+    const s = createInitialState(0);
+    s.level = 9;
+    s.workers.trained = 100;
+    s.buildings.wizardtower.level = 6;
+    s.workers.assigned.wood = 20; // +20/s
+    s.workers.assigned.ether = 1; // 100 wood/s, needs only wood
+    s.resources.wood.amount = getCapacity(s, 'wood')!; // at cap, but draining hard
+
+    // 20 − 100 = −80/s; at cap but a real deficit, so it shows negative.
+    expect(getLiveNetProductionRate(s, 'wood').toNumber()).toBe(-80);
   });
 });

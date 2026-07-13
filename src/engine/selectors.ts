@@ -111,6 +111,33 @@ export function getNetProductionRate(state: GameState, id: ResourceId): Decimal 
   return rate;
 }
 
+/**
+ * Live net rate: the per-second balance the simulation will actually apply right
+ * now, honoring the same gating a real tick does. Two differences from the
+ * nominal getNetProductionRate:
+ *  - Consumers are counted only if they can currently start a cycle — a line
+ *    starved on another input, or whose own output is at cap, draws nothing, so
+ *    it isn't subtracted (the nominal figure subtracts it regardless).
+ *  - A resource sitting at its cap can't climb, so a surplus reads as stable
+ *    (0/s) rather than the "+X" its producers would nominally add. A genuine
+ *    deficit at cap still shows the negative rate it will fall at.
+ * This is what the Core rows show as the headline number; the nominal rate rides
+ * beneath it as the "if every staffed line ran at full" target.
+ */
+export function getLiveNetProductionRate(state: GameState, id: ResourceId): Decimal {
+  let rate = getProductionRate(state, id);
+  for (const pid of PRODUCER_IDS) {
+    const qty = PRODUCERS[pid]?.inputs?.[id];
+    if (!qty) continue;
+    const workers = state.workers.assigned[pid];
+    if (workers <= 0 || !canStartCycle(state, pid)) continue;
+    rate = rate.minus(D(workers).times(qty).div(PRODUCERS[pid]!.cycleSeconds));
+  }
+  // At cap the amount can't rise: a surplus is really "holding steady", not "+X".
+  if (rate.gt(0) && isAtCapacity(state, id)) return D(0);
+  return rate;
+}
+
 // ---------- Workers ----------
 
 export function getTotalWorkers(state: GameState): number {

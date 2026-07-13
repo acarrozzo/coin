@@ -13,6 +13,7 @@
     canBuild,
     canStartCycle,
     getNetProductionRate,
+    getLiveNetProductionRate,
     splitCost,
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate, formatSignedRate } from '../engine/numbers';
@@ -186,14 +187,22 @@
 
               <span class="rcost">
                 {#if group.key === 'core'}
-                  {@const net = getNetProductionRate(gs, id)}
-                  <span
-                    class="netrate"
-                    class:pos={net.gt(0)}
-                    class:neg={net.lt(0)}
-                    title="Overall {RESOURCES[id].name.toLowerCase()} rate — production minus everything that consumes it"
-                    >{formatSignedRate(net)}</span
-                  >
+                  {@const live = getLiveNetProductionRate(gs, id)}
+                  {@const nominal = getNetProductionRate(gs, id)}
+                  <span class="netrates">
+                    <span
+                      class="netrate"
+                      class:pos={live.gt(0)}
+                      class:neg={live.lt(0)}
+                      title="Live {RESOURCES[id].name.toLowerCase()} rate — what's actually happening now: production minus only the lines that can currently run (starved or at-cap lines draw nothing), held at 0 when full."
+                      >{formatSignedRate(live)}</span
+                    >
+                    <span
+                      class="netrate target"
+                      title="Target rate — production minus every staffed consumer at full throughput, ignoring starvation and caps."
+                      >{formatSignedRate(nominal)} target</span
+                    >
+                  </span>
                 {:else}
                   {#each inputEntries(id) as [rid, amt] (rid)}
                     <span class="pill" class:short={gs.resources[rid].amount.lt(amt)}>
@@ -499,6 +508,13 @@
 
   /* Core rows: the running net rate (production − consumption) for wood/stone/
      food, sitting where crafting rows show their input pills — far right. */
+  .netrates {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+    line-height: 1.15;
+  }
   .netrate {
     color: var(--text-muted);
     font-size: 15px;
@@ -511,6 +527,13 @@
   }
   .netrate.neg {
     color: var(--bad);
+  }
+  /* The nominal "target" rate rides beneath the live one, smaller and quieter —
+     context for the headline, not the headline itself. */
+  .netrate.target {
+    font-size: 11px;
+    font-weight: 500;
+    color: color-mix(in srgb, var(--text-muted) 70%, var(--bg-panel));
   }
 
   /* Clickable cost/recipe entry — the whole container jumps to that resource's
