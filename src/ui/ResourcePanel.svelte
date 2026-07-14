@@ -4,6 +4,7 @@
   import { RESOURCES, type ResourceId } from '../content/resources';
   import { PRODUCERS, resourceDecimals } from '../content/producers';
   import { BUILDINGS } from '../content/buildings';
+  import type { BuildingId } from '../engine/state';
   import type { ResourceCost } from '../content/settlement';
   import {
     getAvailableWorkers,
@@ -27,6 +28,13 @@
 
   function inputEntries(id: ResourceId) {
     return Object.entries(PRODUCERS[id]?.inputs ?? {}) as [ResourceId, number][];
+  }
+
+  // The settlement level this build/upgrade is gated behind: the building's own
+  // availability plus any per-level gate. Not consumed — surfaced so an all-green
+  // cost line with a disabled button explains itself.
+  function requiredSettlementLevel(id: BuildingId, level: { requiresLevel?: number }): number {
+    return Math.max(BUILDINGS[id].availableAtLevel, level.requiresLevel ?? 0);
   }
 
   // A crafting line with workers that can't muster a full batch of some input
@@ -59,8 +67,9 @@
 
 <!-- Cost line: consumed resources (spent on build) first, then — after a
      bullet — the higher-end resources that are only required to be held. -->
-{#snippet costLine(cost: ResourceCost)}
+{#snippet costLine(cost: ResourceCost, reqLevel: number = 0)}
   {@const parts = splitCost(cost)}
+  {@const levelShort = reqLevel > 0 && gs.level < reqLevel}
   <p class="gcost">
     {#if parts.consumed.length}
       <span class="cost-label">cost:</span>
@@ -85,6 +94,12 @@
           >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
         >
       {/each}
+    {/if}
+    {#if levelShort}
+      {#if parts.consumed.length || parts.required.length}<span class="cost-sep" aria-hidden="true"
+          >•</span
+        >{/if}
+      <span class="cost-num req-only short">settlement lvl {reqLevel}</span>
     {/if}
   </p>
 {/snippet}
@@ -122,7 +137,7 @@
             </button>
             <div class="uinfo">
               <p class="gsummary">{next.summary}</p>
-              {@render costLine(next.cost)}
+              {@render costLine(next.cost, requiredSettlementLevel(group.building!, next))}
             </div>
           </div>
         {/if}
@@ -235,7 +250,7 @@
               </button>
               <div class="finfo">
                 <p class="gsummary">{fNext.summary}</p>
-                {@render costLine(fNext.cost)}
+                {@render costLine(fNext.cost, requiredSettlementLevel(group.building, fNext))}
               </div>
             {:else}
               <span class="maxed">MAX</span>
