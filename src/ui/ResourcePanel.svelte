@@ -177,7 +177,8 @@
                 >
               </div>
 
-              <span class="rate" class:idle={assigned === 0}>
+              <div class="trail">
+                <span class="rate" class:idle={assigned === 0}>
                 {#if starved}
                   <span class="warn">needs {RESOURCES[starved].name}</span>
                 {:else}
@@ -213,6 +214,7 @@
                   {/each}
                 {/if}
               </span>
+              </div>
             </div>
           {/each}
         </div>
@@ -341,8 +343,9 @@
   .rows {
     display: grid;
     /* Fixed widths through the worker column so the −/count/+ clusters (and the
-       rate) sit at the same x in every card, not just within one card. */
-    grid-template-columns: 20px 96px 150px 116px auto minmax(0, 1fr);
+       rate) sit at the same x in every card, not just within one card. The
+       trailing column holds the rate + cost pills together (see .trail). */
+    grid-template-columns: 20px 96px 150px 116px minmax(0, 1fr);
     column-gap: var(--space-3);
   }
   .row {
@@ -467,6 +470,18 @@
     text-align: center;
     font-variant-numeric: tabular-nums;
   }
+  /* Rate and cost share one wrapping cell: rate pinned left, cost pinned right
+     (margin-left:auto). When they can't both fit on one line the cost wraps
+     onto the next line instead of the two colliding — responsive at any width,
+     with no reliance on a pixel breakpoint. */
+  .trail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: var(--space-3);
+    row-gap: var(--space-1);
+    min-width: 0;
+  }
   .rate {
     color: var(--good);
     font-size: 0.9em;
@@ -480,10 +495,15 @@
   .warn {
     color: var(--bad);
   }
+  /* Cost pills: pinned to the right of the trail cell, wrapping among
+     themselves when there are several long inputs. */
   .rcost {
-    display: inline-flex;
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--space-2);
     justify-content: flex-end;
+    align-content: center;
+    margin-left: auto;
   }
   .pill {
     color: var(--good);
@@ -654,10 +674,11 @@
 
   /* --- Narrow card: rows fall back to a wrapped, stacked layout (no subgrid).
      Keyed on the CARD's own width, so this triggers both on small screens and
-     when the settings drawer pushes the content column narrow on desktop —
-     the fixed 6-column grid would otherwise collide the rate onto the cost
-     pills. ~700px is the point below which those columns stop fitting. --- */
-  @container (max-width: 700px) {
+     when the settings drawer pushes the content column narrow on desktop.
+     The rate/cost collision is handled by .trail wrapping at any width, so this
+     restack only needs to fire when the fixed icon/bars/label/worker columns
+     themselves stop fitting (~600px). --- */
+  @container (max-width: 600px) {
     .rows {
       display: block;
     }
@@ -666,7 +687,7 @@
       grid-template-areas:
         'icon label workers'
         'bar bar bar'
-        'rate rate rcost';
+        'trail trail trail';
       row-gap: var(--space-2);
     }
     .ricon {
@@ -681,12 +702,8 @@
     .bars {
       grid-area: bar;
     }
-    .rate {
-      grid-area: rate;
-      text-align: left;
-    }
-    .rcost {
-      grid-area: rcost;
+    .trail {
+      grid-area: trail;
     }
   }
 

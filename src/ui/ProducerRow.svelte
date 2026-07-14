@@ -95,23 +95,25 @@
     >
   </div>
 
-  <span class="rate" class:idle={assigned === 0}>
-    {#if starved}
-      <span class="warn">needs {RESOURCES[starved].name}</span>
-    {:else}
-      +{formatCycleRate(assigned * outputPerCycle, RESOURCES[id].name.toLowerCase(), cycleSeconds)}
-    {/if}
-  </span>
+  <div class="trail">
+    <span class="rate" class:idle={assigned === 0}>
+      {#if starved}
+        <span class="warn">needs {RESOURCES[starved].name}</span>
+      {:else}
+        +{formatCycleRate(assigned * outputPerCycle, RESOURCES[id].name.toLowerCase(), cycleSeconds)}
+      {/if}
+    </span>
 
-  <span class="rcost">
-    {#each inputEntries() as [rid, amt] (rid)}
-      <span class="pill" class:short={gs.resources[rid].amount.lt(amt)}>
-        <button type="button" class="req jump" onclick={() => jump(rid)}
-          >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
-        ><span class="held">/{formatNumber(gs.resources[rid].amount)}</span>
-      </span>
-    {/each}
-  </span>
+    <span class="rcost">
+      {#each inputEntries() as [rid, amt] (rid)}
+        <span class="pill" class:short={gs.resources[rid].amount.lt(amt)}>
+          <button type="button" class="req jump" onclick={() => jump(rid)}
+            >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
+          ><span class="held">/{formatNumber(gs.resources[rid].amount)}</span>
+        </span>
+      {/each}
+    </span>
+  </div>
 </div>
 
 <style>
@@ -119,7 +121,7 @@
      Assault panel reads identically to every other resource line. */
   .row {
     display: grid;
-    grid-template-columns: 20px 96px 150px 116px auto minmax(0, 1fr);
+    grid-template-columns: 20px 96px 150px 116px minmax(0, 1fr);
     column-gap: var(--space-3);
     align-items: center;
     scroll-margin-block: calc(var(--header-h, 72px) + var(--space-3));
@@ -274,6 +276,18 @@
     opacity: 0.35;
     cursor: not-allowed;
   }
+  /* Rate and cost share one wrapping cell: rate pinned left, cost pinned right
+     (margin-left:auto). When they can't both fit on one line the cost wraps
+     onto the next line instead of the two colliding — responsive at any width,
+     with no reliance on a pixel breakpoint. */
+  .trail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: var(--space-3);
+    row-gap: var(--space-1);
+    min-width: 0;
+  }
   .rate {
     color: var(--good);
     font-size: 0.9em;
@@ -287,10 +301,15 @@
   .warn {
     color: var(--bad);
   }
+  /* Cost pills: pinned to the right of the trail cell, wrapping among
+     themselves when there are several long inputs. */
   .rcost {
-    display: inline-flex;
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--space-2);
     justify-content: flex-end;
+    align-content: center;
+    margin-left: auto;
   }
   .pill {
     color: var(--good);
@@ -332,13 +351,13 @@
   }
   /* Narrow card: fall back to the same wrapped, stacked layout ResourcePanel
      uses when its cards get tight (keyed on the hosting container's width). */
-  @container (max-width: 700px) {
+  @container (max-width: 600px) {
     .row {
       grid-template-columns: 20px 1fr auto;
       grid-template-areas:
         'icon label workers'
         'bar bar bar'
-        'rate rate rcost';
+        'trail trail trail';
       row-gap: var(--space-2);
     }
     .ricon {
@@ -353,12 +372,8 @@
     .bars {
       grid-area: bar;
     }
-    .rate {
-      grid-area: rate;
-      text-align: left;
-    }
-    .rcost {
-      grid-area: rcost;
+    .trail {
+      grid-area: trail;
     }
   }
 
