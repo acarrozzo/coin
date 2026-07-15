@@ -171,21 +171,22 @@
 </aside>
 
 <style>
+  /* A fixed overlay drawer at all widths, opened from the header gear. It
+     overlays the content on the right; no backdrop, so the page behind stays
+     lit and interactive — close via the ✕ only. */
   .settings {
     display: flex;
     flex-direction: column;
     background: var(--bg-panel);
-    border: var(--panel-border);
-    border-radius: var(--panel-radius);
-    box-shadow: var(--panel-shadow);
-    /* Desktop: a sticky right-hand column that scrolls independently. Parked
-       just below the sticky header (its measured height + a gap) so scrolling
-       never tucks the panel's title under the header. */
-    position: sticky;
-    top: calc(var(--header-h, 56px) + var(--space-3));
-    max-height: calc(100vh - var(--header-h, 56px) - var(--space-4));
-    /* Line the panel's top up with the first content panel (main's padding). */
-    margin-top: var(--space-4);
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(380px, 92vw);
+    z-index: 30;
+    border-left: 1px solid var(--border);
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
+    animation: drawerIn var(--transition);
   }
   .head {
     display: flex;
@@ -390,26 +391,6 @@
     background: color-mix(in srgb, var(--bad) 18%, transparent);
   }
 
-  /* Below the split breakpoint, settings detaches into a right-hand drawer
-     that overlays the content. No backdrop — the content behind stays lit and
-     interactive; close via the ✕ only. A shadow separates it from the page. */
-  @media (max-width: 1023px) {
-    .settings {
-      position: fixed;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      width: min(380px, 92vw);
-      max-height: none;
-      margin-top: 0;
-      z-index: 30;
-      border: 0;
-      border-left: 1px solid var(--border);
-      border-radius: 0;
-      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
-      animation: drawerIn var(--transition);
-    }
-  }
   @keyframes drawerIn {
     from {
       transform: translateX(100%);

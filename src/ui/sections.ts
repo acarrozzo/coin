@@ -34,6 +34,13 @@ import Swords from '@lucide/svelte/icons/swords';
 // Rail-only icons for the non-resource sections.
 import Home from '@lucide/svelte/icons/home';
 import Shield from '@lucide/svelte/icons/shield';
+import Store from '@lucide/svelte/icons/store';
+
+/** The shop (worker recruitment) unlocks at settlement level 5. */
+export const SHOP_UNLOCK_LEVEL = 5;
+export function isShopUnlocked(gs: GameState): boolean {
+  return gs.level >= SHOP_UNLOCK_LEVEL;
+}
 
 // Each group is a structure card: a header (name + level + upgrade), the
 // resources it produces as single rows, and — for Core Resources — the Farm
@@ -161,6 +168,8 @@ export interface NavSection {
   count: number;
   /** 'good' = an affordable build/upgrade waits here; 'bad' = combat danger. */
   alert: 'good' | 'bad' | null;
+  /** Render a divider before this button — separates the shop from the main sections. */
+  separated?: boolean;
 }
 
 /**
@@ -200,6 +209,18 @@ export function getNavSections(gs: GameState): NavSection[] {
       icon: g.icon,
       count,
       alert: g.building && canBuild(gs, g.building) ? 'good' : null,
+    });
+  }
+
+  // The shop is the final section, set apart from the resource groups.
+  if (isShopUnlocked(gs)) {
+    sections.push({
+      id: 'shop',
+      label: 'Shop',
+      icon: Store,
+      count: 0,
+      alert: null,
+      separated: true,
     });
   }
 

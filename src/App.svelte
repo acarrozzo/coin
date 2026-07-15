@@ -19,10 +19,9 @@
   import ShopPanel from './ui/ShopPanel.svelte';
   import WelcomeBack from './ui/WelcomeBack.svelte';
   import Toasts from './ui/Toasts.svelte';
-  import { getNavSections } from './ui/sections';
+  import { getNavSections, isShopUnlocked } from './ui/sections';
   import Castle from '@lucide/svelte/icons/castle';
   import Settings from '@lucide/svelte/icons/settings';
-  import Store from '@lucide/svelte/icons/store';
   import PersonStanding from '@lucide/svelte/icons/person-standing';
   import Check from '@lucide/svelte/icons/check';
   import TreePine from '@lucide/svelte/icons/tree-pine';
@@ -38,16 +37,15 @@
   ];
 
   let leveled = $state(false);
-  // Which side panel is open, if any — only one at a time. Toggled from the
-  // icon rail between the main content and the panel column.
-  let activePanel = $state<'shop' | 'settings' | null>(null);
-  // Measured so the sticky settings column can park just below the header,
+  // Settings opens as an overlay drawer from the header gear (all widths).
+  let settingsOpen = $state(false);
+  // Measured so the settings drawer and rails can park just below the header,
   // whose height shifts with the chosen font/layout.
   let headerH = $state(0);
 
   const gs = $derived(game.state);
   // The shop (worker recruitment) unlocks at settlement level 5.
-  const showShop = $derived(gs.level >= 5);
+  const showShop = $derived(isShopUnlocked(gs));
 
   // Left-rail jump targets: one per visible main-content section, each with a
   // worker count and an opportunity/danger indicator.
@@ -150,7 +148,7 @@
     let raf = 0;
     const recompute = () => {
       raf = 0;
-      const line = headerH + 16;
+      const line = headerH + 20;
       const els = Array.from(document.querySelectorAll<HTMLElement>('[data-nav]'));
       let current = els[0]?.dataset.nav ?? null;
       for (const el of els) {
@@ -181,18 +179,14 @@
     }
     prevLevel = level;
   });
-
-  // Don't leave the shop panel open if the shop is no longer available.
-  $effect(() => {
-    if (activePanel === 'shop' && !showShop) activePanel = null;
-  });
 </script>
 
 <div class="topstack" bind:clientHeight={headerH}>
   <header>
     <div class="header-inner">
     <h1>
-      <Castle size={18} color="var(--gold)" aria-hidden="true" /> Coin &amp; Castle
+      <Castle size={18} color="var(--gold)" aria-hidden="true" />
+      <span class="wordmark">Coin &amp; Castle</span>
       <span class="stat level-badge" class:leveled title="Settlement level">Lv {gs.level}</span>
     </h1>
 
@@ -243,15 +237,25 @@
             </span>
           </span>
         {/if}
-        <PersonStanding size={16} color="var(--gold)" aria-hidden="true" />
-        {working}/{total}
+        <PersonStanding class="worker-icon" size={16} color="var(--gold)" aria-hidden="true" />
+        {working}<span class="worker-total">/{total}</span>
       </span>
+      <button
+        class="gear"
+        class:active={settingsOpen}
+        onclick={() => (settingsOpen = !settingsOpen)}
+        aria-pressed={settingsOpen}
+        aria-label="Settings"
+        title="Settings"
+      >
+        <Settings size={18} aria-hidden="true" />
+      </button>
     </div>
   </div>
   </header>
 </div>
 
-<div class="layout" class:panel-open={activePanel !== null} style="--header-h: {headerH}px">
+<div class="layout" style="--header-h: {headerH}px">
   <!-- Left jump rail: one button per visible section. Clicking scrolls to it;
        a dot flags an affordable upgrade (gold) or combat danger (red), and a
        badge shows the workers assigned there. On mobile it floats at the left
@@ -259,6 +263,9 @@
   <nav class="jump-rail" aria-label="Jump to section">
     {#each navSections as s (s.id)}
       {@const Icon = s.icon}
+      {#if s.separated}
+        <span class="rail-divider" aria-hidden="true"></span>
+      {/if}
       <button
         class="jump-btn"
         class:active={activeSection === s.id}
@@ -288,6 +295,12 @@
       <CombatPanel />
       <ResourcePanel />
       <CampPanel />
+      {#if showShop}
+        <!-- The shop is set apart from the resource sections by a divider, and
+             sits last in the main content. -->
+        <hr class="section-divider" />
+        <ShopPanel />
+      {/if}
       <!-- Breathing room so the last (possibly short) section can scroll up to
            the header line, triggering its active state in the left rail. -->
       <div class="tail-space" aria-hidden="true"></div>
@@ -299,43 +312,8 @@
     </footer>
   </div>
 
-  <!-- Icon rail between the main content and the panel column. On mobile it
-       floats at the right edge and slides left of the drawer when one opens. -->
-  <nav class="rail" aria-label="Panels">
-    {#if showShop}
-      <button
-        class="rail-btn"
-        class:active={activePanel === 'shop'}
-        onclick={() => (activePanel = activePanel === 'shop' ? null : 'shop')}
-        aria-pressed={activePanel === 'shop'}
-        aria-label="Shop"
-        onmouseenter={(e) => showTip(e, 'Shop', 'left')}
-        onmouseleave={hideTip}
-        onfocus={(e) => showTip(e, 'Shop', 'left')}
-        onblur={hideTip}
-      >
-        <Store size={20} aria-hidden="true" />
-      </button>
-    {/if}
-    <button
-      class="rail-btn"
-      class:active={activePanel === 'settings'}
-      onclick={() => (activePanel = activePanel === 'settings' ? null : 'settings')}
-      aria-pressed={activePanel === 'settings'}
-      aria-label="Settings"
-      onmouseenter={(e) => showTip(e, 'Settings', 'left')}
-      onmouseleave={hideTip}
-      onfocus={(e) => showTip(e, 'Settings', 'left')}
-      onblur={hideTip}
-    >
-      <Settings size={20} aria-hidden="true" />
-    </button>
-  </nav>
-
-  {#if activePanel === 'shop'}
-    <ShopPanel onclose={() => (activePanel = null)} />
-  {:else if activePanel === 'settings'}
-    <SettingsPanel onclose={() => (activePanel = null)} />
+  {#if settingsOpen}
+    <SettingsPanel onclose={() => (settingsOpen = false)} />
   {/if}
 
   {#if tip}
@@ -368,49 +346,8 @@
     display: flex;
     flex-direction: column;
   }
-  .layout > :global(.side-panel) {
-    flex: 0 0 340px;
-    align-self: stretch;
-  }
-
-  /* Vertical strip of panel toggles, sitting between the main content and the
-     open panel. Sticks under the header alongside the panels. */
-  .rail {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    position: sticky;
-    top: calc(var(--header-h, 56px) + var(--space-3));
-    margin-top: var(--space-4);
-  }
-  .rail-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 44px;
-    height: 44px;
-    background: var(--bg-panel);
-    border: var(--panel-border);
-    border-radius: var(--panel-radius);
-    box-shadow: var(--panel-shadow);
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: color var(--transition), background var(--transition), border-color var(--transition);
-  }
-  .rail-btn:hover {
-    color: var(--text);
-    border-color: var(--accent);
-  }
-  .rail-btn.active {
-    color: var(--gold);
-    background: color-mix(in srgb, var(--accent) 20%, var(--bg-panel));
-    border-color: var(--accent);
-  }
-  .rail-btn:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
-  }
+  /* Settings opens as a fixed overlay drawer at all widths (see SettingsPanel),
+     so it sits outside the flex row rather than as a column. */
 
   /* --- Left jump rail: navigate to main-content sections --- */
   .jump-rail {
@@ -419,7 +356,7 @@
     flex-direction: column;
     gap: var(--space-2);
     position: sticky;
-    top: calc(var(--header-h, 56px) + var(--space-3));
+    top: calc(var(--header-h, 56px) + var(--space-4));
     margin-top: var(--space-4);
     /* Never grow past the viewport if many sections have unlocked. */
     max-height: calc(100vh - var(--header-h, 56px) - var(--space-4));
@@ -457,6 +394,15 @@
   .jump-btn:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
+  }
+  /* Sets the shop apart from the main-content sections in the rail. */
+  .rail-divider {
+    flex: 0 0 auto;
+    align-self: center;
+    width: 24px;
+    height: 1px;
+    margin: var(--space-1) 0;
+    background: var(--border);
   }
 
   /* Instant hover/focus label for both icon rails. Fixed-positioned (see
@@ -629,14 +575,36 @@
     border-radius: 999px;
     transition: width 0.2s linear;
   }
-  /* Idle workers: the unfilled remainder glows red as a nudge to assign them. */
-  .store-bar.alert {
-    background: color-mix(in srgb, var(--bad) 55%, transparent);
-  }
   .hud {
     display: flex;
     align-items: center;
     gap: var(--space-3);
+  }
+  /* Settings toggle, living in the header now that the right rail is gone. */
+  .gear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    color: var(--text-on-header);
+    cursor: pointer;
+    transition: color var(--transition), background var(--transition), border-color var(--transition);
+  }
+  .gear:hover {
+    color: var(--gold);
+    background: rgba(255, 255, 255, 0.2);
+  }
+  .gear.active {
+    color: var(--gold);
+    border-color: var(--gold);
+  }
+  .gear:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 1px;
   }
   .stat {
     display: inline-flex;
@@ -690,6 +658,8 @@
     animation: idlePulse 2s ease-in-out infinite;
   }
   .worker-badge.done {
+    width: 18px;
+    padding: 0;
     background: transparent;
     color: var(--good, #16a34a);
     border: 1px solid var(--good, #16a34a);
@@ -768,6 +738,13 @@
     flex-direction: column;
     gap: var(--panel-gap);
   }
+  /* Sets the shop apart from the resource sections in the main content. */
+  .section-divider {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: var(--space-2) 0;
+  }
+
   /* Roughly one viewport of slack, so even a single-row final section can be
      scrolled to the top of the page. */
   .tail-space {
@@ -794,64 +771,95 @@
      The rail floats at the right edge over the content, and slides left to sit
      just beside the drawer whenever one is open. */
   @media (max-width: 1023px) {
-    /* Both rails detach to fixed and float over the edges, so reserve a gutter
-       the width of a rail button (44px + its edge offset + a small gap) on each
-       side. This keeps the content column clear of the icons at every width. */
+    /* The jump rail detaches to fixed and floats over the left edge, so reserve
+       a gutter the width of a rail button (44px + its edge offset + a small gap)
+       so the content column stays clear of the icons at every width. */
     .layout {
       padding-left: calc(44px + var(--space-2) * 2);
-      padding-right: calc(44px + var(--space-2) * 2);
     }
-    .rail {
-      position: fixed;
-      top: calc(var(--header-h, 56px) + var(--space-3));
-      right: var(--space-2);
-      margin-top: 0;
-      z-index: 31;
-      transition: right var(--transition);
-    }
-    .layout.panel-open .rail {
-      right: calc(min(380px, 92vw) + var(--space-2));
-    }
-    /* The jump rail floats at the left edge, mirroring the panel rail. */
+    /* The jump rail floats at the left edge. */
     .jump-rail {
       position: fixed;
       left: var(--space-2);
-      top: calc(var(--header-h, 56px) + var(--space-3));
+      top: calc(var(--header-h, 56px) + var(--space-4));
       margin-top: 0;
       z-index: 20;
       max-height: calc(100dvh - var(--header-h, 56px) - var(--space-4));
     }
   }
 
-  @media (max-width: 768px) {
-    /* Keep the rail gutters from the 1023px breakpoint (don't shrink them here)
-       or the fixed icons would overlap the content again on phones. */
+  /* Tablet and below: the title + worker readout keep the top row to
+     themselves, and the storage gauges drop to their own full-width row. This
+     kicks in early (900px) so the three gauges never crowd the title on a
+     single line. */
+  /* Tablet and below: keep everything on one row and collapse the wordmark to
+     the castle icon + level badge, freeing width for the gauges, worker readout
+     and gear. Desktop (above 900px) is untouched. */
+  @media (max-width: 900px) {
     .header-inner {
+      flex-wrap: nowrap;
       padding: var(--space-2) var(--space-3);
-      gap: var(--space-2);
+      gap: var(--space-3);
     }
     header h1 {
       font-size: 20px;
-      /* Shrink so the worker display always shares the top row instead of
-         wrapping the HUD to a new line. */
-      flex: 1 1 auto;
-      min-width: 0;
-    }
-    .hud {
-      gap: var(--space-2);
-      /* Pin the worker display to the very top-right of the header. */
-      order: 0;
-      margin-left: auto;
       flex: 0 0 auto;
     }
-    .stores {
-      gap: var(--space-3);
-      order: 1;
-      width: 100%;
-      justify-content: space-between;
+    .wordmark {
+      display: none;
+    }
+  }
+
+  /* Below 768px: each gauge stacks its bar beneath the icon + amount. The gauge
+     is pinned to the original bar width (52px) so the content and bar share that
+     width and the whole thing stays narrow. The /cap text is dropped here (it
+     wouldn't fit the narrow column — the bar shows fullness). */
+  @media (max-width: 767.98px) {
+    .store {
+      flex-wrap: wrap;
+      justify-content: center;
+      text-align: center;
+      row-gap: 4px;
+      min-width: 52px;
+    }
+    .store-cap {
+      display: none;
     }
     .store-bar {
-      width: 40px;
+      flex-basis: 100%;
+      width: auto;
+    }
+  }
+
+  /* Phones: tighten gaps and shrink the worker readout so the row still fits on
+     one line. */
+  @media (max-width: 640px) {
+    .header-inner {
+      gap: var(--space-2);
+    }
+    .stores {
+      gap: 10px;
+    }
+    .store-num {
+      font-size: 13px;
+    }
+    .worker-stat {
+      font-size: 13px;
+      padding: 2px 4px;
+    }
+    .gear {
+      width: 28px;
+      height: 28px;
+    }
+  }
+
+  /* Small mobile: the total is implied, so show just the working count. */
+  @media (max-width: 480px) {
+    .worker-total {
+      display: none;
+    }
+    :global(.worker-icon) {
+      display: none;
     }
   }
 </style>
