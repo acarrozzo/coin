@@ -9,9 +9,11 @@
     willRepelAssault,
     willBreakHex,
   } from '../engine/selectors';
-  import { ASSAULT, HEX } from '../content/combat';
-  import { formatNumber } from '../engine/numbers';
+  import { ASSAULT, HEX, WIPE_ON_BREACH, type ThreatConfig } from '../content/combat';
+  import { RESOURCES } from '../content/resources';
+  import { formatNumber, type Decimal } from '../engine/numbers';
   import ProducerRow from './ProducerRow.svelte';
+  import InfoFlyout from './InfoFlyout.svelte';
   import Star from '@lucide/svelte/icons/star';
   import Sparkles from '@lucide/svelte/icons/sparkles';
   import Swords from '@lucide/svelte/icons/swords';
@@ -20,6 +22,80 @@
   const gs = $derived(game.state);
   const ward = $derived(gs.resources.ward.amount);
   const wardMax = $derived(getCapacity(gs, 'ward'));
+
+  // The resources looted if a threat lands with the stat already at zero.
+  const wipeNames = WIPE_ON_BREACH.map((id) => RESOURCES[id].name).join(', ');
+
+  interface TrackInfo {
+    accent: string;
+    worker: string;
+    capBuilding: string;
+    rewardName: string;
+    statName: string;
+    incoming: string;
+    nextAfterWin: string;
+    statNow: string;
+    statMax: string | null;
+    margin: string;
+    holding: boolean;
+    interval: number;
+    wins: number;
+    losses: number;
+    lossAmount: number;
+  }
+
+  function trackInfo(cfg: ThreatConfig, opts: {
+    accent: string;
+    worker: string;
+    capBuilding: string;
+    incoming: Decimal;
+    holding: boolean;
+    wins: number;
+    losses: number;
+  }): TrackInfo {
+    const statNow = gs.resources[cfg.defenseStat].amount;
+    const statMax = getCapacity(gs, cfg.defenseStat);
+    return {
+      accent: opts.accent,
+      worker: opts.worker,
+      capBuilding: opts.capBuilding,
+      rewardName: RESOURCES[cfg.reward].name,
+      statName: RESOURCES[cfg.defenseStat].name,
+      incoming: formatNumber(opts.incoming),
+      nextAfterWin: formatNumber(opts.incoming.times(cfg.growth)),
+      statNow: formatNumber(statNow),
+      statMax: statMax ? formatNumber(statMax) : null,
+      margin: formatNumber(statNow.minus(opts.incoming)),
+      holding: opts.holding,
+      interval: cfg.intervalSeconds,
+      wins: opts.wins,
+      losses: opts.losses,
+      lossAmount: cfg.lossAmount,
+    };
+  }
+
+  const assaultInfo = $derived(
+    trackInfo(ASSAULT, {
+      accent: 'var(--bad)',
+      worker: 'an archer',
+      capBuilding: 'Castle',
+      incoming: getNextAssaultPower(gs),
+      holding: willRepelAssault(gs),
+      wins: gs.combat.assault.wins,
+      losses: gs.combat.assault.losses,
+    }),
+  );
+  const hexInfo = $derived(
+    trackInfo(HEX, {
+      accent: 'var(--wisdom)',
+      worker: 'a mage',
+      capBuilding: 'Wizard Tower',
+      incoming: getNextHexPower(gs),
+      holding: willBreakHex(gs),
+      wins: gs.combat.hex.wins,
+      losses: gs.combat.hex.losses,
+    }),
+  );
 
   // Fraction of the interval elapsed — the bar fills as the next attack nears.
   const assaultProgressPct = $derived(
@@ -48,6 +124,9 @@
         <span class="in-label">Incoming in {countdown(gs.combat.assault.timer)}</span>
         <span class="bar"><span class="bar-fill" style:width="{assaultProgressPct}%"></span></span>
       </div>
+      <InfoFlyout label="Assault details" accent="var(--bad)">
+        {@render trackDetails(assaultInfo)}
+      </InfoFlyout>
       <span class="honor" title="Honor won from repelled assaults">
         <Star size={16} color="var(--gold)" aria-hidden="true" />
         {formatNumber(gs.resources.honor.amount)} Honor
@@ -67,7 +146,6 @@
     <div class="def-row">
       <ProducerRow id="defense" showCap />
     </div>
-    <p class="hint">Dedicate an archer to the walls to raise defense (up to your Castle's cap).</p>
 
     <!-- Hex track -->
     {#if isHexUnlocked(gs)}
@@ -80,6 +158,9 @@
           <span class="in-label">Incoming in {countdown(gs.combat.hex.timer)}</span>
           <span class="bar"><span class="bar-fill" style:width="{hexProgressPct}%"></span></span>
         </div>
+        <InfoFlyout label="Hex details" accent="var(--wisdom)">
+          {@render trackDetails(hexInfo)}
+        </InfoFlyout>
         <span class="honor" title="Wisdom won from resisted hexes">
           <Sparkles size={16} color="var(--wisdom)" aria-hidden="true" />
           {formatNumber(gs.resources.wisdom.amount)} Wisdom
@@ -103,10 +184,37 @@
       <div class="def-row">
         <ProducerRow id="ward" showCap />
       </div>
-      <p class="hint">Dedicate a mage to weave wards (up to your Wizard Tower's cap).</p>
     {/if}
   </section>
 {/if}
+
+{#snippet trackDetails(t: TrackInfo)}
+  <p class="fly-how">
+    Dedicate {t.worker} to raise <strong>{t.statName}</strong> (up to your {t.capBuilding}'s cap).
+  </p>
+  <dl class="fly-stats">
+    <div><dt>{t.statName}</dt><dd>{t.statNow}{#if t.statMax} / {t.statMax}{/if}</dd></div>
+    <div><dt>Incoming</dt><dd>{t.incoming}</dd></div>
+    <div>
+      <dt>Margin</dt>
+      <dd class={t.holding ? 'ok' : 'bad'}>{t.margin}</dd>
+    </div>
+    <div><dt>Every</dt><dd>{t.interval}s</dd></div>
+    <div><dt>Record</dt><dd>{t.wins}W / {t.losses}L</dd></div>
+  </dl>
+  <ul class="fly-outcomes">
+    <li>
+      <span class="ok">Win</span> +1 {t.rewardName}; next hit escalates to {t.nextAfterWin}.
+    </li>
+    <li>
+      <span class="bad">Loss</span> −{t.lossAmount} {t.statName}. If it hits 0, your {wipeNames} are
+      looted and the wave resets.
+    </li>
+  </ul>
+  <p class="fly-tip">
+    Tip: when the wave outgrows your cap, upgrade the {t.capBuilding} to raise the ceiling.
+  </p>
+{/snippet}
 
 <style>
   .panel {
@@ -208,9 +316,50 @@
        exactly like ResourcePanel's rows do. */
     container-type: inline-size;
   }
-  .hint {
-    margin-top: var(--space-2);
+  /* Flyout content */
+  .fly-how {
+    margin: 0 0 var(--space-3);
+    color: var(--text);
+  }
+  .fly-how strong {
+    color: var(--text);
+  }
+  .fly-stats {
+    margin: 0 0 var(--space-3);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-1) var(--space-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .fly-stats div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+  .fly-stats dt {
     color: var(--text-muted);
-    font-size: 13px;
+  }
+  .fly-stats dd {
+    margin: 0;
+  }
+  .fly-outcomes {
+    margin: 0 0 var(--space-3);
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    color: var(--text-muted);
+  }
+  .fly-outcomes .ok,
+  .fly-outcomes .bad {
+    font-weight: bold;
+    margin-right: var(--space-1);
+  }
+  .fly-tip {
+    margin: 0;
+    color: var(--text-muted);
+    border-top: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+    padding-top: var(--space-2);
   }
 </style>
