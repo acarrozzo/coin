@@ -36,7 +36,7 @@ export interface ThreatConfig {
 
 export const ASSAULT: ThreatConfig = {
   unlockLevel: 7,
-  intervalSeconds: 100,
+  intervalSeconds: 300,
   basePower: 1,
   growth: 1.5,
   defenseStat: 'defense',
