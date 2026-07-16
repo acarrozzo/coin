@@ -129,6 +129,15 @@
           {/each}
         </div>
       </div>
+
+      <label class="row toggle">
+        <span>Panel accent border<small>Colored strip along the top of each panel</small></span>
+        <input
+          type="checkbox"
+          checked={look.accentBorder}
+          onchange={() => (look.accentBorder = !look.accentBorder)}
+        />
+      </label>
     </section>
 
     <section class="section">
@@ -369,9 +378,44 @@
     opacity: 0.35;
     cursor: not-allowed;
   }
-  .toggle input {
-    width: 18px;
-    height: 18px;
+  /* Pure-CSS switch: the checkbox is restyled into a track, its ::before is
+     the sliding thumb. Track tints to the accent when on. */
+  .toggle input[type='checkbox'] {
+    appearance: none;
+    -webkit-appearance: none;
+    flex-shrink: 0;
+    position: relative;
+    width: 38px;
+    height: 22px;
+    margin: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text) 22%, transparent);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition);
+  }
+  .toggle input[type='checkbox']::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--bg-panel);
+    transform: translateY(-50%);
+    transition: transform var(--transition);
+  }
+  .toggle input[type='checkbox']:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .toggle input[type='checkbox']:checked::before {
+    transform: translate(16px, -50%);
+  }
+  .toggle input[type='checkbox']:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
   .toggle span {
     display: flex;

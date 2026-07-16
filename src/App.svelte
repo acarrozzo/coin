@@ -74,13 +74,18 @@
     const el = document.querySelector<HTMLElement>(`[data-nav="${id}"]`);
     if (!el) return;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
     el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-    // Subtle accent flash so it's obvious which section you landed on. Restart
+
+    // Light the ring up right away, concurrently with the scroll, so it's
+    // already glowing as the section slides into view rather than snapping on
+    // after it lands. The animation fades in, holds, then drifts out slowly, and
+    // is long enough that it's still lit when a distant section arrives. Restart
     // the animation cleanly if the same target is jumped to again.
     el.classList.remove('nav-flash');
     void el.offsetWidth;
     el.classList.add('nav-flash');
-    window.setTimeout(() => el.classList.remove('nav-flash'), 900);
+    window.setTimeout(() => el.classList.remove('nav-flash'), 2400);
   }
   const available = $derived(getAvailableWorkers(gs));
   const total = $derived(getTotalWorkers(gs));
@@ -431,46 +436,20 @@
   .rail-flyout.left {
     transform: translate(-100%, -50%);
   }
-  /* Opportunity/danger dot, top-right of the icon. */
+  /* Opportunity/danger dot, tucked into the tile's top-right corner (inside the
+     bounds so the scroll container never clips it). */
   .dot {
     position: absolute;
-    top: -3px;
-    right: -3px;
-    width: 10px;
-    height: 10px;
+    top: 3px;
+    right: 3px;
+    width: 8px;
+    height: 8px;
     border-radius: 999px;
     background: var(--gold);
     box-shadow: 0 0 0 2px var(--bg-panel);
-    animation: dotPulse 2s ease-in-out infinite;
   }
   .dot.bad {
     background: var(--bad);
-  }
-  @keyframes dotPulse {
-    0%,
-    100% {
-      box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 0 color-mix(in srgb, var(--gold) 55%, transparent);
-    }
-    50% {
-      box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 5px transparent;
-    }
-  }
-  .dot.bad {
-    animation-name: dotPulseBad;
-  }
-  @keyframes dotPulseBad {
-    0%,
-    100% {
-      box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 0 color-mix(in srgb, var(--bad) 60%, transparent);
-    }
-    50% {
-      box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 5px transparent;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .dot {
-      animation: none;
-    }
   }
   /* Worker count: just the number, tucked in the icon's bottom-left corner. */
   .count-badge {
@@ -495,17 +474,28 @@
   /* Subtle accent ring that fades out once a section is jumped to. Uses outline
      (not box-shadow) so it never disturbs the panels' own drop shadow. */
   :global([data-nav].nav-flash) {
-    animation: navFlash 0.9s ease-out;
+    outline: 2px solid transparent;
+    outline-offset: 3px;
+    animation: navFlash 2.4s;
   }
+  /* Each phase gets its own easing (set on the keyframe that begins it): a slow,
+     smooth ease-in-out on the way in so the ring never pops, a brief hold, then
+     an even longer ease-in-out fade out. */
   @keyframes navFlash {
-    0%,
-    12% {
-      outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent);
-      outline-offset: 3px;
+    0% {
+      outline-color: transparent;
+      animation-timing-function: ease-in-out; /* fade in: 0 → 30% (~720ms) */
+    }
+    30% {
+      outline-color: color-mix(in srgb, var(--accent) 75%, transparent);
+      animation-timing-function: linear; /* hold: 30 → 45% */
+    }
+    45% {
+      outline-color: color-mix(in srgb, var(--accent) 75%, transparent);
+      animation-timing-function: ease-in-out; /* fade out: 45 → 100% (~1.3s) */
     }
     100% {
-      outline: 2px solid transparent;
-      outline-offset: 3px;
+      outline-color: transparent;
     }
   }
   @media (prefers-reduced-motion: reduce) {

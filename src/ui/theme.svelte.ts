@@ -113,6 +113,7 @@ const KEYS = {
   palette: 'cc:palette',
   font: 'cc:font',
   layout: 'cc:layout',
+  accentBorder: 'cc:accent-border',
 } as const;
 
 function isId<T extends readonly Option[]>(opts: T, v: string | null): v is T[number]['id'] {
@@ -127,22 +128,27 @@ function createLookStore() {
   const savedPalette = localStorage.getItem(KEYS.palette);
   const savedFont = localStorage.getItem(KEYS.font);
   const savedLayout = localStorage.getItem(KEYS.layout);
+  const savedAccentBorder = localStorage.getItem(KEYS.accentBorder);
 
   let palette = $state<PaletteId>(isId(PALETTES, savedPalette) ? savedPalette : defaultPalette);
   let font = $state<FontId>(isId(FONTS, savedFont) ? savedFont : 'retro');
   let layout = $state<LayoutId>(isId(LAYOUTS, savedLayout) ? savedLayout : 'classic');
+  // The colored accent strip along the top of each panel; on by default.
+  let accentBorder = $state<boolean>(savedAccentBorder !== 'off');
 
-  /** Stamp all three attributes and persist. Safe to call before mount. */
+  /** Stamp all attributes and persist. Safe to call before mount. */
   function apply(): void {
     const root = document.documentElement;
     root.setAttribute('data-palette', palette);
     root.setAttribute('data-font', font);
     root.setAttribute('data-layout', layout);
+    root.setAttribute('data-accent-border', accentBorder ? 'on' : 'off');
     // The old toggle set data-theme; drop it so it can't fight data-palette.
     root.removeAttribute('data-theme');
     localStorage.setItem(KEYS.palette, palette);
     localStorage.setItem(KEYS.font, font);
     localStorage.setItem(KEYS.layout, layout);
+    localStorage.setItem(KEYS.accentBorder, accentBorder ? 'on' : 'off');
   }
 
   return {
@@ -165,6 +171,13 @@ function createLookStore() {
     },
     set layout(v: LayoutId) {
       layout = v;
+      apply();
+    },
+    get accentBorder() {
+      return accentBorder;
+    },
+    set accentBorder(v: boolean) {
+      accentBorder = v;
       apply();
     },
     apply,

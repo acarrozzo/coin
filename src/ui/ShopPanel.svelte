@@ -37,6 +37,10 @@
     padding: var(--panel-pad);
     animation: fadeIn var(--fade-in);
   }
+  /* Settings can drop the colored accent strip; fall back to the plain frame. */
+  :global(:root[data-accent-border='off']) .shop {
+    border-top: var(--panel-border);
+  }
   .head {
     display: inline-flex;
     align-items: center;

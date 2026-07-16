@@ -16,6 +16,7 @@ import {
   isHexUnlocked,
   canBuild,
   canUpgradeSettlement,
+  canTrainWorker,
   getTotalWorkers,
   willRepelAssault,
   willBreakHex,
@@ -185,7 +186,9 @@ export function getNavSections(gs: GameState): NavSection[] {
     label: 'Settlement',
     icon: Home,
     count: getTotalWorkers(gs),
-    alert: canUpgradeSettlement(gs) ? 'good' : null,
+    // Flag either affordable action in this section: a settlement upgrade or
+    // training the next worker (both live in SettlementPanel).
+    alert: canUpgradeSettlement(gs) || canTrainWorker(gs) ? 'good' : null,
   });
 
   if (isCombatUnlocked(gs)) {

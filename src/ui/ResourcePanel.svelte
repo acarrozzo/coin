@@ -283,6 +283,10 @@
        content column narrow. */
     container-type: inline-size;
   }
+  /* Settings can drop the colored accent strip; fall back to the plain frame. */
+  :global(:root[data-accent-border='off']) .group {
+    border-top: var(--panel-border);
+  }
 
   /* --- Group header --- */
   .ghead {
