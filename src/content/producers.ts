@@ -51,6 +51,7 @@ export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
   steel: { output: 'steel', category: 'metal', structure: 'deepmine', minLevel: 2, workerCap: 'level', outputPerCycle: 0.01, cycleSeconds: 2, inputs: { food: 2 } },
   mithril: { output: 'mithril', category: 'metal', structure: 'deepmine', minLevel: 3, workerCap: 'level', outputPerCycle: 0.001, cycleSeconds: 3, inputs: { food: 3 } },
   adamantium: { output: 'adamantium', category: 'metal', structure: 'deepmine', minLevel: 4, workerCap: 'level', outputPerCycle: 0.0001, cycleSeconds: 4, inputs: { food: 4 } },
+  obsidion: { output: 'obsidion', category: 'metal', structure: 'deepmine', minLevel: 5, workerCap: 'level', outputPerCycle: 0.00001, cycleSeconds: 5, inputs: { food: 5 } },
 
   // Blacksmith — weapons (arrow @1, sword @3, staff @4, gladius @5, claymore @6)
   arrow: { output: 'arrow', category: 'weapon', structure: 'blacksmith', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 0.5, inputs: { wood: 2, stone: 1 } },

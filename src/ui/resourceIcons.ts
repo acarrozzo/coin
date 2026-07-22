@@ -28,6 +28,7 @@ import Skull from '@lucide/svelte/icons/skull';
 import Bone from '@lucide/svelte/icons/bone';
 import Orbit from '@lucide/svelte/icons/orbit';
 import Diamond from '@lucide/svelte/icons/diamond';
+import Hexagon from '@lucide/svelte/icons/hexagon';
 import Star from '@lucide/svelte/icons/star';
 import Droplet from '@lucide/svelte/icons/droplet';
 import Leaf from '@lucide/svelte/icons/leaf';
@@ -42,6 +43,7 @@ export const RESOURCE_ICON: Partial<Record<ResourceId, Component>> = {
   steel: Layers,
   mithril: Gem,
   adamantium: Diamond,
+  obsidion: Hexagon,
   arrow: Feather,
   spear: Swords,
   sword: Sword,

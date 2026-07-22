@@ -133,13 +133,14 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   },
   deepmine: {
     name: 'Deep Mine',
-    blurb: 'Descends for iron, steel, mithril, and adamantium.',
+    blurb: 'Descends for iron, steel, mithril, adamantium, and obsidion.',
     availableAtLevel: 6,
     levels: [
       { cost: { wood: 600 }, summary: 'Unlocks iron (smelted from food).' },
       { cost: { wood: 900 }, summary: 'Unlocks steel.', requiresLevel: 6 },
       { cost: { wood: 1800 }, summary: 'Unlocks mithril.', requiresLevel: 7 },
       { cost: { wood: 3600 }, summary: 'Unlocks adamantium.', requiresLevel: 8 },
+      { cost: { wood: 72000 }, summary: 'Unlocks obsidion.', requiresLevel: 10 },
     ],
   },
   barracks: {

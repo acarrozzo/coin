@@ -19,6 +19,7 @@ export type ResourceId =
   | 'steel'
   | 'mithril'
   | 'adamantium'
+  | 'obsidion'
   // weapons
   | 'arrow'
   | 'spear'
@@ -79,6 +80,7 @@ export const RESOURCES: Record<ResourceId, ResourceDef> = {
   steel: { name: 'Steel', category: 'metal', blurb: 'Iron, folded and hardened.' },
   mithril: { name: 'Mithril', category: 'metal', blurb: 'Light, strong, and rare.' },
   adamantium: { name: 'Adamantium', category: 'metal', blurb: 'The hardest metal known.' },
+  obsidion: { name: 'Obsidion', category: 'metal', blurb: 'Forged in the deepest dark.' },
 
   arrow: { name: 'Arrow', category: 'weapon', blurb: 'Fletched by the dozen.' },
   spear: { name: 'Spear', category: 'weapon', blurb: 'Simple, reliable, deadly.' },
