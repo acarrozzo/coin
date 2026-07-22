@@ -107,7 +107,7 @@ export const RESOURCES: Record<ResourceId, ResourceDef> = {
   holywater: { name: 'Holy Water', category: 'quest', blurb: 'Blessed by the highest order.' },
   dreamleaf: { name: 'Dream Leaf', category: 'quest', blurb: 'Woven from cloud and dream.' },
 
-  coin: { name: 'Coin', category: 'currency', blurb: 'Minted slowly at the Bank.' },
+  coin: { name: 'Coin', category: 'currency', blurb: 'Earned by selling weapons at the Market.' },
 
   defense: { name: 'Defense', category: 'stat', blurb: 'Archers manning the walls. Repels assaults.' },
   honor: { name: 'Honor', category: 'stat', blurb: 'Won by repelling assaults.' },

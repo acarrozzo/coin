@@ -5,6 +5,11 @@
   import X from '@lucide/svelte/icons/x';
 
   const summary = $derived(game.welcomeBack);
+  const combat = $derived(summary?.combat);
+  const hadCombat = $derived(
+    !!combat &&
+      (combat.assaults.won + combat.assaults.lost + combat.hexes.won + combat.hexes.lost > 0),
+  );
 
   function humanize(seconds: number): string {
     const h = Math.floor(seconds / 3600);
@@ -28,6 +33,28 @@
           <li>+{formatNumber(amt)} {RESOURCES[rid as ResourceId].name}</li>
         {/each}
       </ul>
+      {#if hadCombat && combat}
+        <span>Meanwhile, the walls were tested:</span>
+        <ul>
+          {#if combat.assaults.won + combat.assaults.lost > 0}
+            <li>
+              Assaults: {combat.assaults.won} repelled{combat.assaults.lost > 0
+                ? `, ${combat.assaults.lost} breached the line`
+                : ''}
+            </li>
+          {/if}
+          {#if combat.hexes.won + combat.hexes.lost > 0}
+            <li>
+              Hexes: {combat.hexes.won} broken{combat.hexes.lost > 0
+                ? `, ${combat.hexes.lost} struck`
+                : ''}
+            </li>
+          {/if}
+          {#if combat.breached}
+            <li class="bad">Your stores were looted in a breach!</li>
+          {/if}
+        </ul>
+      {/if}
     </div>
     <button onclick={() => game.dismissWelcome()} aria-label="Dismiss">
       <X size={16} aria-hidden="true" />
@@ -56,6 +83,9 @@
     margin: var(--space-1) 0 0;
     padding-left: var(--space-4);
     color: var(--good);
+  }
+  li.bad {
+    color: var(--bad, var(--text));
   }
   button {
     display: inline-flex;

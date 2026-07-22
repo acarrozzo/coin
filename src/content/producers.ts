@@ -70,9 +70,6 @@ export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
   ward: { output: 'ward', category: 'magic', structure: 'wizardtower', minLevel: 1, workerCap: 1, outputPerCycle: 1, cycleSeconds: 5, inputs: { mage: 1, trollskull: 10 } },
   ether: { output: 'ether', category: 'magic', structure: 'wizardtower', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 1, inputs: { wood: 100 } },
 
-  // Bank — coin
-  coin: { output: 'coin', category: 'currency', structure: 'bank', minLevel: 1, workerCap: 'level', outputPerCycle: 0.00001, cycleSeconds: 1 },
-
   // Barracks — the standing army
   archer: { output: 'archer', category: 'unit', structure: 'barracks', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { arrow: 50, leather: 5 } },
   warrior: { output: 'warrior', category: 'unit', structure: 'barracks', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { sword: 1, fur: 4 } },
@@ -97,8 +94,8 @@ export const PRODUCER_IDS = Object.keys(PRODUCERS) as ResourceId[];
 /**
  * Resources allowed to hold decimal amounts — the "handful". Derived, not a
  * hand-kept list: a resource is fractional iff its producer emits less than one
- * whole unit per cycle (the metals iron→adamantium at 0.1…0.0001, and coin at
- * 0.00001). Every other line emits whole units per cycle, so with atomic cycles
+ * whole unit per cycle (the metals iron→adamantium at 0.1…0.0001). Every other
+ * line emits whole units per cycle, so with atomic cycles
  * its amount never leaves the integers. Used by the save migration to know which
  * resources to floor.
  */
@@ -112,8 +109,8 @@ export const isFractionalResource = (id: ResourceId): boolean =>
 /**
  * How many decimal places a fractional resource is gathered in — its display
  * precision. Derived from the producer's per-cycle step (iron 0.1 → 1, steel
- * 0.01 → 2, mithril 0.001 → 3, adamantium 0.0001 → 4, coin 0.00001 → 5).
- * Whole-unit producers (and non-producers) return 0.
+ * 0.01 → 2, mithril 0.001 → 3, adamantium 0.0001 → 4).
+ * Whole-unit producers (and non-producers, e.g. coin) return 0.
  */
 export function resourceDecimals(id: ResourceId): number {
   const step = PRODUCERS[id]?.outputPerCycle ?? 1;

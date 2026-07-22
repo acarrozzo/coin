@@ -68,12 +68,12 @@ describe('assault resolution (deterministic, defense-based)', () => {
     expect(s.resources.food.amount.toNumber()).toBe(0);
   });
 
-  it('resolves through tick() live, but not during offline (combat:false)', () => {
+  it('resolves through tick() by default, and can be disabled with combat:false', () => {
     const s = createInitialState(0);
     primeAssault(s);
     s.resources.defense.amount = D(100);
 
-    // Offline-style tick: production only, no combat.
+    // combat:false suppresses resolution (used by tests; offline now resolves combat).
     const offlineEvents = tick(s, 1, { combat: false });
     expect(offlineEvents).toHaveLength(0);
     expect(s.combat.assault.wave).toBe(0);
@@ -102,10 +102,10 @@ describe('assault loop over live time (escalate → wall → reset)', () => {
     s.buildings.castle.level = 1; // Watchtower → defenseMax 5
     s.resources.defense.amount = D(5); // maxed for this tier
 
-    // ASSAULT interval is 100s; attackPower = 1.5^wave. Defense 5 holds waves
-    // 0–3 (1.5^3 ≈ 3.4) but fails wave 4 (1.5^4 ≈ 5.06). 610s → 6 assaults:
+    // ASSAULT interval is 300s; attackPower = 1.5^wave. Defense 5 holds waves
+    // 0–3 (1.5^3 ≈ 3.4) but fails wave 4 (1.5^4 ≈ 5.06). 1810s → 6 assaults:
     // win, win, win, win, LOSE (wave resets, -1 defense), win.
-    for (let i = 0; i < 610; i++) tick(s, 1);
+    for (let i = 0; i < 1810; i++) tick(s, 1);
 
     expect(s.combat.assault.wins).toBe(5);
     expect(s.combat.assault.losses).toBe(1);

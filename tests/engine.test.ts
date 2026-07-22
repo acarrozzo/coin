@@ -2,12 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { createInitialState, SAVE_VERSION } from '../src/engine/state';
 import { D, formatNumber, setRoundingSource } from '../src/engine/numbers';
 import { tick } from '../src/engine/tick';
-import { assignWorker, trainWorker } from '../src/engine/actions';
+import {
+  assignWorker,
+  trainWorker,
+  sellResourceTier,
+  buyRateUnlock,
+  buyWorkerContract,
+} from '../src/engine/actions';
 import { buildBuilding } from '../src/systems/buildings';
 import { upgradeSettlement } from '../src/systems/settlement';
 import { applyOffline, MAX_OFFLINE_SECONDS } from '../src/engine/offline';
 import { serialize, deserialize } from '../src/engine/save';
 import { SETTLEMENT_TIERS } from '../src/content/settlement';
+import { ASSAULT } from '../src/content/combat';
 import type { ResourceId } from '../src/content/resources';
 import {
   getCapacity,
@@ -19,7 +26,12 @@ import {
   canTrainWorker,
   getNetProductionRate,
   getLiveNetProductionRate,
+  canSellTier,
+  isRateUnlocked,
+  canBuyRateUnlock,
+  canBuyWorkerContract,
 } from '../src/engine/selectors';
+import { MAX_COIN_EARNED } from '../src/content/market';
 
 describe('gathering', () => {
   it('produces at the producer rate', () => {
@@ -262,12 +274,12 @@ describe('building-derived caps & converters', () => {
     expect(getCapacity(s, 'defense')!.toNumber()).toBe(30);
   });
 
-  it('caps ward (Wizard Tower) and coin (Bank) from their buildings', () => {
+  it('caps ward (Wizard Tower) from its building; coin is uncapped', () => {
     const s = createInitialState(0);
     s.buildings.wizardtower.level = 1;
     expect(getCapacity(s, 'ward')!.toNumber()).toBe(5);
-    s.buildings.bank.level = 2;
-    expect(getCapacity(s, 'coin')!.toNumber()).toBe(10);
+    // Coin has no cap now that the Bank is gone — it accumulates freely.
+    expect(getCapacity(s, 'coin')).toBeNull();
   });
 
   it('builds defense from archers, capped by defenseMax', () => {
@@ -307,6 +319,19 @@ describe('offline catch-up', () => {
     expect(summary.capped).toBe(true);
     expect(summary.elapsedSeconds).toBe(MAX_OFFLINE_SECONDS);
     expect(s.resources.wood.amount.toNumber()).toBe(3); // clamped to cap
+  });
+
+  it('resolves combat while idle so honor accrues offline', () => {
+    const s = createInitialState(0);
+    s.level = ASSAULT.unlockLevel; // combat unlocked
+    s.resources.defense.amount = D(1000); // repels every wave
+
+    // Interval is 300s; over 1000s three assaults come due (t=300/600/900).
+    const summary = applyOffline(s, 1000 * 1000);
+
+    expect(summary.combat.assaults.won).toBe(3);
+    expect(summary.combat.assaults.lost).toBe(0);
+    expect(s.resources.honor.amount.toNumber()).toBe(3);
   });
 });
 
@@ -358,7 +383,7 @@ describe('save', () => {
       combat: { assault: { wave: 12, wins: 12 } },
     });
     const restored = deserialize(v3, 0);
-    expect(restored.version).toBe(SAVE_VERSION); // chained all the way up (v5)
+    expect(restored.version).toBe(SAVE_VERSION); // chained all the way up to the current version
     expect(restored.level).toBe(1); // reset
     expect(restored.resources.wood.amount.toNumber()).toBe(999); // kept
     expect(restored.resources.food.amount.toNumber()).toBe(3); // kept
@@ -366,7 +391,7 @@ describe('save', () => {
     expect(restored.playtime).toBe(42);
   });
 
-  it('floors integer resources on the v4→v5 migration, keeping metals fractional', () => {
+  it('floors integer resources on migration, keeping metals fractional', () => {
     const v4 = JSON.stringify({
       version: 4,
       createdAt: 1,
@@ -376,14 +401,14 @@ describe('save', () => {
         wood: { amount: '12.7' }, // integer resource → floored
         arrow: { amount: '3.9' }, // integer resource → floored
         iron: { amount: '0.35' }, // fractional handful → kept
-        coin: { amount: '0.00042' }, // fractional handful → kept
+        coin: { amount: '0.00042' }, // coin no longer minted/fractional → floored (v5→v6)
       },
     });
     const restored = deserialize(v4, 0);
     expect(restored.resources.wood.amount.toNumber()).toBe(12);
     expect(restored.resources.arrow.amount.toNumber()).toBe(3);
     expect(restored.resources.iron.amount.toNumber()).toBeCloseTo(0.35, 6);
-    expect(restored.resources.coin.amount.toNumber()).toBeCloseTo(0.00042, 8);
+    expect(restored.resources.coin.amount.toNumber()).toBe(0);
   });
 
   it('falls back to a fresh state on garbage', () => {
@@ -479,5 +504,80 @@ describe('net production rate — live vs nominal', () => {
 
     // 20 − 100 = −80/s; at cap but a real deficit, so it shows negative.
     expect(getLiveNetProductionRate(s, 'wood').toNumber()).toBe(-80);
+  });
+});
+
+describe('market — coin economy', () => {
+  it('sells weapons in three sequential one-time tiers, consuming stock', () => {
+    const s = createInitialState(0);
+    s.resources.arrow.amount = D(2_000);
+
+    // Tier 1: consume 1,000 arrows → +10 coin.
+    expect(canSellTier(s, 'arrow')).toBe(true);
+    expect(sellResourceTier(s, 'arrow')).toBe(true);
+    expect(s.resources.arrow.amount.toNumber()).toBe(1_000);
+    expect(s.resources.coin.amount.toNumber()).toBe(10);
+    expect(s.market.coinEarned.toNumber()).toBe(10);
+    expect(s.market.sellTier.arrow).toBe(1);
+
+    // Tier 2 needs 10,000 — not enough on hand, so it can't fire yet.
+    expect(canSellTier(s, 'arrow')).toBe(false);
+    expect(sellResourceTier(s, 'arrow')).toBe(false);
+  });
+
+  it('caps lifetime coin earned at MAX_COIN_EARNED across both weapons', () => {
+    const s = createInitialState(0);
+    for (const id of ['arrow', 'spear'] as const) {
+      s.resources[id].amount = D(1_000_000);
+      expect(sellResourceTier(s, id)).toBe(true); // +10
+      expect(sellResourceTier(s, id)).toBe(true); // +100
+      expect(sellResourceTier(s, id)).toBe(true); // +1000
+      expect(sellResourceTier(s, id)).toBe(false); // all tiers sold
+    }
+    expect(s.market.coinEarned.toNumber()).toBe(MAX_COIN_EARNED);
+    expect(s.resources.coin.amount.toNumber()).toBe(MAX_COIN_EARNED);
+  });
+
+  it('unlocks a core rate display for 10 coin, in any order', () => {
+    const s = createInitialState(0);
+    s.resources.coin.amount = D(25);
+    expect(isRateUnlocked(s, 'food')).toBe(false);
+    expect(canBuyRateUnlock(s, 'food')).toBe(true);
+    expect(buyRateUnlock(s, 'food')).toBe(true);
+    expect(isRateUnlocked(s, 'food')).toBe(true);
+    expect(s.resources.coin.amount.toNumber()).toBe(15);
+    // Buying the same one again is a no-op.
+    expect(canBuyRateUnlock(s, 'food')).toBe(false);
+    expect(buyRateUnlock(s, 'food')).toBe(false);
+  });
+
+  it('signs Worker Contracts in order, adding bonus workers', () => {
+    const s = createInitialState(0);
+    s.resources.coin.amount = D(1_200);
+    const before = s.workers.bonus;
+
+    expect(buyWorkerContract(s)).toBe(true); // I: +1 worker, 10 coin
+    expect(s.workers.bonus).toBe(before + 1);
+    expect(s.market.workerContract).toBe(1);
+
+    expect(buyWorkerContract(s)).toBe(true); // II: +2 workers, 100 coin
+    expect(buyWorkerContract(s)).toBe(true); // III: +3 workers, 1000 coin
+    expect(s.workers.bonus).toBe(before + 6);
+    expect(s.resources.coin.amount.toNumber()).toBe(1_200 - 1_110);
+
+    // All contracts signed.
+    expect(canBuyWorkerContract(s)).toBe(false);
+    expect(buyWorkerContract(s)).toBe(false);
+  });
+
+  it('persists market progress through a save round-trip', () => {
+    const s = createInitialState(0);
+    s.resources.arrow.amount = D(1_000);
+    sellResourceTier(s, 'arrow');
+    buyRateUnlock(s, 'wood');
+    const restored = deserialize(serialize(s), 0);
+    expect(restored.market.sellTier.arrow).toBe(1);
+    expect(restored.market.coinEarned.toNumber()).toBe(10);
+    expect(restored.market.rateUnlocks.wood).toBe(true);
   });
 });

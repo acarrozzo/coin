@@ -1,4 +1,3 @@
-import { D, type Decimal } from './numbers';
 import type { GameState, ResourceId } from './state';
 import {
   getAvailableWorkers,
@@ -7,7 +6,17 @@ import {
   canTrainWorker,
   getWorkerCost,
   getCapacity,
+  canSellTier,
+  canBuyRateUnlock,
+  canBuyWorkerContract,
 } from './selectors';
+import {
+  SELL_TIERS,
+  RATE_UNLOCK_COST,
+  WORKER_CONTRACTS,
+  type SellableResource,
+  type RateUnlockResource,
+} from '../content/market';
 
 /**
  * Move workers on/off a production line. `delta` is typically +1 / -1.
@@ -82,18 +91,40 @@ export function buyTool(state: GameState, tool: 'hatchet' | 'pickaxe'): boolean 
   return true;
 }
 
-// ---------- Shop ----------
+// ---------- Market ----------
 //
-// Extra workers can be recruited with arrows, scaling steeply (coin-old sold
-// them for 1k / 10k / 100k … arrows).
-export function extraWorkerCost(state: GameState): Decimal {
-  return D(1000).times(D(10).pow(state.workers.bonus));
+// Coin is earned only here, by selling weapons in three one-time, escalating
+// tiers (see content/market.ts). It is then spent on rate-display unlocks and
+// Worker Contracts. See selectors.ts for the affordability/availability reads.
+
+/**
+ * Sell the next available tier of a weapon: consume the stock, pay out coin, and
+ * advance that weapon's tier. Returns whether the sale happened.
+ */
+export function sellResourceTier(state: GameState, id: SellableResource): boolean {
+  if (!canSellTier(state, id)) return false;
+  const tier = SELL_TIERS[state.market.sellTier[id]];
+  state.resources[id].amount = state.resources[id].amount.minus(tier.amount);
+  state.resources.coin.amount = state.resources.coin.amount.plus(tier.coin);
+  state.market.coinEarned = state.market.coinEarned.plus(tier.coin);
+  state.market.sellTier[id] += 1;
+  return true;
 }
 
-export function buyExtraWorker(state: GameState): boolean {
-  const cost = extraWorkerCost(state);
-  if (state.resources.arrow.amount.lt(cost)) return false;
-  state.resources.arrow.amount = state.resources.arrow.amount.minus(cost);
-  state.workers.bonus += 1;
+/** Reveal a core resource's overall-rate display, paying 10 coin. */
+export function buyRateUnlock(state: GameState, id: RateUnlockResource): boolean {
+  if (!canBuyRateUnlock(state, id)) return false;
+  state.resources.coin.amount = state.resources.coin.amount.minus(RATE_UNLOCK_COST);
+  state.market.rateUnlocks[id] = true;
+  return true;
+}
+
+/** Buy the next Worker Contract, adding its bonus workers to the pool. */
+export function buyWorkerContract(state: GameState): boolean {
+  if (!canBuyWorkerContract(state)) return false;
+  const contract = WORKER_CONTRACTS[state.market.workerContract];
+  state.resources.coin.amount = state.resources.coin.amount.minus(contract.cost);
+  state.workers.bonus += contract.workers;
+  state.market.workerContract += 1;
   return true;
 }

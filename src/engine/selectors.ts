@@ -5,14 +5,23 @@ import { BUILDINGS } from '../content/buildings';
 import { PRODUCERS, PRODUCER_IDS, type StructureId } from '../content/producers';
 import { getTier, SETTLEMENT_TIERS, type ResourceCost } from '../content/settlement';
 import { ASSAULT, HEX, type ThreatConfig } from '../content/combat';
+import {
+  SELL_TIERS,
+  RATE_UNLOCK_COST,
+  RATE_UNLOCK_RESOURCES,
+  WORKER_CONTRACTS,
+  type SellableResource,
+  type SellTier,
+  type RateUnlockResource,
+  type WorkerContract,
+} from '../content/market';
 
 /** Stat resources whose cap comes from a building level, not a settlement tier. */
 const BUILDING_CAP_SOURCES: Partial<
-  Record<ResourceId, { building: BuildingId; key: 'defenseMax' | 'wardMax' | 'coinMax' }>
+  Record<ResourceId, { building: BuildingId; key: 'defenseMax' | 'wardMax' }>
 > = {
   defense: { building: 'castle', key: 'defenseMax' },
   ward: { building: 'wizardtower', key: 'wardMax' },
-  coin: { building: 'bank', key: 'coinMax' },
 };
 
 // ---------- Structures ----------
@@ -34,8 +43,8 @@ export function unlockedResources(state: GameState): ResourceId[] {
 
 /**
  * Absolute storage capacity, or null if the resource is uncapped.
- * wood/stone/food are capped by the settlement tier; defense/ward/coin by the
- * building that sets them (0 until that building is built).
+ * wood/stone/food are capped by the settlement tier; defense/ward by the
+ * building that sets them (0 until that building is built). Coin is uncapped.
  */
 export function getCapacity(state: GameState, id: ResourceId): Decimal | null {
   const source = BUILDING_CAP_SOURCES[id];
@@ -280,4 +289,41 @@ export function willRepelAssault(state: GameState): boolean {
 
 export function willBreakHex(state: GameState): boolean {
   return getDefenseStat(state, HEX).gte(getNextHexPower(state));
+}
+
+// ---------- Market ----------
+
+/** The next unsold tier for a weapon, or null once all tiers are sold. */
+export function getNextSellTier(state: GameState, id: SellableResource): SellTier | null {
+  return SELL_TIERS[state.market.sellTier[id]] ?? null;
+}
+
+/** Can the next sell tier be completed — it exists and the stock is on hand. */
+export function canSellTier(state: GameState, id: SellableResource): boolean {
+  const tier = getNextSellTier(state, id);
+  return tier !== null && state.resources[id].amount.gte(tier.amount);
+}
+
+/** Whether a core resource's overall-rate display has been unlocked. */
+export function isRateUnlocked(state: GameState, id: ResourceId): boolean {
+  return (
+    (RATE_UNLOCK_RESOURCES as readonly ResourceId[]).includes(id) &&
+    state.market.rateUnlocks[id as RateUnlockResource]
+  );
+}
+
+/** Can a core rate display be unlocked — not already owned and coin on hand. */
+export function canBuyRateUnlock(state: GameState, id: RateUnlockResource): boolean {
+  return !state.market.rateUnlocks[id] && state.resources.coin.amount.gte(RATE_UNLOCK_COST);
+}
+
+/** The next Worker Contract to buy, or null once all are purchased. */
+export function getNextWorkerContract(state: GameState): WorkerContract | null {
+  return WORKER_CONTRACTS[state.market.workerContract] ?? null;
+}
+
+/** Can the next Worker Contract be bought — it exists and coin is on hand. */
+export function canBuyWorkerContract(state: GameState): boolean {
+  const contract = getNextWorkerContract(state);
+  return contract !== null && state.resources.coin.amount.gte(contract.cost);
 }

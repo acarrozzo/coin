@@ -1,7 +1,7 @@
 import { createInitialState, type GameState, type ResourceId, type BuildingId } from '../engine/state';
 import { D, type Decimal } from '../engine/numbers';
 import { tick } from '../engine/tick';
-import { applyOffline, type OfflineSummary } from '../engine/offline';
+import { applyOffline, simulate, MAX_OFFLINE_SECONDS, type OfflineSummary } from '../engine/offline';
 import {
   loadFromStorage,
   saveToStorage,
@@ -16,8 +16,13 @@ import {
   chopWood,
   mineStone,
   buyTool,
-  buyExtraWorker,
+  sellResourceTier,
+  buyRateUnlock,
+  buyWorkerContract,
 } from '../engine/actions';
+import { RATE_UNLOCK_NUMERAL } from '../content/market';
+import type { SellableResource, RateUnlockResource } from '../content/market';
+import { RESOURCES } from '../content/resources';
 import { buildBuilding } from '../systems/buildings';
 import { upgradeSettlement } from '../systems/settlement';
 import type { CombatEvent } from '../systems/combat';
@@ -28,6 +33,14 @@ import { sound } from './sound.svelte';
 
 /** Fixed simulation step in seconds (10 ticks/sec). */
 const TICK_STEP = 0.1;
+/**
+ * A single frame gap larger than this (while the tab is visible) means the loop
+ * was frozen — a long main-thread stall or a machine sleep with the tab
+ * foregrounded. rAF can't fire during that, so no offline catch-up covers it;
+ * we fast-forward the gap through `simulate` instead of feeding a huge burst
+ * into the fixed-step accumulator.
+ */
+const MAX_LIVE_GAP_S = 5;
 const AUTOSAVE_MS = 30_000;
 /** Only greet the player if they were away at least this long. */
 const WELCOME_THRESHOLD_S = 60;
@@ -88,11 +101,33 @@ function createGameStore() {
 
   function frame(ts: number): void {
     if (!running) return;
+    // Don't advance while hidden — offline catch-up (on return) owns that time.
+    // Some browsers throttle rather than pause rAF; simulating here would let
+    // that interval be counted twice (once now, once by applyOffline).
+    if (document.hidden) {
+      rafId = requestAnimationFrame(frame);
+      return;
+    }
     if (lastFrame === 0) lastFrame = ts;
-    let dt = (ts - lastFrame) / 1000;
+    const dt = (ts - lastFrame) / 1000;
     lastFrame = ts;
-    // Clamp large frame gaps (background throttling); offline catch-up owns real absences.
-    if (dt > 1) dt = 1;
+
+    // A gap this large means the loop was frozen while visible (stall/sleep).
+    // Fast-forward it as a bounded catch-up rather than dropping the time (the
+    // old 1s clamp) or bursting the live loop with hundreds of fixed steps.
+    if (dt > MAX_LIVE_GAP_S) {
+      // Silent like offline catch-up — a long frozen gap could hold many combat
+      // resolutions, and toasting each would flood the UI. State still updates.
+      simulate(state, Math.min(dt, MAX_OFFLINE_SECONDS));
+      accumulator = 0;
+      sinceSaveMs += dt * 1000;
+      if (sinceSaveMs >= AUTOSAVE_MS) {
+        persist();
+        sinceSaveMs = 0;
+      }
+      rafId = requestAnimationFrame(frame);
+      return;
+    }
 
     accumulator += dt;
     const events: CombatEvent[] = [];
@@ -133,7 +168,13 @@ function createGameStore() {
   function start(): void {
     if (running) return;
     const summary = applyOffline(state, Date.now());
-    if (summary.elapsedSeconds >= WELCOME_THRESHOLD_S && Object.keys(summary.gains).length > 0) {
+    const c = summary.combat;
+    const hadCombat =
+      c.assaults.won + c.assaults.lost + c.hexes.won + c.hexes.lost > 0 || c.breached;
+    if (
+      summary.elapsedSeconds >= WELCOME_THRESHOLD_S &&
+      (Object.keys(summary.gains).length > 0 || hadCombat)
+    ) {
       welcomeBack = summary;
     }
     running = true;
@@ -197,9 +238,23 @@ function createGameStore() {
         persist();
       }
     },
-    recruit(): void {
-      if (buyExtraWorker(state)) {
-        notify.push('You recruit an extra worker with arrows.', 'good');
+    sell(id: SellableResource): void {
+      if (sellResourceTier(state, id)) {
+        notify.push(`You sell ${RESOURCES[id].name.toLowerCase()}s for coin.`, 'good');
+        sound.play.build();
+        persist();
+      }
+    },
+    unlockRate(id: RateUnlockResource): void {
+      if (buyRateUnlock(state, id)) {
+        notify.push(`Rate Display ${RATE_UNLOCK_NUMERAL[id]} unlocked.`, 'good');
+        sound.play.build();
+        persist();
+      }
+    },
+    buyWorkerContract(): void {
+      if (buyWorkerContract(state)) {
+        notify.push('Worker Contract signed — new workers join the pool.', 'good');
         sound.play.train();
         persist();
       }

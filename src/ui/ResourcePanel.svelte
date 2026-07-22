@@ -15,6 +15,7 @@
     canStartCycle,
     getNetProductionRate,
     getLiveNetProductionRate,
+    isRateUnlocked,
     splitCost,
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate, formatSignedRate } from '../engine/numbers';
@@ -203,22 +204,28 @@
 
               <span class="rcost">
                 {#if group.key === 'core'}
-                  {@const live = getLiveNetProductionRate(gs, id)}
-                  {@const nominal = getNetProductionRate(gs, id)}
-                  <span class="netrates">
-                    <span
-                      class="netrate"
-                      class:pos={live.gt(0)}
-                      class:neg={live.lt(0)}
-                      title="Live {RESOURCES[id].name.toLowerCase()} rate — what's actually happening now: production minus only the lines that can currently run (starved or at-cap lines draw nothing), held at 0 when full."
-                      >{formatSignedRate(live)}</span
+                  {#if isRateUnlocked(gs, id)}
+                    {@const live = getLiveNetProductionRate(gs, id)}
+                    {@const nominal = getNetProductionRate(gs, id)}
+                    <span class="netrates">
+                      <span
+                        class="netrate"
+                        class:pos={live.gt(0)}
+                        class:neg={live.lt(0)}
+                        title="Live {RESOURCES[id].name.toLowerCase()} rate — what's actually happening now: production minus only the lines that can currently run (starved or at-cap lines draw nothing), held at 0 when full."
+                        >{formatSignedRate(live)}</span
+                      >
+                      <span
+                        class="netrate target"
+                        title="Target rate — production minus every staffed consumer at full throughput, ignoring starvation and caps."
+                        >{formatSignedRate(nominal)} target</span
+                      >
+                    </span>
+                  {:else}
+                    <span class="netrate-locked" title="Unlock this rate display in the Market."
+                      >rate locked</span
                     >
-                    <span
-                      class="netrate target"
-                      title="Target rate — production minus every staffed consumer at full throughput, ignoring starvation and caps."
-                      >{formatSignedRate(nominal)} target</span
-                    >
-                  </span>
+                  {/if}
                 {:else}
                   {#each inputEntries(id) as [rid, amt] (rid)}
                     <span class="pill" class:short={gs.resources[rid].amount.lt(amt)}>
@@ -573,6 +580,13 @@
     font-size: 11px;
     font-weight: 500;
     color: color-mix(in srgb, var(--text-muted) 70%, var(--bg-panel));
+  }
+  /* Core rate not yet unlocked in the Market — a quiet placeholder in its slot. */
+  .netrate-locked {
+    color: color-mix(in srgb, var(--text-muted) 70%, var(--bg-panel));
+    font-size: 12px;
+    font-style: italic;
+    white-space: nowrap;
   }
 
   /* Clickable cost/recipe entry — the whole container jumps to that resource's

@@ -6,7 +6,7 @@
  * level (`requiresLevel`) — a faithful port of coin-old's lvlAllRefresh gates.
  *
  * Some buildings also set an absolute cap on a stat resource via `sets`:
- * Castle → defenseMax, Wizard Tower → wardMax, Bank → coinMax.
+ * Castle → defenseMax, Wizard Tower → wardMax.
  */
 import type { ResourceCost } from './settlement';
 import { getTier } from './settlement';
@@ -19,7 +19,6 @@ export type BuildingId =
   | 'barracks'
   | 'wizardtower'
   | 'castle'
-  | 'bank'
   | 'cloudshaman';
 
 export interface BuildingLevel {
@@ -29,7 +28,7 @@ export interface BuildingLevel {
   /** Minimum settlement level required to build this level (gates upper tiers). */
   requiresLevel?: number;
   /** Absolute caps this level sets on stat resources (latest level wins). */
-  sets?: { defenseMax?: number; wardMax?: number; coinMax?: number };
+  sets?: { defenseMax?: number; wardMax?: number };
 }
 
 // ---------- Farm level generation (matches the original coin-old maxes) ----------
@@ -174,15 +173,6 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
       { cost: { stone: 1600, mage: 1 }, summary: 'Stronghold — unlocks soul gems. Defense cap 30.', requiresLevel: 7, sets: { defenseMax: 30 } },
       { cost: { stone: 3200, centurion: 1 }, summary: 'Fortress — unlocks star metal. Defense cap 50.', requiresLevel: 8, sets: { defenseMax: 50 } },
       { cost: { stone: 6400, wargeneral: 1 }, summary: 'Castle — unlocks holy water. Defense cap 75.', requiresLevel: 9, sets: { defenseMax: 75 } },
-    ],
-  },
-  bank: {
-    name: 'Bank',
-    blurb: 'Mints and stores coin.',
-    availableAtLevel: 7,
-    levels: [
-      { cost: { stone: 1000, iron: 100, steel: 10, mithril: 1 }, summary: 'Unlocks coin. Coin cap 3.', sets: { coinMax: 3 } },
-      { cost: { coin: 1 }, summary: 'Coin cap 10.', sets: { coinMax: 10 } },
     ],
   },
   cloudshaman: {

@@ -159,3 +159,19 @@ migration. Transient runtime state (per-line cycle `progress`) is intentionally
 - **Icons** come from `@lucide/svelte` (per-icon imports).
 - TypeScript is strict; content records are keyed by their id unions, so adding
   an id to a union forces you to fill in every table — lean on that.
+
+
+## Working approach
+
+- Read the relevant implementation before proposing changes.
+- Make the smallest change that solves the task.
+- Reuse established patterns from nearby files.
+- Do not refactor unrelated code.
+- Run the narrowest relevant validation first.
+- Summarize changed files and any remaining risks.
+
+- Do not scan the whole repository unless necessary.
+- Do not read generated files, lockfiles, or build output unless directly relevant.
+- Prefer targeted searches over broad directory listings.
+- Keep explanations concise unless asked for detail.
+- Do not repeat the task or narrate routine tool usage.

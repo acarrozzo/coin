@@ -16,10 +16,10 @@
   import CombatPanel from './ui/CombatPanel.svelte';
   import ResourcePanel from './ui/ResourcePanel.svelte';
   import SettingsPanel from './ui/SettingsPanel.svelte';
-  import ShopPanel from './ui/ShopPanel.svelte';
+  import MarketPanel from './ui/MarketPanel.svelte';
   import WelcomeBack from './ui/WelcomeBack.svelte';
   import Toasts from './ui/Toasts.svelte';
-  import { getNavSections, isShopUnlocked } from './ui/sections';
+  import { getNavSections, isMarketUnlocked } from './ui/sections';
   import Castle from '@lucide/svelte/icons/castle';
   import Settings from '@lucide/svelte/icons/settings';
   import PersonStanding from '@lucide/svelte/icons/person-standing';
@@ -44,8 +44,8 @@
   let headerH = $state(0);
 
   const gs = $derived(game.state);
-  // The shop (worker recruitment) unlocks at settlement level 5.
-  const showShop = $derived(isShopUnlocked(gs));
+  // The Market (coin economy) unlocks at settlement level 5.
+  const showMarket = $derived(isMarketUnlocked(gs));
 
   // Left-rail jump targets: one per visible main-content section, each with a
   // worker count and an opportunity/danger indicator.
@@ -300,11 +300,11 @@
       <CombatPanel />
       <ResourcePanel />
       <CampPanel />
-      {#if showShop}
-        <!-- The shop is set apart from the resource sections by a divider, and
+      {#if showMarket}
+        <!-- The Market is set apart from the resource sections by a divider, and
              sits last in the main content. -->
         <hr class="section-divider" />
-        <ShopPanel />
+        <MarketPanel />
       {/if}
       <!-- Breathing room so the last (possibly short) section can scroll up to
            the header line, triggering its active state in the left rail. -->

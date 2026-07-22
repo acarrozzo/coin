@@ -6,7 +6,7 @@ import { ASSAULT, HEX } from '../content/combat';
 export type { ResourceId, BuildingId };
 
 /** Bumped whenever the save shape changes; drives migrations (see save.ts). */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 /** Trained workers the player starts with (coin-old set workers=2 at the shack). */
 export const STARTING_WORKERS = 2;
@@ -50,8 +50,21 @@ export interface GameState {
     /** Hex track. */
     hex: ThreatState;
   };
+  /** Market progress — the coin economy (see content/market.ts). */
+  market: MarketState;
   /** One-off early-game tools/unlocks. */
   flags: { hatchet: boolean; pickaxe: boolean };
+}
+
+export interface MarketState {
+  /** Lifetime coin ever earned — the "max accumulated" score (never spent down). */
+  coinEarned: Decimal;
+  /** Highest sell tier completed per weapon (0–3, sold sequentially). */
+  sellTier: { arrow: number; spear: number };
+  /** Which core-resource rate displays have been unlocked. */
+  rateUnlocks: { wood: boolean; stone: boolean; food: boolean };
+  /** Highest Worker Contract purchased (0–3, bought sequentially). */
+  workerContract: number;
 }
 
 export interface ThreatState {
@@ -90,6 +103,12 @@ export function createInitialState(now: number): GameState {
     combat: {
       assault: { timer: ASSAULT.intervalSeconds, wave: 0, wins: 0, losses: 0 },
       hex: { timer: HEX.intervalSeconds, wave: 0, wins: 0, losses: 0 },
+    },
+    market: {
+      coinEarned: D(0),
+      sellTier: { arrow: 0, spear: 0 },
+      rateUnlocks: { wood: false, stone: false, food: false },
+      workerContract: 0,
     },
     flags: { hatchet: false, pickaxe: false },
   };

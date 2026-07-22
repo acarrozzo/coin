@@ -3,7 +3,7 @@ import { runProduction, type GainHandler } from '../systems/production';
 import { runCombat, type CombatEvent } from '../systems/combat';
 
 export interface TickOptions {
-  /** Whether combat resolves this tick. Off during offline catch-up. */
+  /** Whether combat resolves this tick. Defaults on; tests disable it. */
   combat?: boolean;
   /**
    * Called once per completed production cycle with the resource and the amount

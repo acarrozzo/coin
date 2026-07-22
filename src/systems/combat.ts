@@ -18,7 +18,7 @@ export interface CombatEvent {
  * power you repel it, it escalates, and you gain honor/wisdom. Fall short and
  * you lose `lossAmount` of the stat — and if it hits zero, core resources are
  * looted — while the attacker resets to wave 0.
- * Runs only in the live loop (see tick/offline), never during offline catch-up.
+ * Runs both in the live loop and during offline catch-up (see tick/offline).
  */
 export function runCombat(state: GameState, dt: number): CombatEvent[] {
   const events: CombatEvent[] = [];
