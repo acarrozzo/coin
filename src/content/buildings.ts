@@ -9,7 +9,6 @@
  * Castle → defenseMax, Wizard Tower → wardMax.
  */
 import type { ResourceCost } from './settlement';
-import { getTier } from './settlement';
 
 export type BuildingId =
   | 'farm'
@@ -31,62 +30,31 @@ export interface BuildingLevel {
   sets?: { defenseMax?: number; wardMax?: number };
 }
 
-// ---------- Farm level generation (matches the original coin-old maxes) ----------
+// ---------- Farm level costs (hand-tuned; naturally capped by settlement storage) ----------
 //
-// The original scaled the farm to 51 levels — and since the food line uses
-// workerCap: 'level' (producers.ts), farm level == max farmers. Higher tiers
-// were gated behind settlement level. We reproduce those exact thresholds and
-// grow cost geometrically from the three original hand-tuned levels, keeping
-// the top level under the Kingdom storage cap (100k).
+// The food line uses workerCap: 'level' (producers.ts), so farm level == max
+// farmers. There is deliberately NO settlement-level gate: each level's wood ==
+// stone cost is tuned so the highest level affordable within a settlement
+// tier's storage cap lands exactly on that tier's intended farmer count.
+// Reaching the next band simply requires the larger storage a higher tier
+// grants. The costs stop at L50 (90k), reachable inside the Kingdom cap (100k).
 //
-// NOTE: the original's multi-level farm was WIP scaffolding — no cost table and
-// no worker cap. We keep the rewrite's completed implementation (that is the
-// "fix a clear bug" clause) but restore the original settlement-level gates.
-const FARM_MAX_LEVEL = 51;
-
-/** [highest farm level in band, required settlement level] — from coin-old's lvlAllRefresh. */
-const FARM_GATES: Array<[number, number]> = [
-  [8, 0], // levels 1–8: only need the Farm's availableAtLevel (settlement 3)
-  [12, 5], // Small Village
-  [16, 6], // Large Village
-  [21, 7], // Small Town
-  [28, 8], // Large Town
-  [35, 9], // City
-  [51, 10], // Kingdom
+//   Sett 3  (cap 50)   → L4     Sett 7  (cap 2k)   → L21
+//   Sett 4  (cap 250)  → L8     Sett 8  (cap 4k)   → L28
+//   Sett 5  (cap 500)  → L12    Sett 9  (cap 10k)  → L35
+//   Sett 6  (cap 1k)   → L16    Sett 10 (cap 100k) → L50
+const FARM_COSTS = [
+  10, 20, 30, 40, 60, 100, 140, 220, 300, 360, 420, 480, 600, 720, 840, 960,
+  1200, 1300, 1500, 1700, 1900, 2200, 2400, 2600, 2800, 3000, 3400, 3800, 4200,
+  4800, 5400, 6000, 7000, 8000, 9000, 11000, 13000, 15000, 17000, 20000, 23000,
+  26000, 30000, 35000, 40000, 50000, 60000, 70000, 80000, 90000,
 ];
 
-function farmRequires(level: number): number {
-  for (const [max, req] of FARM_GATES) if (level <= max) return req;
-  return 10;
-}
-
-/** Round to two significant figures for readable costs. */
-function niceCost(x: number): number {
-  if (x < 100) return Math.round(x / 5) * 5;
-  const mag = Math.pow(10, Math.floor(Math.log10(x)) - 1);
-  return Math.round(x / mag) * mag;
-}
-
 function buildFarmLevels(): BuildingLevel[] {
-  const levels: BuildingLevel[] = [
-    { cost: { wood: 10, stone: 10 }, summary: 'Unlocks food gathering (1 farmer).' },
-    { cost: { wood: 60, stone: 40 }, summary: '' },
-    { cost: { wood: 200, stone: 150 }, summary: '+1 farmer.' },
-  ];
-  let prevReq = farmRequires(3);
-  for (let level = 4; level <= FARM_MAX_LEVEL; level++) {
-    const wood = niceCost(200 * Math.pow(1.11, level - 3));
-    const stone = niceCost(wood * 0.7);
-    const req = farmRequires(level);
-    // Note the settlement gate only on the first level of each new band.
-    const gateName = req > prevReq ? getTier(req)?.name : undefined;
-    const summary = gateName ? `+1 farmer — requires ${gateName}.` : 'bigger farm.';
-    const level_: BuildingLevel = { cost: { wood, stone }, summary };
-    if (req > 0) level_.requiresLevel = req;
-    levels.push(level_);
-    prevReq = req;
-  }
-  return levels;
+  return FARM_COSTS.map((n, i) => ({
+    cost: { wood: n, stone: n },
+    summary: i === 0 ? 'Unlocks food gathering (1 farmer).' : '+1 farmer.',
+  }));
 }
 
 export interface BuildingDef {

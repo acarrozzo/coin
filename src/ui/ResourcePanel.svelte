@@ -119,6 +119,8 @@
             <span class="gname"
               >{group.label}{#if !group.upgradeInFooter && level > 0}<span class="lvl">
                   Lvl {level}</span
+                >{/if}{#if group.key === 'core'}<span class="subtitle">
+                  Land of Plenty</span
                 >{/if}</span
             >
           </div>
@@ -314,6 +316,11 @@
   }
   .lvl {
     color: var(--accent);
+    margin-left: var(--space-2);
+  }
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 18px;
     margin-left: var(--space-2);
   }
   .gsummary {
