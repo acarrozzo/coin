@@ -114,6 +114,7 @@ const KEYS = {
   font: 'cc:font',
   layout: 'cc:layout',
   accentBorder: 'cc:accent-border',
+  density: 'cc:density',
 } as const;
 
 function isId<T extends readonly Option[]>(opts: T, v: string | null): v is T[number]['id'] {
@@ -129,12 +130,15 @@ function createLookStore() {
   const savedFont = localStorage.getItem(KEYS.font);
   const savedLayout = localStorage.getItem(KEYS.layout);
   const savedAccentBorder = localStorage.getItem(KEYS.accentBorder);
+  const savedDensity = localStorage.getItem(KEYS.density);
 
   let palette = $state<PaletteId>(isId(PALETTES, savedPalette) ? savedPalette : defaultPalette);
   let font = $state<FontId>(isId(FONTS, savedFont) ? savedFont : 'retro');
   let layout = $state<LayoutId>(isId(LAYOUTS, savedLayout) ? savedLayout : 'classic');
   // The colored accent strip along the top of each panel; on by default.
   let accentBorder = $state<boolean>(savedAccentBorder !== 'off');
+  // Tight mode: compress whitespace to fit more on screen; off ("cozy") by default.
+  let tight = $state<boolean>(savedDensity === 'tight');
 
   /** Stamp all attributes and persist. Safe to call before mount. */
   function apply(): void {
@@ -143,12 +147,14 @@ function createLookStore() {
     root.setAttribute('data-font', font);
     root.setAttribute('data-layout', layout);
     root.setAttribute('data-accent-border', accentBorder ? 'on' : 'off');
+    root.setAttribute('data-density', tight ? 'tight' : 'cozy');
     // The old toggle set data-theme; drop it so it can't fight data-palette.
     root.removeAttribute('data-theme');
     localStorage.setItem(KEYS.palette, palette);
     localStorage.setItem(KEYS.font, font);
     localStorage.setItem(KEYS.layout, layout);
     localStorage.setItem(KEYS.accentBorder, accentBorder ? 'on' : 'off');
+    localStorage.setItem(KEYS.density, tight ? 'tight' : 'cozy');
   }
 
   return {
@@ -178,6 +184,13 @@ function createLookStore() {
     },
     set accentBorder(v: boolean) {
       accentBorder = v;
+      apply();
+    },
+    get tight() {
+      return tight;
+    },
+    set tight(v: boolean) {
+      tight = v;
       apply();
     },
     apply,

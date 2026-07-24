@@ -971,3 +971,26 @@
   --panel-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
   --header-border: 0;
 }
+
+/* ============================== DENSITY ============================== */
+
+/*
+ * A fourth, independent axis: [data-density] compresses whitespace without
+ * touching color, type, or framing. Because every panel gap, inner padding,
+ * header band, and section gap resolves from the space scale (or the panel and
+ * header tokens derived from it) via late-bound var(), shrinking
+ * the scale here cascades through the whole app — tighter top-to-bottom,
+ * side-to-side, and inside each control. "Cozy" is the :root default (no
+ * block); "tight" trims each step ~30%.
+ */
+:root[data-density='tight'] {
+  --space-1: 3px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 14px;
+  --space-5: 22px;
+}
+/* Tighten the global vertical rhythm too, so text rows pack closer. */
+:root[data-density='tight'] body {
+  line-height: 1.25;
+}

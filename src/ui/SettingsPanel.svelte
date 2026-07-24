@@ -138,6 +138,11 @@
           onchange={() => (look.accentBorder = !look.accentBorder)}
         />
       </label>
+
+      <label class="row toggle">
+        <span>Tight mode<small>Compress spacing to fit more on screen</small></span>
+        <input type="checkbox" checked={look.tight} onchange={() => (look.tight = !look.tight)} />
+      </label>
     </section>
 
     <section class="section">
