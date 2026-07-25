@@ -98,7 +98,7 @@ describe('assault resolution (deterministic, defense-based)', () => {
 describe('assault loop over live time (escalate → wall → reset)', () => {
   it('climbs until the Castle-capped defense fails, then resets the wave', () => {
     const s = createInitialState(0);
-    s.level = ASSAULT.unlockLevel; // 7
+    s.level = ASSAULT.unlockLevel; // 6
     s.buildings.castle.level = 1; // Watchtower → defenseMax 5
     s.resources.defense.amount = D(5); // maxed for this tier
 

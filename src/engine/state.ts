@@ -6,7 +6,7 @@ import { ASSAULT, HEX } from '../content/combat';
 export type { ResourceId, BuildingId };
 
 /** Bumped whenever the save shape changes; drives migrations (see save.ts). */
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 /** Trained workers the player starts with. */
 export const STARTING_WORKERS = 0;

@@ -40,7 +40,7 @@ import Store from '@lucide/svelte/icons/store';
 /** The Market (coin economy) unlocks at settlement level 1. */
 export const MARKET_UNLOCK_LEVEL = 1;
 /** Rate displays, worker contracts, and late-game sells unlock at this level. */
-export const FULL_MARKET_LEVEL = 5;
+export const FULL_MARKET_LEVEL = 3;
 export function isMarketUnlocked(gs: GameState): boolean {
   return gs.level >= MARKET_UNLOCK_LEVEL;
 }

@@ -4,12 +4,12 @@
  * sometimes a minimum worker count or a stat threshold) and sets absolute
  * storage caps.
  *
- * Faithful port of coin-old's upgradeLvl1…10 chain (10 tiers). Two kinds of
- * gate, matching the original:
+ * 9 tiers (levels 0–9), adapted from coin-old's upgradeLvl1…10 chain. Two kinds
+ * of gate, matching the original:
  *   - `cost`: resources actually deducted (wood/stone/food + consumable quest
  *     items like mithril/magic orb/soul gem/star metal/holy water).
  *   - `requires`: standing thresholds that are checked but NOT consumed
- *     (defense at L6/L7, honor/ward at L8, wisdom at L9).
+ *     (defense at L5/L6, honor/ward at L7, wisdom at L8).
  */
 import type { ResourceId } from './resources';
 
@@ -21,7 +21,7 @@ export interface SettlementTier {
   name: string;
   /** Cost to upgrade *into* this tier — deducted (empty for the starting tier). */
   cost: ResourceCost;
-  /** Standing thresholds required but not consumed (e.g. defense ≥ 5). */
+  /** Standing thresholds required but not consumed (e.g. defense >= 5). */
   requires?: ResourceCost;
   /** Minimum trained workers required to upgrade in. */
   workersRequired?: number;
@@ -43,7 +43,7 @@ export const SETTLEMENT_TIERS: SettlementTier[] = [
     name: 'Small Shack',
     cost: { wood: 3, stone: 3 },
     caps: { wood: 3, stone: 3, food: 3 },
-    blurb: "It'll do for now. Let us continue to build.",
+    blurb: "It'll do for now. Let's continue to build.",
   },
   {
     level: 2,
@@ -54,27 +54,21 @@ export const SETTLEMENT_TIERS: SettlementTier[] = [
   },
   {
     level: 3,
-    name: 'Small Cabin',
-    cost: { wood: 20, stone: 20, food: 5 },
-    caps: { wood: 50, stone: 50, food: 50 },
-    blurb: 'A proper home — raise a Farm to feed the work.',
+    name: 'Large Cabin',
+    cost: { wood: 20, stone: 20, food: 15 },
+    caps: { wood: 250, stone: 250, food: 250 },
+    blurb: "The beginnings of a holding. A Blacksmith and Hunter's Cabin follow.",
   },
   {
     level: 4,
-    name: 'Large Cabin',
-    cost: { wood: 30, stone: 30, food: 15 },
-    caps: { wood: 250, stone: 250, food: 250 },
-    blurb: 'The beginnings of a holding. A Blacksmith and Hunter’s Cabin follow.',
-  },
-  {
-    level: 5,
     name: 'Small Village',
     cost: { wood: 200, stone: 200, food: 100 },
+    requires: { spear: 5 },
     caps: { wood: 500, stone: 500, food: 500 },
     blurb: 'Smoke from many chimneys. Raise a Barracks and a Castle.',
   },
   {
-    level: 6,
+    level: 5,
     name: 'Large Village',
     cost: { wood: 400, stone: 400, food: 200 },
     requires: { defense: 5 },
@@ -82,7 +76,7 @@ export const SETTLEMENT_TIERS: SettlementTier[] = [
     blurb: 'Prosperous — and now a target. Dig a Deep Mine.',
   },
   {
-    level: 7,
+    level: 6,
     name: 'Small Town',
     cost: { wood: 800, stone: 800, food: 400, magicorb: 1 },
     requires: { defense: 10 },
@@ -90,7 +84,7 @@ export const SETTLEMENT_TIERS: SettlementTier[] = [
     blurb: 'Walls worth defending. Raiders assault the gates now.',
   },
   {
-    level: 8,
+    level: 7,
     name: 'Large Town',
     cost: { wood: 1600, stone: 1600, food: 800, mithril: 1, soulgem: 1 },
     requires: { honor: 1, ward: 1 },
@@ -98,7 +92,7 @@ export const SETTLEMENT_TIERS: SettlementTier[] = [
     blurb: 'A seat of power — and of envy. Dark hexes gather.',
   },
   {
-    level: 9,
+    level: 8,
     name: 'City',
     cost: { wood: 3200, stone: 3200, food: 3200, starmetal: 1 },
     requires: { wisdom: 1 },
@@ -106,7 +100,7 @@ export const SETTLEMENT_TIERS: SettlementTier[] = [
     blurb: 'A city of renown. Court a Cloud Shaman.',
   },
   {
-    level: 10,
+    level: 9,
     name: 'Kingdom',
     cost: { wood: 9000, stone: 9000, food: 9000, holywater: 1 },
     caps: { wood: 100000, stone: 100000, food: 100000 },

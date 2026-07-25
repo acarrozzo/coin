@@ -50,15 +50,17 @@ describe('progression (integration)', () => {
     expect(trainWorker(s)).toBe(true);
     expect(s.workers.trained).toBe(2);
 
-    // Assign both workers and fill toward Small Cabin (costs 20/20/5food, no worker minimum).
+    // Upgrade to Large Cabin (costs 30/30/15food, no worker minimum).
+    // Cost 30 exceeds the L2 cap of 25 — inject directly to bypass storage limit.
     assignWorker(s, 'stone', -1);
     assignWorker(s, 'wood', 1);
     assignWorker(s, 'stone', 1);
-    simulate(s, 120);
-    s.resources.food.amount = D(5); // inject 5 food for the upgrade cost
+    s.resources.wood.amount = D(30);
+    s.resources.stone.amount = D(30);
+    s.resources.food.amount = D(15);
     expect(upgradeSettlement(s)).toBe(true); // 2 → 3
     expect(s.level).toBe(3);
-    expect(getCapacity(s, 'wood')!.toNumber()).toBe(50);
+    expect(getCapacity(s, 'wood')!.toNumber()).toBe(250);
 
     // Build the Farm (available at level 2+).
     simulate(s, 120);

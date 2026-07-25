@@ -35,7 +35,7 @@ export interface ThreatConfig {
 }
 
 export const ASSAULT: ThreatConfig = {
-  unlockLevel: 7,
+  unlockLevel: 6,
   intervalSeconds: 300,
   basePower: 1,
   growth: 1.5,
@@ -45,7 +45,7 @@ export const ASSAULT: ThreatConfig = {
 };
 
 export const HEX: ThreatConfig = {
-  unlockLevel: 8,
+  unlockLevel: 7,
   intervalSeconds: 3600,
   basePower: 1,
   growth: 1.5,

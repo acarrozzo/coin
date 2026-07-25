@@ -53,12 +53,12 @@ export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
   adamantium: { output: 'adamantium', category: 'metal', structure: 'deepmine', minLevel: 4, workerCap: 'level', outputPerCycle: 0.0001, cycleSeconds: 4, inputs: { food: 4 } },
   obsidion: { output: 'obsidion', category: 'metal', structure: 'deepmine', minLevel: 5, workerCap: 'level', outputPerCycle: 0.00001, cycleSeconds: 5, inputs: { food: 5 } },
 
-  // Blacksmith — weapons (arrow @1, sword @3, staff @4, gladius @5, claymore @6)
+  // Blacksmith — weapons (arrow @1, sword @2, staff @3, gladius @4, claymore @5)
   arrow: { output: 'arrow', category: 'weapon', structure: 'blacksmith', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 0.5, inputs: { wood: 2, stone: 1 } },
-  sword: { output: 'sword', category: 'weapon', structure: 'blacksmith', minLevel: 3, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { wood: 10, iron: 2 } },
-  staff: { output: 'staff', category: 'weapon', structure: 'blacksmith', minLevel: 4, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { wood: 50, steel: 1 } },
-  gladius: { output: 'gladius', category: 'weapon', structure: 'blacksmith', minLevel: 5, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 30, inputs: { dragonbone: 5, mithril: 1 } },
-  claymore: { output: 'claymore', category: 'weapon', structure: 'blacksmith', minLevel: 6, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 45, inputs: { starmetal: 5, adamantium: 1 } },
+  sword: { output: 'sword', category: 'weapon', structure: 'blacksmith', minLevel: 2, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { wood: 10, iron: 2 } },
+  staff: { output: 'staff', category: 'weapon', structure: 'blacksmith', minLevel: 3, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 10, inputs: { wood: 50, steel: 1 } },
+  gladius: { output: 'gladius', category: 'weapon', structure: 'blacksmith', minLevel: 4, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 30, inputs: { dragonbone: 5, mithril: 1 } },
+  claymore: { output: 'claymore', category: 'weapon', structure: 'blacksmith', minLevel: 5, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 45, inputs: { starmetal: 5, adamantium: 1 } },
 
   // Hunter's Cabin — spears, goods, hunt trophies
   spear: { output: 'spear', category: 'weapon', structure: 'hunterscabin', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 2, inputs: { wood: 8, stone: 4 } },

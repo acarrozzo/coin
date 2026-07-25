@@ -108,7 +108,7 @@ describe('atomic cycles', () => {
   it('does not start a cycle without full ingredients (all-or-nothing)', () => {
     const s = createInitialState(0);
     s.level = 6;
-    s.buildings.blacksmith.level = 3; // unlock sword (10 wood + 2 iron / 10s)
+    s.buildings.blacksmith.level = 2; // unlock sword (10 wood + 2 iron / 10s)
     assignWorker(s, 'sword', 1);
     s.resources.wood.amount = D(100);
     s.resources.iron.amount = D(1); // short: needs 2
@@ -214,8 +214,8 @@ describe('buildings', () => {
     // Blacksmith L3 costs { stone: 400, iron: 1 }. Stone (base) is spent; iron
     // (a metal) must be held but is not removed from inventory.
     const s = createInitialState(0);
-    s.level = 6;
-    s.buildings.blacksmith.level = 2; // next level is the { stone: 400, iron: 1 } one
+    s.level = 5;
+    s.buildings.blacksmith.level = 1; // next level is the { stone: 400, iron: 1 } one
     s.resources.stone.amount = D(1000);
 
     s.resources.iron.amount = D(0);
@@ -223,7 +223,7 @@ describe('buildings', () => {
 
     s.resources.iron.amount = D(1);
     expect(buildBuilding(s, 'blacksmith')).toBe(true);
-    expect(s.buildings.blacksmith.level).toBe(3);
+    expect(s.buildings.blacksmith.level).toBe(2);
     expect(s.resources.stone.amount.toNumber()).toBe(600); // 400 stone spent
     expect(s.resources.iron.amount.toNumber()).toBe(1); // iron required, not consumed
   });
@@ -264,7 +264,7 @@ describe('settlement', () => {
 
   it('upgrades without worker requirements (none on any tier)', () => {
     const s = createInitialState(0);
-    s.level = 3; // next tier (4, Large Cabin) — no worker gate
+    s.level = 2; // next tier (3, Large Cabin) — no worker gate
     s.resources.wood.amount = D(100);
     s.resources.stone.amount = D(100);
     s.resources.food.amount = D(100);
@@ -274,7 +274,7 @@ describe('settlement', () => {
 
   it('checks a standing threshold (defense) without consuming it', () => {
     const s = createInitialState(0);
-    s.level = 5; // next tier (6, Large Village) requires defense ≥ 5
+    s.level = 4; // next tier (5, Large Village) requires defense ≥ 5
     s.resources.wood.amount = D(1000);
     s.resources.stone.amount = D(1000);
     s.resources.food.amount = D(1000);
@@ -480,7 +480,7 @@ describe('net production rate — live vs nominal', () => {
     const s = createInitialState(0);
     s.level = 9; // lift wood cap well above the amounts here
     s.workers.trained = 100;
-    s.buildings.blacksmith.level = 6;
+    s.buildings.blacksmith.level = 5;
     s.buildings.hunterscabin.level = 6;
 
     s.workers.assigned.wood = 20; // +20 wood/s
