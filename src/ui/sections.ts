@@ -37,8 +37,10 @@ import Home from '@lucide/svelte/icons/home';
 import Shield from '@lucide/svelte/icons/shield';
 import Store from '@lucide/svelte/icons/store';
 
-/** The Market (coin economy) unlocks at settlement level 5. */
-export const MARKET_UNLOCK_LEVEL = 5;
+/** The Market (coin economy) unlocks at settlement level 1. */
+export const MARKET_UNLOCK_LEVEL = 1;
+/** Rate displays, worker contracts, and late-game sells unlock at this level. */
+export const FULL_MARKET_LEVEL = 5;
 export function isMarketUnlocked(gs: GameState): boolean {
   return gs.level >= MARKET_UNLOCK_LEVEL;
 }
@@ -144,11 +146,11 @@ export function getResourceGroups(gs: GameState): ResourceGroup[] {
     ),
   })).filter(
     // Show a group once its resources exist, or once its building can be
-    // built/upgraded. Core is always present.
-    (g) =>
-      g.key === 'core' ||
-      g.ids.length > 0 ||
-      (g.building !== null && isBuildingAvailable(gs, g.building)),
+    // built/upgraded. Core shows only after the first worker is trained.
+    (g) => {
+      if (g.key === 'core') return gs.workers.trained >= 1;
+      return g.ids.length > 0 || (g.building !== null && isBuildingAvailable(gs, g.building));
+    },
   );
 }
 

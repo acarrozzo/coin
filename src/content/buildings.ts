@@ -70,7 +70,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   farm: {
     name: 'Farm',
     blurb: 'Turns labor into food.',
-    availableAtLevel: 3,
+    availableAtLevel: 2,
     levels: buildFarmLevels(),
   },
   blacksmith: {

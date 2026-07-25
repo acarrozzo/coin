@@ -12,13 +12,10 @@ import {
 import {
   assignWorker,
   trainWorker,
-  forage,
-  chopWood,
-  mineStone,
-  buyTool,
   sellResourceTier,
   buyRateUnlock,
   buyWorkerContract,
+  buyFood,
 } from '../engine/actions';
 import { RATE_UNLOCK_NUMERAL } from '../content/market';
 import type { SellableResource, RateUnlockResource } from '../content/market';
@@ -227,17 +224,6 @@ function createGameStore() {
         persist();
       }
     },
-    gather(kind: 'wood' | 'stone' | 'food'): void {
-      const ok = kind === 'food' ? forage(state) : kind === 'wood' ? chopWood(state) : mineStone(state);
-      if (ok) sound.play.build();
-    },
-    buyTool(tool: 'hatchet' | 'pickaxe'): void {
-      if (buyTool(state, tool)) {
-        notify.push(`You fashion a ${tool}.`, 'good');
-        sound.play.build();
-        persist();
-      }
-    },
     sell(id: SellableResource): void {
       if (sellResourceTier(state, id)) {
         notify.push(`You sell ${RESOURCES[id].name.toLowerCase()}s for coin.`, 'good');
@@ -256,6 +242,13 @@ function createGameStore() {
       if (buyWorkerContract(state)) {
         notify.push('Worker Contract signed — new workers join the pool.', 'good');
         sound.play.train();
+        persist();
+      }
+    },
+    buyFood(): void {
+      if (buyFood(state)) {
+        notify.push('Food purchased — workers can be trained.', 'good');
+        sound.play.build();
         persist();
       }
     },

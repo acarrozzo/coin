@@ -78,6 +78,10 @@ const migrations: Record<number, (data: RawSave) => RawSave> = {
     }
     return { ...data, version: 6 };
   },
+  // v6 → v7 (early-game reboot): manual gathering tools (flags) removed; wood and
+  // stone added as sellable resources; food purchase slots added. Missing market
+  // fields fall back to fresh defaults in deserialize; flags are simply dropped.
+  6: (data) => ({ ...data, version: 7 }),
 };
 
 function migrate(data: RawSave): RawSave {
@@ -115,8 +119,8 @@ export function serialize(state: GameState): string {
       sellTier: state.market.sellTier,
       rateUnlocks: state.market.rateUnlocks,
       workerContract: state.market.workerContract,
+      foodBought: state.market.foodBought,
     },
-    flags: state.flags,
   });
 }
 
@@ -186,9 +190,10 @@ export function deserialize(raw: string, now: number): GameState {
   const market = data.market as
     | {
         coinEarned?: unknown;
-        sellTier?: { arrow?: unknown; spear?: unknown };
+        sellTier?: { wood?: unknown; stone?: unknown; arrow?: unknown; spear?: unknown };
         rateUnlocks?: { wood?: unknown; stone?: unknown; food?: unknown };
         workerContract?: unknown;
+        foodBought?: unknown;
       }
     | undefined;
   if (market) {
@@ -196,18 +201,15 @@ export function deserialize(raw: string, now: number): GameState {
     if (typeof earned === 'string' || typeof earned === 'number') {
       state.market.coinEarned = D(earned);
     }
+    if (typeof market.sellTier?.wood === 'number') state.market.sellTier.wood = market.sellTier.wood;
+    if (typeof market.sellTier?.stone === 'number') state.market.sellTier.stone = market.sellTier.stone;
     if (typeof market.sellTier?.arrow === 'number') state.market.sellTier.arrow = market.sellTier.arrow;
     if (typeof market.sellTier?.spear === 'number') state.market.sellTier.spear = market.sellTier.spear;
     for (const id of ['wood', 'stone', 'food'] as const) {
       if (typeof market.rateUnlocks?.[id] === 'boolean') state.market.rateUnlocks[id] = market.rateUnlocks[id];
     }
     if (typeof market.workerContract === 'number') state.market.workerContract = market.workerContract;
-  }
-
-  const flags = data.flags as { hatchet?: unknown; pickaxe?: unknown } | undefined;
-  if (flags) {
-    if (typeof flags.hatchet === 'boolean') state.flags.hatchet = flags.hatchet;
-    if (typeof flags.pickaxe === 'boolean') state.flags.pickaxe = flags.pickaxe;
+    if (typeof market.foodBought === 'number') state.market.foodBought = market.foodBought;
   }
 
   return state;

@@ -5,15 +5,17 @@ import {
   isResourceUnlocked,
   canTrainWorker,
   getWorkerCost,
-  getCapacity,
   canSellTier,
   canBuyRateUnlock,
   canBuyWorkerContract,
+  canBuyFood,
 } from './selectors';
 import {
-  SELL_TIERS,
+  SELL_TIER_DEFS,
   RATE_UNLOCK_COST,
   WORKER_CONTRACTS,
+  FOOD_PURCHASE_COST,
+  FOOD_PURCHASE_AMOUNT,
   type SellableResource,
   type RateUnlockResource,
 } from '../content/market';
@@ -46,64 +48,19 @@ export function trainWorker(state: GameState): boolean {
   return true;
 }
 
-// ---------- Manual early game ----------
-//
-// The very first resources come from working by hand, before you have the
-// workforce/buildings to automate. Foraging is always available; chopping and
-// mining need a hatchet/pickaxe. (coin-old gated these behind a coin economy
-// that was never finished, so we use a small coherent food/wood cost instead.)
-
-const TOOL_COST = { hatchet: { food: 5 }, pickaxe: { wood: 5 } } as const;
-
-/** Add one unit of a gathered resource by hand, respecting storage caps. */
-function gatherByHand(state: GameState, id: ResourceId): boolean {
-  const cap = getCapacity(state, id);
-  if (cap !== null && state.resources[id].amount.gte(cap)) return false;
-  state.resources[id].amount = state.resources[id].amount.plus(1);
-  return true;
-}
-
-export function forage(state: GameState): boolean {
-  return gatherByHand(state, 'food');
-}
-
-export function chopWood(state: GameState): boolean {
-  if (!state.flags.hatchet) return false;
-  return gatherByHand(state, 'wood');
-}
-
-export function mineStone(state: GameState): boolean {
-  if (!state.flags.pickaxe) return false;
-  return gatherByHand(state, 'stone');
-}
-
-/** Buy an early-game tool, unlocking a manual gathering action. */
-export function buyTool(state: GameState, tool: 'hatchet' | 'pickaxe'): boolean {
-  if (state.flags[tool]) return false;
-  const cost = TOOL_COST[tool];
-  for (const [rid, amount] of Object.entries(cost) as [ResourceId, number][]) {
-    if (state.resources[rid].amount.lt(amount)) return false;
-  }
-  for (const [rid, amount] of Object.entries(cost) as [ResourceId, number][]) {
-    state.resources[rid].amount = state.resources[rid].amount.minus(amount);
-  }
-  state.flags[tool] = true;
-  return true;
-}
-
 // ---------- Market ----------
 //
-// Coin is earned only here, by selling weapons in three one-time, escalating
-// tiers (see content/market.ts). It is then spent on rate-display unlocks and
-// Worker Contracts. See selectors.ts for the affordability/availability reads.
+// Coin is earned only here, by selling resources in one-time, escalating
+// tiers (see content/market.ts). It is then spent on food purchases, rate-display
+// unlocks, and Worker Contracts. See selectors.ts for the affordability/availability reads.
 
 /**
- * Sell the next available tier of a weapon: consume the stock, pay out coin, and
- * advance that weapon's tier. Returns whether the sale happened.
+ * Sell the next available tier of a resource: consume the stock, pay out coin, and
+ * advance that resource's tier. Returns whether the sale happened.
  */
 export function sellResourceTier(state: GameState, id: SellableResource): boolean {
   if (!canSellTier(state, id)) return false;
-  const tier = SELL_TIERS[state.market.sellTier[id]];
+  const tier = SELL_TIER_DEFS[id][state.market.sellTier[id]];
   state.resources[id].amount = state.resources[id].amount.minus(tier.amount);
   state.resources.coin.amount = state.resources.coin.amount.plus(tier.coin);
   state.market.coinEarned = state.market.coinEarned.plus(tier.coin);
@@ -126,5 +83,17 @@ export function buyWorkerContract(state: GameState): boolean {
   state.resources.coin.amount = state.resources.coin.amount.minus(contract.cost);
   state.workers.bonus += contract.workers;
   state.market.workerContract += 1;
+  return true;
+}
+
+/**
+ * Buy one food purchase: spend FOOD_PURCHASE_COST coin, gain FOOD_PURCHASE_AMOUNT food.
+ * Limited to FOOD_PURCHASE_COUNT total purchases. Returns whether it happened.
+ */
+export function buyFood(state: GameState): boolean {
+  if (!canBuyFood(state)) return false;
+  state.resources.coin.amount = state.resources.coin.amount.minus(FOOD_PURCHASE_COST);
+  state.resources.food.amount = state.resources.food.amount.plus(FOOD_PURCHASE_AMOUNT);
+  state.market.foodBought += 1;
   return true;
 }

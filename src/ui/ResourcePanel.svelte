@@ -243,7 +243,7 @@
           {/each}
         </div>
 
-        {#if group.upgradeInFooter && group.building}
+        {#if group.upgradeInFooter && group.building && gs.level >= 2}
           {@const fLevel = getStructureLevel(gs, group.building)}
           {@const fNext = getNextBuildingLevel(gs, group.building)}
           <div class="footer">

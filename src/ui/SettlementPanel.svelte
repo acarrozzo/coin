@@ -73,7 +73,7 @@
           {/if}
         </span>
         <button onclick={() => game.upgradeSettlement()} disabled={!canUpgradeSettlement(gs)}>
-          Upgrade → {next.name}
+          {gs.level === 0 ? 'Build Shack' : `Upgrade → ${next.name}`}
         </button>
       </div>
     {:else}
@@ -87,22 +87,20 @@
       <span class="blurb">{available} idle · {total} total</span>
     </div>
     <div class="action">
-      <span class="cost">
-        <span class="cost-item" class:short={!canTrainWorker(gs)}>
-          {formatNumber(workerCost)} Food
+      {#if workerCost.gt(0)}
+        <span class="cost">
+          <span class="cost-item" class:short={!canTrainWorker(gs)}>
+            {formatNumber(workerCost)} Food
+          </span>
         </span>
-      </span>
-      <button onclick={() => game.train()} disabled={!canTrainWorker(gs)}>Train worker</button>
+      {/if}
+      <button onclick={() => game.train()} disabled={!canTrainWorker(gs)}>+1 worker</button>
     </div>
   </div>
 </section>
 
 <style>
   .panel {
-    background: var(--bg-panel);
-    border: var(--panel-border);
-    border-radius: var(--panel-radius);
-    box-shadow: var(--panel-shadow);
     padding: var(--panel-pad);
     animation: fadeIn var(--fade-in);
     display: flex;

@@ -6,10 +6,10 @@ import { ASSAULT, HEX } from '../content/combat';
 export type { ResourceId, BuildingId };
 
 /** Bumped whenever the save shape changes; drives migrations (see save.ts). */
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
-/** Trained workers the player starts with (coin-old set workers=2 at the shack). */
-export const STARTING_WORKERS = 2;
+/** Trained workers the player starts with. */
+export const STARTING_WORKERS = 0;
 
 export interface ResourceState {
   amount: Decimal;
@@ -52,19 +52,19 @@ export interface GameState {
   };
   /** Market progress — the coin economy (see content/market.ts). */
   market: MarketState;
-  /** One-off early-game tools/unlocks. */
-  flags: { hatchet: boolean; pickaxe: boolean };
 }
 
 export interface MarketState {
   /** Lifetime coin ever earned — the "max accumulated" score (never spent down). */
   coinEarned: Decimal;
-  /** Highest sell tier completed per weapon (0–3, sold sequentially). */
-  sellTier: { arrow: number; spear: number };
+  /** Highest sell tier completed per sellable resource (0-N, sold sequentially). */
+  sellTier: { wood: number; stone: number; arrow: number; spear: number };
   /** Which core-resource rate displays have been unlocked. */
   rateUnlocks: { wood: boolean; stone: boolean; food: boolean };
   /** Highest Worker Contract purchased (0–3, bought sequentially). */
   workerContract: number;
+  /** How many one-time food purchases have been made (0–2). */
+  foodBought: number;
 }
 
 export interface ThreatState {
@@ -95,7 +95,7 @@ export function createInitialState(now: number): GameState {
     createdAt: now,
     lastTick: now,
     playtime: 0,
-    level: 1,
+    level: 0,
     resources,
     workers: { trained: STARTING_WORKERS, bonus: 0, assigned },
     buildings,
@@ -106,10 +106,10 @@ export function createInitialState(now: number): GameState {
     },
     market: {
       coinEarned: D(0),
-      sellTier: { arrow: 0, spear: 0 },
+      sellTier: { wood: 0, stone: 0, arrow: 0, spear: 0 },
       rateUnlocks: { wood: false, stone: false, food: false },
       workerContract: 0,
+      foodBought: 0,
     },
-    flags: { hatchet: false, pickaxe: false },
   };
 }

@@ -42,8 +42,8 @@ export interface ProducerDef {
 // Ordered upstream → downstream so a chain settles within a single small tick.
 export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
   // Base gathering
-  wood: { output: 'wood', category: 'base', structure: 'settlement', minLevel: 1, workerCap: 'pool', outputPerCycle: 1, cycleSeconds: 1 },
-  stone: { output: 'stone', category: 'base', structure: 'settlement', minLevel: 1, workerCap: 'pool', outputPerCycle: 1, cycleSeconds: 2 },
+  wood: { output: 'wood', category: 'base', structure: 'settlement', minLevel: 0, workerCap: 'pool', outputPerCycle: 1, cycleSeconds: 1 },
+  stone: { output: 'stone', category: 'base', structure: 'settlement', minLevel: 0, workerCap: 'pool', outputPerCycle: 1, cycleSeconds: 2 },
   food: { output: 'food', category: 'base', structure: 'farm', minLevel: 1, workerCap: 'level', outputPerCycle: 1, cycleSeconds: 3 },
 
   // Deep Mine — metals smelted directly from food, fractional yields (coin-old)

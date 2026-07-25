@@ -12,7 +12,6 @@
   import { RESOURCES, type ResourceId } from './content/resources';
   import { formatNumber } from './engine/numbers';
   import SettlementPanel from './ui/SettlementPanel.svelte';
-  import CampPanel from './ui/CampPanel.svelte';
   import CombatPanel from './ui/CombatPanel.svelte';
   import ResourcePanel from './ui/ResourcePanel.svelte';
   import SettingsPanel from './ui/SettingsPanel.svelte';
@@ -44,7 +43,7 @@
   let headerH = $state(0);
 
   const gs = $derived(game.state);
-  // The Market (coin economy) unlocks at settlement level 5.
+  // The Market (coin economy) unlocks at settlement level 2.
   const showMarket = $derived(isMarketUnlocked(gs));
 
   // Left-rail jump targets: one per visible main-content section, each with a
@@ -195,7 +194,7 @@
       <span class="stat level-badge" class:leveled title="Settlement level">Lv {gs.level}</span>
     </h1>
 
-    {#if stores.length > 0}
+    {#if gs.workers.trained >= 1 && stores.length > 0}
       <div class="stores">
         {#each stores as s (s.id)}
           {@const Icon = s.icon}
@@ -265,6 +264,7 @@
        a dot flags an affordable upgrade (gold) or combat danger (red), and a
        badge shows the workers assigned there. On mobile it floats at the left
        edge, mirroring the panel rail on the right. -->
+  {#if gs.workers.trained >= 1}
   <nav class="jump-rail" aria-label="Jump to section">
     {#each navSections as s (s.id)}
       {@const Icon = s.icon}
@@ -292,6 +292,7 @@
       </button>
     {/each}
   </nav>
+  {/if}
 
   <div class="app">
     <main>
@@ -299,7 +300,6 @@
       <SettlementPanel />
       <CombatPanel />
       <ResourcePanel />
-      <CampPanel />
       {#if showMarket}
         <!-- The Market is set apart from the resource sections by a divider, and
              sits last in the main content. -->

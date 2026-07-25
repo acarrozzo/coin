@@ -8,6 +8,7 @@ import {
   sellResourceTier,
   buyRateUnlock,
   buyWorkerContract,
+  buyFood,
 } from '../src/engine/actions';
 import { buildBuilding } from '../src/systems/buildings';
 import { upgradeSettlement } from '../src/systems/settlement';
@@ -30,6 +31,7 @@ import {
   isRateUnlocked,
   canBuyRateUnlock,
   canBuyWorkerContract,
+  canBuyFood,
 } from '../src/engine/selectors';
 import { MAX_COIN_EARNED } from '../src/content/market';
 
@@ -37,6 +39,7 @@ describe('gathering', () => {
   it('produces at the producer rate', () => {
     const s = createInitialState(0);
     s.level = 5; // lift the tiny level-1 cap so the rate is what's tested
+    s.workers.trained = 2;
     assignWorker(s, 'wood', 2); // 2 × 1/s
     tick(s, 5);
     expect(s.resources.wood.amount.toNumber()).toBe(10);
@@ -44,6 +47,7 @@ describe('gathering', () => {
 
   it('clamps to the settlement capacity', () => {
     const s = createInitialState(0); // level 1 → wood cap 3 (original)
+    s.workers.trained = 2;
     assignWorker(s, 'wood', 2);
     tick(s, 1000);
     expect(getCapacity(s, 'wood')!.toNumber()).toBe(3);
@@ -55,6 +59,7 @@ describe('crafting', () => {
   it('consumes food and is limited by supply (fractional metal)', () => {
     const s = createInitialState(0);
     s.buildings.deepmine.level = 1; // unlock iron
+    s.workers.trained = 1;
     s.resources.food.amount = D(100);
     assignWorker(s, 'iron', 1); // 0.1 iron/s, 1 food per 0.1 iron (10 food/iron)
     tick(s, 10); // wants 1 iron → needs 10 food
@@ -65,6 +70,7 @@ describe('crafting', () => {
   it('smelts each metal from food independently (coin-old model)', () => {
     const s = createInitialState(0);
     s.buildings.deepmine.level = 2; // unlock iron + steel
+    s.workers.trained = 2;
     s.resources.food.amount = D(100);
     assignWorker(s, 'iron', 1); // 0.1 iron / 1s cycle, food-fed
     assignWorker(s, 'steel', 1); // 0.01 steel / 2s cycle, also food-fed (not iron-fed)
@@ -87,6 +93,7 @@ describe('atomic cycles', () => {
   it('emits nothing until a whole cycle completes, then a whole unit', () => {
     const s = createInitialState(0);
     s.level = 5; // lift caps
+    s.workers.trained = 1;
     assignWorker(s, 'wood', 1); // 1 wood / 1s cycle
     tick(s, 0.5); // mid-cycle
     expect(s.resources.wood.amount.toNumber()).toBe(0);
@@ -126,6 +133,7 @@ describe('atomic cycles', () => {
   it('deducts inputs at cycle END and does not clamp a transient negative', () => {
     const s = createInitialState(0);
     s.buildings.deepmine.level = 1; // iron: 1 food/cycle, 1s
+    s.workers.trained = 1;
     assignWorker(s, 'iron', 1);
     s.resources.food.amount = D(1); // exactly enough to START one cycle
     // Spend the food elsewhere mid-cycle, then let the committed cycle finish.
@@ -152,26 +160,38 @@ describe('workers', () => {
   it('caps a line by its building level', () => {
     const s = createInitialState(0);
     s.buildings.deepmine.level = 1;
+    s.workers.trained = 3;
     expect(getMaxWorkers(s, 'iron')).toBe(1);
     assignWorker(s, 'iron', 3); // only 1 slot
     expect(s.workers.assigned.iron).toBe(1);
   });
 
   it('never over-assigns beyond the pool', () => {
-    const s = createInitialState(0); // 2 workers
+    const s = createInitialState(0);
+    s.workers.trained = 1;
     assignWorker(s, 'wood', 5);
-    expect(s.workers.assigned.wood).toBe(2);
+    expect(s.workers.assigned.wood).toBe(1);
     expect(getAvailableWorkers(s)).toBe(0);
   });
 
-  it('trains workers on the floor(n²/2) food curve', () => {
-    const s = createInitialState(0); // trained = 2
-    expect(getWorkerCost(s).toNumber()).toBe(2); // floor(4/2)
+  it('trains workers on the cost curve: free, 1, 2, 4…', () => {
+    const s = createInitialState(0);
+    // Worker 1: free
+    expect(getWorkerCost(s).toNumber()).toBe(0);
+    expect(trainWorker(s)).toBe(true);
+    expect(s.workers.trained).toBe(1);
+    // Worker 2: 1 food
+    expect(getWorkerCost(s).toNumber()).toBe(1);
+    s.resources.food.amount = D(1);
+    expect(trainWorker(s)).toBe(true);
+    expect(s.workers.trained).toBe(2);
+    // Worker 3: floor(4/2) = 2 food
+    expect(getWorkerCost(s).toNumber()).toBe(2);
     s.resources.food.amount = D(2);
     expect(trainWorker(s)).toBe(true);
     expect(s.workers.trained).toBe(3);
-    expect(s.resources.food.amount.toNumber()).toBe(0);
-    expect(getWorkerCost(s).toNumber()).toBe(4); // floor(9/2)
+    // Worker 4: floor(9/2) = 4 food
+    expect(getWorkerCost(s).toNumber()).toBe(4);
     expect(canTrainWorker(s)).toBe(false);
   });
 });
@@ -214,8 +234,14 @@ describe('settlement', () => {
     const s = createInitialState(0);
     s.resources.wood.amount = D(3);
     s.resources.stone.amount = D(3);
-    expect(getCapacity(s, 'wood')!.toNumber()).toBe(3); // L1 Small Shack
-    expect(upgradeSettlement(s)).toBe(true);
+    expect(getCapacity(s, 'wood')!.toNumber()).toBe(3); // L0 Wilderness
+    expect(upgradeSettlement(s)).toBe(true); // 0 → 1 (Build Shack, costs 3/3)
+    expect(s.level).toBe(1);
+    expect(getCapacity(s, 'wood')!.toNumber()).toBe(3); // L1 Small Shack (same cap)
+    s.resources.wood.amount = D(3);
+    s.resources.stone.amount = D(3);
+    s.resources.food.amount = D(1);
+    expect(upgradeSettlement(s)).toBe(true); // 1 → 2 (Large Shack, costs 3/3/1food)
     expect(s.level).toBe(2);
     expect(getCapacity(s, 'wood')!.toNumber()).toBe(25); // L2 Large Shack
   });
@@ -236,15 +262,13 @@ describe('settlement', () => {
     }
   });
 
-  it('enforces the worker requirement for a tier', () => {
+  it('upgrades without worker requirements (none on any tier)', () => {
     const s = createInitialState(0);
-    s.level = 2; // next tier (3, Small Cabin) needs 2 trained workers
+    s.level = 3; // next tier (4, Large Cabin) — no worker gate
     s.resources.wood.amount = D(100);
     s.resources.stone.amount = D(100);
-    s.workers.trained = 1; // one short of the requirement
-    expect(canUpgradeSettlement(s)).toBe(false);
-
-    s.workers.trained = 2; // meets the requirement
+    s.resources.food.amount = D(100);
+    s.workers.trained = 0; // no workers needed
     expect(canUpgradeSettlement(s)).toBe(true);
   });
 
@@ -285,6 +309,7 @@ describe('building-derived caps & converters', () => {
   it('builds defense from archers, capped by defenseMax', () => {
     const s = createInitialState(0);
     s.buildings.castle.level = 1; // unlocks defense, cap 5
+    s.workers.trained = 1;
     s.resources.archer.amount = D(100);
     expect(getMaxWorkers(s, 'defense')).toBe(1); // single-slot converter
     assignWorker(s, 'defense', 3); // clamps to 1
@@ -305,6 +330,7 @@ describe('offline catch-up', () => {
   it('awards production for elapsed time', () => {
     const s = createInitialState(0);
     s.level = 5; // lift the tiny level-1 cap so 10 wood fits
+    s.workers.trained = 2;
     assignWorker(s, 'wood', 2); // 2/s
     const summary = applyOffline(s, 5_000);
     expect(summary.elapsedSeconds).toBe(5);
@@ -314,6 +340,7 @@ describe('offline catch-up', () => {
 
   it('caps very long absences', () => {
     const s = createInitialState(0); // level 1 → wood cap 3
+    s.workers.trained = 1;
     assignWorker(s, 'wood', 1);
     const summary = applyOffline(s, 10 * 24 * 3600 * 1000);
     expect(summary.capped).toBe(true);
@@ -370,7 +397,7 @@ describe('save', () => {
     expect(restored.resources.wood.amount.toNumber()).toBe(30); // kept
     expect(restored.resources.stone.amount.toNumber()).toBe(5); // kept
     expect(restored.playtime).toBe(12);
-    expect(restored.workers.trained).toBe(2); // fresh default (coin-old start)
+    expect(restored.workers.trained).toBe(0); // fresh default
   });
 
   it('migrates a v3 save forward, resetting progression but keeping base materials', () => {
@@ -413,7 +440,7 @@ describe('save', () => {
 
   it('falls back to a fresh state on garbage', () => {
     const restored = deserialize('not json', 500);
-    expect(restored.level).toBe(1);
+    expect(restored.level).toBe(0);
     expect(restored.createdAt).toBe(500);
   });
 });
@@ -508,34 +535,88 @@ describe('net production rate — live vs nominal', () => {
 });
 
 describe('market — coin economy', () => {
-  it('sells weapons in three sequential one-time tiers, consuming stock', () => {
+  it('sells wood/stone for coin in a single one-time tier', () => {
+    const s = createInitialState(0);
+    s.resources.wood.amount = D(3);
+    s.resources.stone.amount = D(3);
+
+    expect(canSellTier(s, 'wood')).toBe(true);
+    expect(sellResourceTier(s, 'wood')).toBe(true);
+    expect(s.resources.wood.amount.toNumber()).toBe(0);
+    expect(s.resources.coin.amount.toNumber()).toBe(1);
+    expect(s.market.sellTier.wood).toBe(1);
+    // Only one tier — already sold.
+    expect(canSellTier(s, 'wood')).toBe(false);
+
+    expect(sellResourceTier(s, 'stone')).toBe(true);
+    expect(s.resources.coin.amount.toNumber()).toBe(2);
+    expect(canSellTier(s, 'stone')).toBe(false);
+  });
+
+  it('sells arrows in five sequential one-time tiers, consuming stock', () => {
     const s = createInitialState(0);
     s.resources.arrow.amount = D(2_000);
 
-    // Tier 1: consume 1,000 arrows → +10 coin.
+    // Tier 1: consume 100 arrows → +10 coin.
     expect(canSellTier(s, 'arrow')).toBe(true);
     expect(sellResourceTier(s, 'arrow')).toBe(true);
-    expect(s.resources.arrow.amount.toNumber()).toBe(1_000);
+    expect(s.resources.arrow.amount.toNumber()).toBe(1_900);
     expect(s.resources.coin.amount.toNumber()).toBe(10);
     expect(s.market.coinEarned.toNumber()).toBe(10);
     expect(s.market.sellTier.arrow).toBe(1);
 
-    // Tier 2 needs 10,000 — not enough on hand, so it can't fire yet.
+    // Tier 2: consume 1,000 → still have 1,900, can sell.
+    expect(canSellTier(s, 'arrow')).toBe(true);
+    expect(sellResourceTier(s, 'arrow')).toBe(true);
+    expect(s.resources.arrow.amount.toNumber()).toBe(900);
+    expect(s.resources.coin.amount.toNumber()).toBe(110);
+
+    // Tier 3 needs 10,000 — not enough on hand.
     expect(canSellTier(s, 'arrow')).toBe(false);
     expect(sellResourceTier(s, 'arrow')).toBe(false);
   });
 
-  it('caps lifetime coin earned at MAX_COIN_EARNED across both weapons', () => {
+  it('caps lifetime coin earned at MAX_COIN_EARNED across all sellable resources', () => {
     const s = createInitialState(0);
+
+    // Sell all tiers of arrow and spear (5 tiers each, need enough stock).
     for (const id of ['arrow', 'spear'] as const) {
-      s.resources[id].amount = D(1_000_000);
-      expect(sellResourceTier(s, id)).toBe(true); // +10
-      expect(sellResourceTier(s, id)).toBe(true); // +100
-      expect(sellResourceTier(s, id)).toBe(true); // +1000
-      expect(sellResourceTier(s, id)).toBe(false); // all tiers sold
+      s.resources[id].amount = D(2_000_000);
+      for (let i = 0; i < 5; i++) {
+        expect(sellResourceTier(s, id)).toBe(true);
+      }
+      expect(canSellTier(s, id)).toBe(false); // all 5 tiers sold
     }
+
+    // Sell the single wood and stone tiers.
+    s.resources.wood.amount = D(3);
+    expect(sellResourceTier(s, 'wood')).toBe(true);
+    s.resources.stone.amount = D(3);
+    expect(sellResourceTier(s, 'stone')).toBe(true);
+
     expect(s.market.coinEarned.toNumber()).toBe(MAX_COIN_EARNED);
     expect(s.resources.coin.amount.toNumber()).toBe(MAX_COIN_EARNED);
+  });
+
+  it('buys food twice with coin, then the slot is exhausted', () => {
+    const s = createInitialState(0);
+    s.resources.coin.amount = D(3);
+
+    expect(canBuyFood(s)).toBe(true);
+    expect(buyFood(s)).toBe(true);
+    expect(s.resources.food.amount.toNumber()).toBe(5);
+    expect(s.resources.coin.amount.toNumber()).toBe(2);
+    expect(s.market.foodBought).toBe(1);
+
+    expect(buyFood(s)).toBe(true);
+    expect(s.resources.food.amount.toNumber()).toBe(10);
+    expect(s.resources.coin.amount.toNumber()).toBe(1);
+    expect(s.market.foodBought).toBe(2);
+
+    // Both slots used — can't buy again even with coin remaining.
+    expect(canBuyFood(s)).toBe(false);
+    expect(buyFood(s)).toBe(false);
+    expect(s.resources.coin.amount.toNumber()).toBe(1);
   });
 
   it('unlocks a core rate display for 10 coin, in any order', () => {
@@ -572,12 +653,15 @@ describe('market — coin economy', () => {
 
   it('persists market progress through a save round-trip', () => {
     const s = createInitialState(0);
-    s.resources.arrow.amount = D(1_000);
-    sellResourceTier(s, 'arrow');
-    buyRateUnlock(s, 'wood');
+    s.resources.wood.amount = D(3);
+    s.resources.arrow.amount = D(100);
+    sellResourceTier(s, 'wood');  // +1 coin
+    sellResourceTier(s, 'arrow'); // +10 coin → 11 total
+    buyRateUnlock(s, 'wood');     // -10 coin → 1 remaining
     const restored = deserialize(serialize(s), 0);
+    expect(restored.market.sellTier.wood).toBe(1);
     expect(restored.market.sellTier.arrow).toBe(1);
-    expect(restored.market.coinEarned.toNumber()).toBe(10);
+    expect(restored.market.coinEarned.toNumber()).toBe(11);
     expect(restored.market.rateUnlocks.wood).toBe(true);
   });
 });

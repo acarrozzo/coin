@@ -11,6 +11,7 @@ import { D } from '../src/engine/numbers';
 // handlers all work together in a real DOM — not just that the engine is correct.
 describe('ResourcePanel (runtime)', () => {
   it('renders the unlocked resource and assigns a worker on click', async () => {
+    game.state.workers.trained = 1; // Core Resources hidden until first worker trained
     render(ResourcePanel);
 
     // Wood + stone gather from the start; food needs a Farm, so it's hidden.
@@ -18,6 +19,7 @@ describe('ResourcePanel (runtime)', () => {
     expect(screen.getByText('Stone')).toBeTruthy();
     expect(screen.queryByText('Food')).toBeNull();
 
+    // already set above; just need at least 1 worker to assign
     const before = game.state.workers.assigned.wood;
     await fireEvent.click(screen.getByLabelText('Add worker to Wood'));
 
@@ -35,8 +37,10 @@ describe('ResourcePanel (runtime)', () => {
   });
 
   it('upgrades the settlement and fires a level-up toast', async () => {
+    game.state.level = 1; // skip level 0 so the button reads "Upgrade →"
     game.state.resources.wood.amount = D(20);
     game.state.resources.stone.amount = D(20);
+    game.state.resources.food.amount = D(20); // level 1→2 now costs 1 food
     render(SettlementPanel);
 
     await fireEvent.click(screen.getByText(/Upgrade →/));

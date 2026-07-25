@@ -9,29 +9,35 @@
     canBuyRateUnlock,
     getNextWorkerContract,
     canBuyWorkerContract,
+    canBuyFood,
   } from '../engine/selectors';
   import {
-    SELL_TIERS,
+    SELL_TIER_DEFS,
     SELLABLE_RESOURCES,
     RATE_UNLOCK_RESOURCES,
     RATE_UNLOCK_NUMERAL,
     RATE_UNLOCK_COST,
     WORKER_CONTRACTS,
     MAX_COIN_EARNED,
+    FOOD_PURCHASE_COST,
+    FOOD_PURCHASE_AMOUNT,
+    FOOD_PURCHASE_COUNT,
   } from '../content/market';
+  import { FULL_MARKET_LEVEL } from './sections';
   import Store from '@lucide/svelte/icons/store';
   import Coins from '@lucide/svelte/icons/coins';
   import Gauge from '@lucide/svelte/icons/gauge';
   import PersonStanding from '@lucide/svelte/icons/person-standing';
   import HandCoins from '@lucide/svelte/icons/hand-coins';
+  import Wheat from '@lucide/svelte/icons/wheat';
 
   const gs = $derived(game.state);
   const coin = $derived(gs.resources.coin.amount);
   const nextContract = $derived(getNextWorkerContract(gs));
 </script>
 
-<!-- The Market: the coin economy. Sell weapons for coin, then spend it on
-     rate-display unlocks and Worker Contracts. data-nav lets the rail scroll here. -->
+<!-- The Market: the coin economy. Sell resources for coin, then spend it on
+     food, rate-display unlocks, and Worker Contracts. data-nav lets the rail scroll here. -->
 <section class="panel market" data-nav="market" aria-label="Market">
   <header class="head">
     <Store size={22} color="var(--accent)" aria-hidden="true" />
@@ -43,32 +49,60 @@
     </span>
   </header>
 
-  <!-- Sell weapons for coin — three one-time, escalating tiers each. -->
+  <!-- Sell resources for coin — one-time, escalating tiers each. -->
   <div class="block">
     <h3><HandCoins size={16} aria-hidden="true" /> Sell for coin</h3>
     <p class="hint">Each tier is a one-time sale. Stock is consumed.</p>
     <div class="actions">
-      {#each SELLABLE_RESOURCES as id (id)}
+      {#each SELLABLE_RESOURCES.filter((id) => gs.level >= FULL_MARKET_LEVEL || id === 'wood' || id === 'stone') as id (id)}
         {@const tier = getNextSellTier(gs, id)}
         {@const done = gs.market.sellTier[id]}
+        {@const total = SELL_TIER_DEFS[id].length}
         {@const ok = canSellTier(gs, id)}
         {#if tier}
           <button class="buy" onclick={() => game.sell(id)} disabled={!ok}>
             <span class="lbl">Sell {formatNumber(tier.amount)} {RESOURCES[id].name.toLowerCase()}s</span>
             <span class="c" class:short={!ok}>+{tier.coin} coin</span>
-            <span class="sub">tier {done + 1} of {SELL_TIERS.length}</span>
+            {#if total > 1}
+              <span class="sub">tier {done + 1} of {total}</span>
+            {/if}
           </button>
         {:else}
           <div class="buy done" aria-disabled="true">
             <span class="lbl">{RESOURCES[id].name}s — all sold</span>
-            <span class="sub">3 of {SELL_TIERS.length} tiers</span>
+            {#if total > 1}
+              <span class="sub">{done} of {total} tiers</span>
+            {/if}
           </div>
         {/if}
       {/each}
     </div>
   </div>
 
+  <!-- Buy food with coin — early-game bootstrap before the Farm comes online. -->
+  <div class="block">
+    <h3><Wheat size={16} aria-hidden="true" /> Buy Food</h3>
+    <p class="hint">Spend coin to stock up on food and train workers early.</p>
+    <div class="actions">
+      {#each { length: FOOD_PURCHASE_COUNT } as _, i (i)}
+        {@const bought = gs.market.foodBought > i}
+        {@const ok = !bought && canBuyFood(gs) && gs.market.foodBought === i}
+        {#if bought}
+          <div class="buy done" aria-disabled="true">
+            <span class="lbl">Food Supply {i + 1} — delivered</span>
+          </div>
+        {:else}
+          <button class="buy" onclick={() => game.buyFood()} disabled={!ok}>
+            <span class="lbl">Food Supply {i + 1} — {FOOD_PURCHASE_AMOUNT} food</span>
+            <span class="c" class:short={!ok}>{FOOD_PURCHASE_COST} coin</span>
+          </button>
+        {/if}
+      {/each}
+    </div>
+  </div>
+
   <!-- Reveal the core resources' overall-rate displays. -->
+  {#if gs.level >= FULL_MARKET_LEVEL}
   <div class="block">
     <h3><Gauge size={16} aria-hidden="true" /> Rate Displays</h3>
     <p class="hint">Unlock the live net-rate readout for each core resource — {RATE_UNLOCK_COST} coin each.</p>
@@ -90,8 +124,10 @@
       {/each}
     </div>
   </div>
+  {/if}
 
   <!-- Worker Contracts — permanent bonus workers, bought in order. -->
+  {#if gs.level >= FULL_MARKET_LEVEL}
   <div class="block">
     <h3><PersonStanding size={16} aria-hidden="true" /> Worker Contracts</h3>
     <p class="hint">Hire permanent workers with coin. Signed in order.</p>
@@ -114,21 +150,13 @@
       {/if}
     </div>
   </div>
+  {/if}
 </section>
 
 <style>
   .market {
-    background: var(--bg-panel);
-    border: var(--panel-border);
-    border-top: 3px solid var(--accent);
-    border-radius: var(--panel-radius);
-    box-shadow: var(--panel-shadow);
     padding: var(--panel-pad);
     animation: fadeIn var(--fade-in);
-  }
-  /* Settings can drop the colored accent strip; fall back to the plain frame. */
-  :global(:root[data-accent-border='off']) .market {
-    border-top: var(--panel-border);
   }
   .head {
     display: flex;
