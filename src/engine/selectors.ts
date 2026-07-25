@@ -327,3 +327,11 @@ export function canBuyWorkerContract(state: GameState): boolean {
   const contract = getNextWorkerContract(state);
   return contract !== null && state.resources.coin.amount.gte(contract.cost);
 }
+
+/** True if any Market action is currently available: sell a tier, buy a rate display, or buy a worker contract. */
+export function hasMarketOpportunity(state: GameState): boolean {
+  const SELLABLE = ['arrow', 'spear'] as const;
+  if (SELLABLE.some((id) => canSellTier(state, id))) return true;
+  if (RATE_UNLOCK_RESOURCES.some((id) => canBuyRateUnlock(state, id))) return true;
+  return canBuyWorkerContract(state);
+}

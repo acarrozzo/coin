@@ -20,6 +20,7 @@ import {
   getTotalWorkers,
   willRepelAssault,
   willBreakHex,
+  hasMarketOpportunity,
 } from '../engine/selectors';
 
 // Structure header icons (also used as the rail's section icons).
@@ -214,7 +215,7 @@ export function getNavSections(gs: GameState): NavSection[] {
       label: 'Market',
       icon: Store,
       count: 0,
-      alert: null,
+      alert: hasMarketOpportunity(gs) ? 'good' : null,
       separated: true,
     });
   }

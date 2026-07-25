@@ -2,10 +2,10 @@
  * The Market — coin economy, as data.
  *
  * Coin is no longer minted; it is earned once and only through the Market. Two
- * weapons (arrows and spears) can be sold in three escalating, one-time tiers.
- * That makes the coin supply finite: 3 tiers × 2 weapons, worth 10 + 100 + 1000
- * each, is a hard lifetime ceiling of 2,220 coin (`MAX_COIN_EARNED`). Everything
- * bought here is priced within that budget.
+ * weapons (arrows and spears) can be sold in five escalating, one-time tiers.
+ * That makes the coin supply finite: 5 tiers × 2 weapons, worth 1 + 10 + 100 +
+ * 1,000 + 10,000 each, is a hard lifetime ceiling of 22,222 coin
+ * (`MAX_COIN_EARNED`). Everything bought here is priced within that budget.
  */
 import type { ResourceId } from './resources';
 
@@ -21,13 +21,15 @@ export interface SellTier {
 }
 
 /**
- * The three sell tiers, sold in order (tier N unlocks only after tier N−1).
- * Each is a one-time sale — six sales total across arrows + spears.
+ * The five sell tiers, sold in order (tier N unlocks only after tier N−1).
+ * Each is a one-time sale — ten sales total across arrows + spears.
  */
 export const SELL_TIERS: readonly SellTier[] = [
-  { amount: 1_000, coin: 10 },
-  { amount: 10_000, coin: 100 },
-  { amount: 100_000, coin: 1_000 },
+  { amount: 100, coin: 10 },
+  { amount: 1_000, coin: 100 },
+  { amount: 10_000, coin: 1_000 },
+  { amount: 100_000, coin: 10_000 },
+  { amount: 1_000_000, coin: 100_000 },
 ];
 
 /** Lifetime coin ceiling: every sell tier, both weapons. */
