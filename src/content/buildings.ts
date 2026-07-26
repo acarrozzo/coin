@@ -132,7 +132,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     ],
   },
   castle: {
-    name: 'Castle',
+    name: 'Quest Lands',
     blurb: 'Walls and a defensive garrison. Sets your defense cap.',
     availableAtLevel: 4,
     levels: [

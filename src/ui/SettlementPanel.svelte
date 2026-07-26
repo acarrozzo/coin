@@ -12,7 +12,7 @@
     splitCost,
   } from '../engine/selectors';
   import { formatNumber } from '../engine/numbers';
-  import PersonStanding from '@lucide/svelte/icons/person-standing';
+  import Users from '@lucide/svelte/icons/users';
 
   const gs = $derived(game.state);
   const tier = $derived(getTier(gs.level));
@@ -55,7 +55,7 @@
             {#if next.workersRequired}
               {@const met = gs.workers.trained >= next.workersRequired}
               <span class="cost-item req-only" class:short={!met} class:met>
-                {next.workersRequired} <PersonStanding
+                {next.workersRequired} <Users
                   size={13}
                   color="var(--gold)"
                   aria-hidden="true"

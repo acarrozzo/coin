@@ -2,7 +2,12 @@ import { Decimal, D } from './numbers';
 import type { GameState, ResourceId, BuildingId } from './state';
 import { RESOURCE_IDS, isConsumableResource } from '../content/resources';
 import { BUILDINGS } from '../content/buildings';
-import { PRODUCERS, PRODUCER_IDS, type StructureId } from '../content/producers';
+import {
+  PRODUCERS,
+  PRODUCER_INPUTS,
+  getConsumers,
+  type StructureId,
+} from '../content/producers';
 import { getTier, SETTLEMENT_TIERS, type ResourceCost } from '../content/settlement';
 import { ASSAULT, HEX, type ThreatConfig } from '../content/combat';
 import {
@@ -45,6 +50,24 @@ export function unlockedResources(state: GameState): ResourceId[] {
 }
 
 /**
+ * Capacities are content constants, so the same handful of numbers is re-wrapped
+ * as a Decimal thousands of times a second (every tick's cycle gate, every
+ * resource row). Cache one Decimal per distinct value and hand out the shared
+ * instance — safe because Decimal arithmetic is non-mutating throughout
+ * (numbers.ts wraps break_infinity, whose ops all return new instances), so no
+ * caller can write through the reference.
+ */
+const capCache = new Map<number, Decimal>();
+function cachedCap(value: number): Decimal {
+  let d = capCache.get(value);
+  if (!d) {
+    d = D(value);
+    capCache.set(value, d);
+  }
+  return d;
+}
+
+/**
  * Absolute storage capacity, or null if the resource is uncapped.
  * wood/stone/food are capped by the settlement tier; defense/ward by the
  * building that sets them (0 until that building is built). Coin is uncapped.
@@ -53,11 +76,11 @@ export function getCapacity(state: GameState, id: ResourceId): Decimal | null {
   const source = BUILDING_CAP_SOURCES[id];
   if (source) {
     const level = state.buildings[source.building].level;
-    if (level <= 0) return D(0);
-    return D(BUILDINGS[source.building].levels[level - 1].sets?.[source.key] ?? 0);
+    if (level <= 0) return cachedCap(0);
+    return cachedCap(BUILDINGS[source.building].levels[level - 1].sets?.[source.key] ?? 0);
   }
   const cap = getTier(state.level)?.caps[id];
-  return cap === undefined ? null : D(cap);
+  return cap === undefined ? null : cachedCap(cap);
 }
 
 export function isAtCapacity(state: GameState, id: ResourceId): boolean {
@@ -87,10 +110,8 @@ export function canStartCycle(state: GameState, id: ResourceId): boolean {
   const cap = getCapacity(state, id);
   if (cap !== null && cap.minus(state.resources[id].amount).lte(0)) return false;
 
-  if (p.inputs) {
-    for (const [rid, qty] of Object.entries(p.inputs) as [ResourceId, number][]) {
-      if (state.resources[rid].amount.lt(workers * qty)) return false;
-    }
+  for (const [rid, qty] of PRODUCER_INPUTS[id]) {
+    if (state.resources[rid].amount.lt(workers * qty)) return false;
   }
   return true;
 }
@@ -113,12 +134,10 @@ export function getProductionRate(state: GameState, id: ResourceId): Decimal {
  */
 export function getNetProductionRate(state: GameState, id: ResourceId): Decimal {
   let rate = getProductionRate(state, id);
-  for (const pid of PRODUCER_IDS) {
-    const qty = PRODUCERS[pid]?.inputs?.[id];
-    if (!qty) continue;
-    const workers = state.workers.assigned[pid];
+  for (const c of getConsumers(id)) {
+    const workers = state.workers.assigned[c.id];
     if (workers <= 0) continue;
-    rate = rate.minus(D(workers).times(qty).div(PRODUCERS[pid]!.cycleSeconds));
+    rate = rate.minus(D(workers).times(c.qty).div(c.cycleSeconds));
   }
   return rate;
 }
@@ -138,12 +157,10 @@ export function getNetProductionRate(state: GameState, id: ResourceId): Decimal 
  */
 export function getLiveNetProductionRate(state: GameState, id: ResourceId): Decimal {
   let rate = getProductionRate(state, id);
-  for (const pid of PRODUCER_IDS) {
-    const qty = PRODUCERS[pid]?.inputs?.[id];
-    if (!qty) continue;
-    const workers = state.workers.assigned[pid];
-    if (workers <= 0 || !canStartCycle(state, pid)) continue;
-    rate = rate.minus(D(workers).times(qty).div(PRODUCERS[pid]!.cycleSeconds));
+  for (const c of getConsumers(id)) {
+    const workers = state.workers.assigned[c.id];
+    if (workers <= 0 || !canStartCycle(state, c.id)) continue;
+    rate = rate.minus(D(workers).times(c.qty).div(c.cycleSeconds));
   }
   // At cap the amount can't rise: a surplus is really "holding steady", not "+X".
   if (rate.gt(0) && isAtCapacity(state, id)) return D(0);

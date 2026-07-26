@@ -1,7 +1,7 @@
 import { D, type Decimal } from '../engine/numbers';
 import type { GameState, ResourceId } from '../engine/state';
 import { getCapacity, canStartCycle } from '../engine/selectors';
-import { PRODUCERS, PRODUCER_IDS } from '../content/producers';
+import { PRODUCERS, PRODUCER_IDS, PRODUCER_INPUTS } from '../content/producers';
 
 /** Notified with each completed cycle's output — see tick's `onGain`. */
 export type GainHandler = (id: ResourceId, amount: Decimal) => void;
@@ -83,9 +83,7 @@ function completeCycle(
   state.resources[id].amount = state.resources[id].amount.plus(output);
   if (onGain && output.gt(0)) onGain(id, output);
 
-  if (p.inputs) {
-    for (const [rid, qty] of Object.entries(p.inputs) as [ResourceId, number][]) {
-      state.resources[rid].amount = state.resources[rid].amount.minus(workers * qty);
-    }
+  for (const [rid, qty] of PRODUCER_INPUTS[id]) {
+    state.resources[rid].amount = state.resources[rid].amount.minus(workers * qty);
   }
 }

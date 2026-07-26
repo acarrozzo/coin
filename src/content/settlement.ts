@@ -110,6 +110,9 @@ export const SETTLEMENT_TIERS: SettlementTier[] = [
 
 export const MAX_SETTLEMENT_LEVEL = SETTLEMENT_TIERS[SETTLEMENT_TIERS.length - 1].level;
 
+/** Level → tier index, built once. getTier runs on every capacity read. */
+const TIERS_BY_LEVEL = new Map(SETTLEMENT_TIERS.map((t) => [t.level, t]));
+
 export function getTier(level: number): SettlementTier | undefined {
-  return SETTLEMENT_TIERS.find((t) => t.level === level);
+  return TIERS_BY_LEVEL.get(level);
 }

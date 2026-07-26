@@ -93,6 +93,59 @@ export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
 export const PRODUCER_IDS = Object.keys(PRODUCERS) as ResourceId[];
 
 /**
+ * A producer's `inputs` as a flat array, computed once. The tick and the rate
+ * selectors walk a line's ingredients many times a second; doing it straight off
+ * `PRODUCERS[id].inputs` means an `Object.entries` allocation on every pass.
+ * Input-less lines get a shared empty array.
+ */
+const NO_INPUTS: readonly (readonly [ResourceId, number])[] = [];
+
+export const PRODUCER_INPUTS: Record<ResourceId, readonly (readonly [ResourceId, number])[]> =
+  Object.fromEntries(
+    PRODUCER_IDS.map((id) => {
+      const inputs = PRODUCERS[id]?.inputs;
+      return [
+        id,
+        inputs ? (Object.entries(inputs) as [ResourceId, number][]) : NO_INPUTS,
+      ];
+    }),
+  ) as Record<ResourceId, readonly (readonly [ResourceId, number])[]>;
+
+/** One line's draw on a resource: how much it eats per worker per cycle. */
+export interface ConsumerRef {
+  /** The consuming line (its output resource id). */
+  id: ResourceId;
+  /** Units consumed per worker per cycle. */
+  qty: number;
+  cycleSeconds: number;
+}
+
+/**
+ * Reverse index: for each resource, the lines that consume it as an input.
+ * The net-rate selectors need "who drains wood?" and would otherwise scan all
+ * ~30 producers per resource row, per frame; almost every resource has 0–3
+ * consumers. Derived from PRODUCERS, so a new line indexes itself.
+ */
+export const CONSUMERS_BY_INPUT: Partial<Record<ResourceId, readonly ConsumerRef[]>> = (() => {
+  const index: Partial<Record<ResourceId, ConsumerRef[]>> = {};
+  for (const id of PRODUCER_IDS) {
+    const p = PRODUCERS[id];
+    if (!p) continue;
+    for (const [rid, qty] of PRODUCER_INPUTS[id]) {
+      (index[rid] ??= []).push({ id, qty, cycleSeconds: p.cycleSeconds });
+    }
+  }
+  return index;
+})();
+
+const EMPTY_CONSUMERS: readonly ConsumerRef[] = [];
+
+/** The lines that consume `id` as an input (empty when nothing does). */
+export function getConsumers(id: ResourceId): readonly ConsumerRef[] {
+  return CONSUMERS_BY_INPUT[id] ?? EMPTY_CONSUMERS;
+}
+
+/**
  * Resources allowed to hold decimal amounts — the "handful". Derived, not a
  * hand-kept list: a resource is fractional iff its producer emits less than one
  * whole unit per cycle (the metals iron→adamantium at 0.1…0.0001). Every other

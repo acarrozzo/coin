@@ -26,16 +26,16 @@ import {
 // Structure header icons (also used as the rail's section icons).
 import Trees from '@lucide/svelte/icons/trees';
 import Pickaxe from '@lucide/svelte/icons/pickaxe';
-import Hammer from '@lucide/svelte/icons/hammer';
+import Anvil from '@lucide/svelte/icons/anvil';
 import House from '@lucide/svelte/icons/house';
 import TowerControl from '@lucide/svelte/icons/tower-control';
 import Castle from '@lucide/svelte/icons/castle';
 import Cloud from '@lucide/svelte/icons/cloud';
-import Swords from '@lucide/svelte/icons/swords';
+import Deer from './icons/Deer.svelte';
+import UsersGroup from './icons/UsersGroup.svelte';
 // Rail-only icons for the non-resource sections.
-import Home from '@lucide/svelte/icons/home';
 import Shield from '@lucide/svelte/icons/shield';
-import Store from '@lucide/svelte/icons/store';
+import BuildingStore from './icons/BuildingStore.svelte';
 
 /** The Market (coin economy) unlocks at settlement level 1. */
 export const MARKET_UNLOCK_LEVEL = 1;
@@ -72,21 +72,21 @@ export const GROUP_DEFS: GroupDef[] = [
   {
     key: 'hunterscabin',
     label: "Hunter's Cabin",
-    icon: House,
+    icon: Deer,
     building: 'hunterscabin',
     structures: ['hunterscabin'],
   },
   {
     key: 'blacksmith',
     label: 'Blacksmith',
-    icon: Hammer,
+    icon: Anvil,
     building: 'blacksmith',
     structures: ['blacksmith'],
   },
   {
     key: 'barracks',
     label: 'Barracks',
-    icon: Swords,
+    icon: UsersGroup,
     building: 'barracks',
     structures: ['barracks'],
   },
@@ -179,7 +179,7 @@ export function getNavSections(gs: GameState): NavSection[] {
   sections.push({
     id: 'settlement',
     label: 'Settlement',
-    icon: Home,
+    icon: House,
     count: getTotalWorkers(gs),
     // Flag either affordable action in this section: a settlement upgrade or
     // training the next worker (both live in SettlementPanel).
@@ -215,7 +215,7 @@ export function getNavSections(gs: GameState): NavSection[] {
     sections.push({
       id: 'market',
       label: 'Market',
-      icon: Store,
+      icon: BuildingStore,
       count: 0,
       alert: hasMarketOpportunity(gs) ? 'good' : null,
       separated: true,

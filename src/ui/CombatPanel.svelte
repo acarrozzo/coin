@@ -15,7 +15,7 @@
   import ProducerRow from './ProducerRow.svelte';
   import InfoFlyout from './InfoFlyout.svelte';
   import Star from '@lucide/svelte/icons/star';
-  import Sparkles from '@lucide/svelte/icons/sparkles';
+  import Book from './icons/Book.svelte';
   import Swords from '@lucide/svelte/icons/swords';
   import Skull from '@lucide/svelte/icons/skull';
 
@@ -162,7 +162,7 @@
           {@render trackDetails(hexInfo)}
         </InfoFlyout>
         <span class="honor" title="Wisdom won from resisted hexes">
-          <Sparkles size={16} color="var(--wisdom)" aria-hidden="true" />
+          <Book size={16} color="var(--wisdom)" aria-hidden="true" />
           {formatNumber(gs.resources.wisdom.amount)} Wisdom
         </span>
       </div>

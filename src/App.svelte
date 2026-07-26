@@ -7,7 +7,6 @@
     getAvailableWorkers,
     getTotalWorkers,
     getCapacity,
-    isResourceUnlocked,
   } from './engine/selectors';
   import { RESOURCES, type ResourceId } from './content/resources';
   import { formatNumber } from './engine/numbers';
@@ -21,7 +20,7 @@
   import { getNavSections, isMarketUnlocked } from './ui/sections';
   import Castle from '@lucide/svelte/icons/castle';
   import Settings from '@lucide/svelte/icons/settings';
-  import PersonStanding from '@lucide/svelte/icons/person-standing';
+  import Users from '@lucide/svelte/icons/users';
   import Check from '@lucide/svelte/icons/check';
   import TreePine from '@lucide/svelte/icons/tree-pine';
   import Mountain from '@lucide/svelte/icons/mountain';
@@ -130,8 +129,11 @@
 
   const stores = $derived(
     CORE_STORES.flatMap((s) => {
+      // Gated on the settlement tier granting storage, not on the producing
+      // structure being built: food is gathered from settlement level 1 (cap 3),
+      // well before the Farm exists, and the gauge should be there for it.
       const cap = getCapacity(gs, s.id);
-      if (!isResourceUnlocked(gs, s.id) || !cap) return [];
+      if (!cap || cap.lte(0)) return [];
       const amount = gs.resources[s.id].amount;
       const pct = cap.gt(0) ? Math.min(100, amount.div(cap).toNumber() * 100) : 0;
       return [{ ...s, amount, cap, pct }];
@@ -241,7 +243,7 @@
             </span>
           </span>
         {/if}
-        <PersonStanding class="worker-icon" size={16} color="var(--gold)" aria-hidden="true" />
+        <Users class="worker-icon" size={16} color="var(--gold)" aria-hidden="true" />
         {working}<span class="worker-total">/{total}</span>
       </span>
       <button

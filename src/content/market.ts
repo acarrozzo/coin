@@ -41,11 +41,11 @@ export const SELL_TIER_DEFS: Record<SellableResource, readonly SellTier[]> = {
     { amount: 1_000_000, coin: 100_000 },
   ],
   spear: [
-    { amount: 100, coin: 10 },
-    { amount: 1_000, coin: 100 },
-    { amount: 10_000, coin: 1_000 },
-    { amount: 100_000, coin: 10_000 },
-    { amount: 1_000_000, coin: 100_000 },
+    { amount: 10, coin: 10 },
+    { amount: 1000, coin: 100 },
+    { amount: 10000, coin: 1000 },
+    { amount: 100000, coin: 10000 },    
+    { amount: 1000000, coin: 100000 },
   ],
 };
 
