@@ -165,7 +165,7 @@
                 <span class="lbl">Food Supply {i + 1} — {FOOD_PURCHASE_AMOUNT} food</span>
                 <span class="sub">{FOOD_QUIP[i]}</span>
               </span>
-              <span class="cost-pill" class:short={!ok}>-{FOOD_PURCHASE_COST} coin</span>
+              <span class="cost-pill" class:short={!ok}>−{FOOD_PURCHASE_COST} coin</span>
             </button>
           {/if}
         {/each}
@@ -220,7 +220,7 @@
               <span class="lbl">Rate Display {RATE_UNLOCK_NUMERAL[id]} — {RESOURCES[id].name}</span>
               <span class="sub">{RATE_QUIP[id]}</span>
             </span>
-            <span class="cost-pill" class:short={!ok}>-{RATE_UNLOCK_COST} coin</span>
+            <span class="cost-pill" class:short={!ok}>−{RATE_UNLOCK_COST} coin</span>
           </button>
         {/if}
       {/each}
@@ -244,7 +244,7 @@
             <span class="lbl">Worker Contract {'I'.repeat(n)} — +{nextContract.workers} worker{nextContract.workers > 1 ? 's' : ''}</span>
             <span class="sub">{CONTRACT_QUIP[gs.market.workerContract]}</span>
           </span>
-          <span class="cost-pill" class:short={!ok}>-{nextContract.cost} coin</span>
+          <span class="cost-pill" class:short={!ok}>−{nextContract.cost} coin</span>
         </button>
       {/if}
     </div>
@@ -428,13 +428,20 @@
   .tier-label + .sub-label {
     margin-top: 0;
   }
+  /* Icon column on the left, title + quip beside it, and the price tag on its
+     own line underneath — so the price reads as the consequence of the content
+     above it rather than competing with it across the row. */
   .buy {
-    display: inline-flex;
-    flex-direction: row;
+    display: inline-grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      'icon main'
+      '.    price';
     align-items: center;
-    justify-content: flex-start;
-    gap: 10px;
-    padding: 8px 10px 8px 12px;
+    justify-items: start;
+    column-gap: 10px;
+    row-gap: 8px;
+    padding: 8px 12px;
     font-size: 15px;
     text-align: left;
     border: 1px solid var(--border);
@@ -446,18 +453,26 @@
   button.buy:hover:not(:disabled) {
     background: color-mix(in srgb, var(--accent) 28%, transparent);
   }
-  /* Unaffordable buttons stay at full opacity — the label has to remain legible
-     so you can read what you're working toward. The flattened background plus
-     the red cost/gain pill carry the "can't do this yet" signal instead. */
+  /* Unaffordable buttons drop to muted text — still readable enough to see what
+     you're working toward, but clearly recessed against the ones you can press.
+     The flattened background and the red price tag finish the signal. */
   button.buy:disabled {
     background: transparent;
     border-color: color-mix(in srgb, var(--border) 60%, transparent);
+    color: var(--text-muted);
     cursor: not-allowed;
   }
   button.buy:disabled .bicon {
-    color: var(--text-muted);
+    color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+  }
+  button.buy:disabled .sub {
+    color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+  }
+  .buy .bicon {
+    grid-area: icon;
   }
   .buy-main {
+    grid-area: main;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -491,36 +506,42 @@
   .done-item .bicon {
     color: inherit;
   }
-  /* Two pills, deliberately different: coin you PAY reads gold (.cost-pill, on
-     every buy), coin you RECEIVE reads green (.gain-pill, on every sell). Same
-     shape and position, so the only thing that changes is the direction of the
-     coin. Both turn red when the button can't be pressed. */
+  /* Two price tags: coin you PAY (.cost-pill, every buy) vs coin you RECEIVE
+     (.gain-pill, every sell). Colour alone can't carry the difference — both go
+     red when the button is unpressable — so the SHAPE is the tell and it holds
+     in every state: a gain is a solid rounded capsule, a cost is a squared,
+     dashed, hollow tag. Read the outline, not the sign. */
   .cost-pill,
   .gain-pill {
-    margin-left: auto;
+    grid-area: price;
     display: inline-flex;
     align-items: center;
+    gap: 5px;
     padding: 3px 10px;
-    border-radius: 999px;
     font-size: 13px;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .cost-pill {
-    background: color-mix(in srgb, var(--gold) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--gold) 28%, transparent);
-    color: var(--gold);
   }
   .gain-pill {
-    background: color-mix(in srgb, var(--good) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--good) 32%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--good) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--good) 45%, transparent);
     color: var(--good);
+    font-weight: 600;
   }
-  .cost-pill.short,
+  .cost-pill {
+    border-radius: 3px;
+    background: transparent;
+    border: 1px dashed color-mix(in srgb, var(--gold) 55%, transparent);
+    color: var(--gold);
+  }
   .gain-pill.short {
-    background: color-mix(in srgb, var(--bad) 10%, transparent);
-    border-color: color-mix(in srgb, var(--bad) 25%, transparent);
+    background: color-mix(in srgb, var(--bad) 22%, transparent);
+    border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+    color: var(--bad);
+  }
+  .cost-pill.short {
+    border-color: color-mix(in srgb, var(--bad) 50%, transparent);
     color: var(--bad);
   }
 

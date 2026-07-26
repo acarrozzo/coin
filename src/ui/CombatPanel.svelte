@@ -44,15 +44,18 @@
     lossAmount: number;
   }
 
-  function trackInfo(cfg: ThreatConfig, opts: {
-    accent: string;
-    worker: string;
-    capBuilding: string;
-    incoming: Decimal;
-    holding: boolean;
-    wins: number;
-    losses: number;
-  }): TrackInfo {
+  function trackInfo(
+    cfg: ThreatConfig,
+    opts: {
+      accent: string;
+      worker: string;
+      capBuilding: string;
+      incoming: Decimal;
+      holding: boolean;
+      wins: number;
+      losses: number;
+    },
+  ): TrackInfo {
     const statNow = gs.resources[cfg.defenseStat].amount;
     const statMax = getCapacity(gs, cfg.defenseStat);
     return {
@@ -113,7 +116,9 @@
 </script>
 
 {#if isCombatUnlocked(gs)}
-  <section class="panel" data-nav="combat">
+  <!-- Both tracks live in one panel, but each is its own rail target so the
+       Assault / Hex buttons can scroll straight to the track that needs feeding. -->
+  <section class="panel" data-nav="combat:assault">
     <!-- Assault header: level, incoming countdown bar, honor -->
     <div class="chead">
       <h2>
@@ -134,7 +139,9 @@
     </div>
 
     <p class="verdict-line">
-      <span class="req">Wave {gs.combat.assault.wave + 1} hits for {formatNumber(getNextAssaultPower(gs))} —</span>
+      <span class="req"
+        >Wave {gs.combat.assault.wave + 1} hits for {formatNumber(getNextAssaultPower(gs))} —</span
+      >
       {#if willRepelAssault(gs)}
         <span class="ok">your walls will hold</span>
       {:else}
@@ -149,40 +156,43 @@
 
     <!-- Hex track -->
     {#if isHexUnlocked(gs)}
-      <div class="chead hex-head">
-        <h2>
-          <Skull size={22} color="var(--wisdom)" aria-hidden="true" />
-          Hex <span class="lvl">Trial {gs.combat.hex.wave + 1}</span>
-        </h2>
-        <div class="incoming" title="Time until the next hex">
-          <span class="in-label">Incoming in {countdown(gs.combat.hex.timer)}</span>
-          <span class="bar"><span class="bar-fill" style:width="{hexProgressPct}%"></span></span>
+      <div data-nav="combat:hex">
+        <div class="chead hex-head">
+          <h2>
+            <Skull size={22} color="var(--wisdom)" aria-hidden="true" />
+            Hex <span class="lvl">Trial {gs.combat.hex.wave + 1}</span>
+          </h2>
+          <div class="incoming" title="Time until the next hex">
+            <span class="in-label">Incoming in {countdown(gs.combat.hex.timer)}</span>
+            <span class="bar"><span class="bar-fill" style:width="{hexProgressPct}%"></span></span>
+          </div>
+          <InfoFlyout label="Hex details" accent="var(--wisdom)">
+            {@render trackDetails(hexInfo)}
+          </InfoFlyout>
+          <span class="honor" title="Wisdom won from resisted hexes">
+            <Book size={16} color="var(--wisdom)" aria-hidden="true" />
+            {formatNumber(gs.resources.wisdom.amount)} Wisdom
+          </span>
         </div>
-        <InfoFlyout label="Hex details" accent="var(--wisdom)">
-          {@render trackDetails(hexInfo)}
-        </InfoFlyout>
-        <span class="honor" title="Wisdom won from resisted hexes">
-          <Book size={16} color="var(--wisdom)" aria-hidden="true" />
-          {formatNumber(gs.resources.wisdom.amount)} Wisdom
-        </span>
-      </div>
 
-      <p class="verdict-line">
-        <span class="req"
-          >Trial {gs.combat.hex.wave + 1} hits for {formatNumber(getNextHexPower(gs))} · ward {formatNumber(
-            ward,
-          )}{#if wardMax} / {formatNumber(wardMax)}{/if} —</span
-        >
-        {#if willBreakHex(gs)}
-          <span class="ok">your wards will resist</span>
-        {:else}
-          <span class="bad">the hex will land</span>
-        {/if}
-        <span class="tally">· {gs.combat.hex.wins}W / {gs.combat.hex.losses}L</span>
-      </p>
+        <p class="verdict-line">
+          <span class="req"
+            >Trial {gs.combat.hex.wave + 1} hits for {formatNumber(getNextHexPower(gs))} · ward {formatNumber(
+              ward,
+            )}{#if wardMax}
+              / {formatNumber(wardMax)}{/if} —</span
+          >
+          {#if willBreakHex(gs)}
+            <span class="ok">your wards will resist</span>
+          {:else}
+            <span class="bad">the hex will land</span>
+          {/if}
+          <span class="tally">· {gs.combat.hex.wins}W / {gs.combat.hex.losses}L</span>
+        </p>
 
-      <div class="def-row">
-        <ProducerRow id="ward" showCap />
+        <div class="def-row">
+          <ProducerRow id="ward" showCap />
+        </div>
       </div>
     {/if}
   </section>
@@ -193,22 +203,37 @@
     Dedicate {t.worker} to raise <strong>{t.statName}</strong> (up to your {t.capBuilding}'s cap).
   </p>
   <dl class="fly-stats">
-    <div><dt>{t.statName}</dt><dd>{t.statNow}{#if t.statMax} / {t.statMax}{/if}</dd></div>
-    <div><dt>Incoming</dt><dd>{t.incoming}</dd></div>
+    <div>
+      <dt>{t.statName}</dt>
+      <dd>
+        {t.statNow}{#if t.statMax}
+          / {t.statMax}{/if}
+      </dd>
+    </div>
+    <div>
+      <dt>Incoming</dt>
+      <dd>{t.incoming}</dd>
+    </div>
     <div>
       <dt>Margin</dt>
       <dd class={t.holding ? 'ok' : 'bad'}>{t.margin}</dd>
     </div>
-    <div><dt>Every</dt><dd>{t.interval}s</dd></div>
-    <div><dt>Record</dt><dd>{t.wins}W / {t.losses}L</dd></div>
+    <div>
+      <dt>Every</dt>
+      <dd>{t.interval}s</dd>
+    </div>
+    <div>
+      <dt>Record</dt>
+      <dd>{t.wins}W / {t.losses}L</dd>
+    </div>
   </dl>
   <ul class="fly-outcomes">
     <li>
       <span class="ok">Win</span> +1 {t.rewardName}; next hit escalates to {t.nextAfterWin}.
     </li>
     <li>
-      <span class="bad">Loss</span> −{t.lossAmount} {t.statName}. If it hits 0, your {wipeNames} are
-      looted and the wave resets.
+      <span class="bad">Loss</span> −{t.lossAmount}
+      {t.statName}. If it hits 0, your {wipeNames} are looted and the wave resets.
     </li>
   </ul>
   <p class="fly-tip">

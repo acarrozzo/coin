@@ -11,11 +11,13 @@
     getMaxWorkers,
     getStructureLevel,
     getNextBuildingLevel,
+    isNextBuildingLevelGated,
     canBuild,
     canStartCycle,
     getNetProductionRate,
     getLiveNetProductionRate,
     isRateUnlocked,
+    isStorageFull,
     splitCost,
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate, formatSignedRate } from '../engine/numbers';
@@ -111,6 +113,7 @@
       {@const GroupIcon = group.icon}
       {@const level = group.building ? getStructureLevel(gs, group.building) : 0}
       {@const next = group.building ? getNextBuildingLevel(gs, group.building) : null}
+      {@const gated = group.building ? isNextBuildingLevelGated(gs, group.building) : false}
       {@const buildName = group.building ? BUILDINGS[group.building].name : ''}
       <div class="group" data-nav="group:{group.key}" transition:fly={{ y: 10, duration: 300 }}>
         <header class="ghead">
@@ -129,7 +132,9 @@
           {/if}
         </header>
 
-        {#if !group.upgradeInFooter && next}
+        <!-- A settlement-gated next level shows nothing at all: no summary, no
+             cost, no button. It reappears when the settlement reaches its tier. -->
+        {#if !group.upgradeInFooter && next && !gated}
           <div class="upgrade-row">
             <button
               class="upgrade"
@@ -174,6 +179,11 @@
               <span class="label">
                 <span class="amount">{formatNumber(gs.resources[id].amount, resourceDecimals(id))}</span>
                 <span class="name" class:jumped={highlighted === id}>{RESOURCES[id].name}</span>
+                {#if isStorageFull(gs, id)}
+                  <span class="at-cap" title="{RESOURCES[id].name} storage is full — upgrade to raise the cap."
+                    >MAX</span
+                  >
+                {/if}
                 {#each game.pops.filter((p) => p.id === id) as p (p.seq)}
                   <span class="pop">+{formatNumber(p.amount)}</span>
                 {/each}
@@ -243,7 +253,7 @@
           {/each}
         </div>
 
-        {#if group.upgradeInFooter && group.building && gs.level >= 2}
+        {#if group.upgradeInFooter && group.building && gs.level >= 2 && !gated}
           {@const fLevel = getStructureLevel(gs, group.building)}
           {@const fNext = getNextBuildingLevel(gs, group.building)}
           <div class="footer">
@@ -486,6 +496,19 @@
         opacity: 0;
       }
     }
+  }
+  /* Storage-full chip, sits between the amount and the resource name. */
+  .at-cap {
+    align-self: center;
+    padding: 0 4px;
+    border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--gold) 14%, transparent);
+    color: var(--gold);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    line-height: 1.5;
   }
   .name {
     margin-left: 2px;

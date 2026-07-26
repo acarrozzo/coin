@@ -53,6 +53,11 @@
   --bad: #c62828;
   --gold: #b8860b;
   --wisdom: #9159a8;
+  /* "Needs attention" amber — sits between the gold opportunity dot and the red
+     danger one. Derived, not hand-picked, so every palette gets it for free:
+     var() here resolves against whichever --gold/--bad are in effect. A palette
+     that wants its own can still override --warn directly. */
+  --warn: color-mix(in srgb, var(--gold) 55%, var(--bad));
 }
 
 /* Dark theme — explicit override */

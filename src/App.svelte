@@ -3,11 +3,7 @@
   import { onMount } from 'svelte';
   import { game } from './ui/gameStore.svelte';
   import { sound } from './ui/sound.svelte';
-  import {
-    getAvailableWorkers,
-    getTotalWorkers,
-    getCapacity,
-  } from './engine/selectors';
+  import { getAvailableWorkers, getTotalWorkers, getCapacity } from './engine/selectors';
   import { RESOURCES, type ResourceId } from './content/resources';
   import { formatNumber } from './engine/numbers';
   import SettlementPanel from './ui/SettlementPanel.svelte';
@@ -190,110 +186,116 @@
 <div class="topstack" bind:clientHeight={headerH}>
   <header>
     <div class="header-inner">
-    <h1>
-      <Castle size={18} color="var(--gold)" aria-hidden="true" />
-      <span class="wordmark">Coin &amp; Castle</span>
-      <span class="stat level-badge" class:leveled title="Settlement level">Lv {gs.level}</span>
-    </h1>
+      <h1>
+        <Castle size={18} color="var(--gold)" aria-hidden="true" />
+        <span class="wordmark">Coin &amp; Castle</span>
+        <span class="stat level-badge" class:leveled title="Settlement level">Lv {gs.level}</span>
+      </h1>
 
-    {#if gs.workers.trained >= 1 && stores.length > 0}
-      <div class="stores">
-        {#each stores as s (s.id)}
-          {@const Icon = s.icon}
-          <div
-            class="store"
-            title="{RESOURCES[s.id].name}: {formatNumber(s.amount)} / {formatNumber(s.cap)}"
-          >
-            <Icon size={14} color="var(--gold)" aria-hidden="true" />
-            <span class="store-num"
-              >{formatNumber(s.amount)}<span class="store-cap">/{formatNumber(s.cap)}</span></span
+      {#if gs.workers.trained >= 1 && stores.length > 0}
+        <div class="stores">
+          {#each stores as s (s.id)}
+            {@const Icon = s.icon}
+            <div
+              class="store"
+              title="{RESOURCES[s.id].name}: {formatNumber(s.amount)} / {formatNumber(s.cap)}"
             >
-            <span class="store-bar"><span class="store-fill" style:width="{s.pct}%"></span></span>
-          </div>
-        {/each}
-      </div>
-    {/if}
+              <Icon size={14} color="var(--gold)" aria-hidden="true" />
+              <span class="store-num"
+                >{formatNumber(s.amount)}<span class="store-cap">/{formatNumber(s.cap)}</span></span
+              >
+              <span class="store-bar"><span class="store-fill" style:width="{s.pct}%"></span></span>
+            </div>
+          {/each}
+        </div>
+      {/if}
 
-    <div class="hud">
-      <span class="stat worker-stat" title="Working / total workers">
-        {#if total > 0}
-          <span
-            class="worker-badge"
-            class:idle={available > 0}
-            class:done={available === 0}
-            role="status"
-            aria-label={available > 0
-              ? `${available} idle worker${available === 1 ? '' : 's'}`
-              : 'All workers assigned'}
-          >
-            {#if available > 0}
-              {formatNumber(available)}
-            {:else}
-              <Check size={12} strokeWidth={3.5} aria-hidden="true" />
-            {/if}
-            <span class="idle-flyout" role="tooltip">
-              <strong>
-                {#if available > 0}
-                  {available} worker{available === 1 ? '' : 's'} standing around
-                {:else}
-                  All workers assigned
-                {/if}
-              </strong>
-              <span class="idle-quip">{workerQuip}</span>
+      <div class="hud">
+        <span class="stat worker-stat" title="Working / total workers">
+          {#if total > 0}
+            <span
+              class="worker-badge"
+              class:idle={available > 0}
+              class:done={available === 0}
+              role="status"
+              aria-label={available > 0
+                ? `${available} idle worker${available === 1 ? '' : 's'}`
+                : 'All workers assigned'}
+            >
+              {#if available > 0}
+                {formatNumber(available)}
+              {:else}
+                <Check size={12} strokeWidth={3.5} aria-hidden="true" />
+              {/if}
+              <span class="idle-flyout" role="tooltip">
+                <strong>
+                  {#if available > 0}
+                    {available} worker{available === 1 ? '' : 's'} standing around
+                  {:else}
+                    All workers assigned
+                  {/if}
+                </strong>
+                <span class="idle-quip">{workerQuip}</span>
+              </span>
             </span>
-          </span>
-        {/if}
-        <Users class="worker-icon" size={16} color="var(--gold)" aria-hidden="true" />
-        {working}<span class="worker-total">/{total}</span>
-      </span>
-      <button
-        class="gear"
-        class:active={settingsOpen}
-        onclick={() => (settingsOpen = !settingsOpen)}
-        aria-pressed={settingsOpen}
-        aria-label="Settings"
-        title="Settings"
-      >
-        <Settings size={18} aria-hidden="true" />
-      </button>
+          {/if}
+          <Users class="worker-icon" size={16} color="var(--gold)" aria-hidden="true" />
+          {working}<span class="worker-total">/{total}</span>
+        </span>
+        <button
+          class="gear"
+          class:active={settingsOpen}
+          onclick={() => (settingsOpen = !settingsOpen)}
+          aria-pressed={settingsOpen}
+          aria-label="Settings"
+          title="Settings"
+        >
+          <Settings size={18} aria-hidden="true" />
+        </button>
+      </div>
     </div>
-  </div>
   </header>
 </div>
 
 <div class="layout" style="--header-h: {headerH}px">
   <!-- Left jump rail: one button per visible section. Clicking scrolls to it;
-       a dot flags an affordable upgrade (gold) or combat danger (red), and a
+       a dot flags an affordable upgrade (gold) or an under-supplied threat
+       track (amber), and a
        badge shows the workers assigned there. On mobile it floats at the left
        edge, mirroring the panel rail on the right. -->
   {#if gs.workers.trained >= 1}
-  <nav class="jump-rail" aria-label="Jump to section">
-    {#each navSections as s (s.id)}
-      {@const Icon = s.icon}
-      {#if s.separated}
-        <span class="rail-divider" aria-hidden="true"></span>
-      {/if}
-      <button
-        class="jump-btn"
-        class:active={activeSection === s.id}
-        onclick={() => jumpTo(s.id)}
-        aria-label={s.label}
-        aria-current={activeSection === s.id ? 'true' : undefined}
-        onmouseenter={(e) => showTip(e, s.label, 'right')}
-        onmouseleave={hideTip}
-        onfocus={(e) => showTip(e, s.label, 'right')}
-        onblur={hideTip}
-      >
-        <Icon size={20} aria-hidden="true" />
-        {#if s.alert}
-          <span class="dot" class:bad={s.alert === 'bad'} aria-hidden="true"></span>
+    <nav class="jump-rail" aria-label="Jump to section">
+      {#each navSections as s (s.id)}
+        {@const Icon = s.icon}
+        {#if s.separated}
+          <span class="rail-divider" aria-hidden="true"></span>
         {/if}
-        {#if s.count > 0}
-          <span class="count-badge" aria-hidden="true">{s.count}</span>
-        {/if}
-      </button>
-    {/each}
-  </nav>
+        <button
+          class="jump-btn"
+          class:active={activeSection === s.id}
+          onclick={() => jumpTo(s.id)}
+          aria-label={s.label}
+          aria-current={activeSection === s.id ? 'true' : undefined}
+          onmouseenter={(e) => showTip(e, s.label, 'right')}
+          onmouseleave={hideTip}
+          onfocus={(e) => showTip(e, s.label, 'right')}
+          onblur={hideTip}
+        >
+          <Icon size={20} aria-hidden="true" />
+          {#if s.alert}
+            <span
+              class="dot"
+              class:warn={s.alert === 'warn'}
+              class:bad={s.alert === 'bad'}
+              aria-hidden="true"
+            ></span>
+          {/if}
+          {#if s.count > 0}
+            <span class="count-badge" aria-hidden="true">{s.count}</span>
+          {/if}
+        </button>
+      {/each}
+    </nav>
   {/if}
 
   <div class="app">
@@ -324,11 +326,9 @@
   {/if}
 
   {#if tip}
-    <span
-      class="rail-flyout {tip.side}"
-      role="tooltip"
-      style="left: {tip.x}px; top: {tip.y}px"
-    >{tip.text}</span>
+    <span class="rail-flyout {tip.side}" role="tooltip" style="left: {tip.x}px; top: {tip.y}px"
+      >{tip.text}</span
+    >
   {/if}
 </div>
 
@@ -387,7 +387,10 @@
     box-shadow: var(--panel-shadow);
     color: var(--text-muted);
     cursor: pointer;
-    transition: color var(--transition), background var(--transition), border-color var(--transition);
+    transition:
+      color var(--transition),
+      background var(--transition),
+      border-color var(--transition);
   }
   .jump-btn:hover {
     color: var(--text);
@@ -449,6 +452,9 @@
     border-radius: 999px;
     background: var(--gold);
     box-shadow: 0 0 0 2px var(--bg-panel);
+  }
+  .dot.warn {
+    background: var(--warn);
   }
   .dot.bad {
     background: var(--bad);
@@ -584,7 +590,10 @@
     border-radius: var(--radius);
     color: var(--text-on-header);
     cursor: pointer;
-    transition: color var(--transition), background var(--transition), border-color var(--transition);
+    transition:
+      color var(--transition),
+      background var(--transition),
+      border-color var(--transition);
   }
   .gear:hover {
     color: var(--gold);
@@ -660,11 +669,15 @@
     0%,
     100% {
       border-color: var(--bad);
-      box-shadow: 0 0 0 2px var(--bg-header), 0 0 0 0 color-mix(in srgb, var(--bad) 60%, transparent);
+      box-shadow:
+        0 0 0 2px var(--bg-header),
+        0 0 0 0 color-mix(in srgb, var(--bad) 60%, transparent);
     }
     50% {
       border-color: color-mix(in srgb, var(--bad) 35%, transparent);
-      box-shadow: 0 0 0 2px var(--bg-header), 0 0 0 5px transparent;
+      box-shadow:
+        0 0 0 2px var(--bg-header),
+        0 0 0 5px transparent;
     }
   }
   /* Hover flyout with the count + a quip. */
@@ -691,7 +704,9 @@
     opacity: 0;
     transform: translateY(-4px);
     pointer-events: none;
-    transition: opacity 0.15s ease, transform 0.15s ease;
+    transition:
+      opacity 0.15s ease,
+      transform 0.15s ease;
   }
   .worker-badge:hover .idle-flyout,
   .worker-badge:focus-visible .idle-flyout {

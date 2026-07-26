@@ -2,12 +2,7 @@ import { Decimal, D } from './numbers';
 import type { GameState, ResourceId, BuildingId } from './state';
 import { RESOURCE_IDS, isConsumableResource } from '../content/resources';
 import { BUILDINGS } from '../content/buildings';
-import {
-  PRODUCERS,
-  PRODUCER_INPUTS,
-  getConsumers,
-  type StructureId,
-} from '../content/producers';
+import { PRODUCERS, PRODUCER_INPUTS, getConsumers, type StructureId } from '../content/producers';
 import { getTier, SETTLEMENT_TIERS, type ResourceCost } from '../content/settlement';
 import { ASSAULT, HEX, type ThreatConfig } from '../content/combat';
 import {
@@ -86,6 +81,16 @@ export function getCapacity(state: GameState, id: ResourceId): Decimal | null {
 export function isAtCapacity(state: GameState, id: ResourceId): boolean {
   const cap = getCapacity(state, id);
   return cap !== null && state.resources[id].amount.gte(cap);
+}
+
+/**
+ * Display-facing "storage full": at capacity AND that capacity is real. A cap of
+ * 0 (defense/ward before their building exists) is at-capacity for production
+ * purposes but shouldn't read as "full" to the player.
+ */
+export function isStorageFull(state: GameState, id: ResourceId): boolean {
+  const cap = getCapacity(state, id);
+  return cap !== null && cap.gt(0) && state.resources[id].amount.gte(cap);
 }
 
 /**
@@ -247,6 +252,18 @@ export function isBuildingMaxed(state: GameState, id: BuildingId): boolean {
   return getNextBuildingLevel(state, id) === null;
 }
 
+/**
+ * The next level exists but is locked behind a settlement tier you haven't
+ * reached (its `requiresLevel`). The UI hides such an upgrade outright rather
+ * than dangling an unpressable button — settlement level is not something you
+ * can act on from a building card, so there is nothing to work toward there.
+ * Distinct from the building's own `availableAtLevel` gate, which still shows.
+ */
+export function isNextBuildingLevelGated(state: GameState, id: BuildingId): boolean {
+  const next = getNextBuildingLevel(state, id);
+  return !!next?.requiresLevel && state.level < next.requiresLevel;
+}
+
 export function canBuild(state: GameState, id: BuildingId): boolean {
   if (!isBuildingAvailable(state, id)) return false;
   const next = getNextBuildingLevel(state, id);
@@ -315,6 +332,21 @@ export function willBreakHex(state: GameState): boolean {
   return getDefenseStat(state, HEX).gte(getNextHexPower(state));
 }
 
+/**
+ * Does a threat track need supplying? True when its stat sits below the cap its
+ * building allows, or when its line isn't fully staffed — either way the player
+ * has slack to take up. A cap of 0 (building not yet raised) returns false:
+ * there's nothing actionable on the line until the structure exists.
+ */
+export function needsThreatSupply(state: GameState, stat: 'defense' | 'ward'): boolean {
+  const cap = getCapacity(state, stat);
+  if (cap === null || cap.lte(0)) return false;
+  return (
+    state.resources[stat].amount.lt(cap) ||
+    (state.workers.assigned[stat] ?? 0) < getMaxWorkers(state, stat)
+  );
+}
+
 // ---------- Market ----------
 
 /** The next unsold tier for a sellable resource, or null once all tiers are sold. */
@@ -354,8 +386,10 @@ export function canBuyWorkerContract(state: GameState): boolean {
 
 /** Can the next food purchase be made — slots remain and coin is on hand. */
 export function canBuyFood(state: GameState): boolean {
-  return state.market.foodBought < FOOD_PURCHASE_COUNT &&
-    state.resources.coin.amount.gte(FOOD_PURCHASE_COST);
+  return (
+    state.market.foodBought < FOOD_PURCHASE_COUNT &&
+    state.resources.coin.amount.gte(FOOD_PURCHASE_COST)
+  );
 }
 
 /** True if any Market action is currently available. */

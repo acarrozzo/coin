@@ -18,8 +18,7 @@ import {
   canUpgradeSettlement,
   canTrainWorker,
   getTotalWorkers,
-  willRepelAssault,
-  willBreakHex,
+  needsThreatSupply,
   hasMarketOpportunity,
 } from '../engine/selectors';
 
@@ -34,7 +33,8 @@ import Cloud from '@lucide/svelte/icons/cloud';
 import Deer from './icons/Deer.svelte';
 import UsersGroup from './icons/UsersGroup.svelte';
 // Rail-only icons for the non-resource sections.
-import Shield from '@lucide/svelte/icons/shield';
+import Swords from '@lucide/svelte/icons/swords';
+import Skull from '@lucide/svelte/icons/skull';
 import BuildingStore from './icons/BuildingStore.svelte';
 
 /** The Market (coin economy) unlocks at settlement level 1. */
@@ -162,8 +162,11 @@ export interface NavSection {
   icon: Component;
   /** Workers assigned to this section (0 = hide the badge). */
   count: number;
-  /** 'good' = an affordable build/upgrade waits here; 'bad' = combat danger. */
-  alert: 'good' | 'bad' | null;
+  /**
+   * 'good' = an affordable build/upgrade waits here; 'warn' = a threat track is
+   * under-supplied (stat below cap, or line unstaffed); 'bad' = danger.
+   */
+  alert: 'good' | 'warn' | 'bad' | null;
   /** Render a divider before this button — separates the shop from the main sections. */
   separated?: boolean;
 }
@@ -186,16 +189,25 @@ export function getNavSections(gs: GameState): NavSection[] {
     alert: canUpgradeSettlement(gs) || canTrainWorker(gs) ? 'good' : null,
   });
 
+  // The two threat tracks share one panel but get their own rail buttons — each
+  // flags only its own supply problem, so the player knows which one to feed.
   if (isCombatUnlocked(gs)) {
-    const hex = isHexUnlocked(gs);
-    const count = (gs.workers.assigned.defense ?? 0) + (hex ? (gs.workers.assigned.ward ?? 0) : 0);
-    const danger = !willRepelAssault(gs) || (hex && !willBreakHex(gs));
     sections.push({
-      id: 'combat',
-      label: 'Defense',
-      icon: Shield,
-      count,
-      alert: danger ? 'bad' : null,
+      id: 'combat:assault',
+      label: 'Assault',
+      icon: Swords,
+      count: gs.workers.assigned.defense ?? 0,
+      alert: needsThreatSupply(gs, 'defense') ? 'warn' : null,
+    });
+  }
+
+  if (isHexUnlocked(gs)) {
+    sections.push({
+      id: 'combat:hex',
+      label: 'Hex',
+      icon: Skull,
+      count: gs.workers.assigned.ward ?? 0,
+      alert: needsThreatSupply(gs, 'ward') ? 'warn' : null,
     });
   }
 
