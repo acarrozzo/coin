@@ -124,7 +124,7 @@ function isId<T extends readonly Option[]>(opts: T, v: string | null): v is T[nu
 function createLookStore() {
   // Migrate the original light/dark toggle into the palette axis.
   const legacyTheme = localStorage.getItem('cc:theme');
-  const defaultPalette: PaletteId = legacyTheme === 'light' ? 'paper' : 'nord';
+  const defaultPalette: PaletteId = legacyTheme === 'light' ? 'paper' : 'dungeon';
 
   const savedPalette = localStorage.getItem(KEYS.palette);
   const savedFont = localStorage.getItem(KEYS.font);

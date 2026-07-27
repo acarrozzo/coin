@@ -91,7 +91,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     availableAtLevel: 3,
     levels: [
       { cost: { wood: 100, stone: 50 }, summary: 'Unlocks spear crafting.' },
-      { cost: { wood: 200, spear: 10 }, summary: 'Unlocks leather.', requiresLevel: 4 },
+      { cost: { wood: 200, arrow: 50 }, summary: 'Unlocks leather.', requiresLevel: 4 },
       { cost: { wood: 400, spear: 100 }, summary: 'Unlocks fur.', requiresLevel: 5 },
       { cost: { wood: 800, sword: 10 }, summary: 'Unlocks troll skulls.', requiresLevel: 6 },
       { cost: { wood: 800, ether: 10 }, summary: 'Unlocks dragon bones.', requiresLevel: 7 },

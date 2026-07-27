@@ -12,7 +12,7 @@
     splitCost,
   } from '../engine/selectors';
   import { formatNumber } from '../engine/numbers';
-  import Users from '@lucide/svelte/icons/users';
+  import User from '@lucide/svelte/icons/user';
 
   const gs = $derived(game.state);
   const tier = $derived(getTier(gs.level));
@@ -55,7 +55,7 @@
             {#if next.workersRequired}
               {@const met = gs.workers.trained >= next.workersRequired}
               <span class="cost-item req-only" class:short={!met} class:met>
-                {next.workersRequired} <Users
+                {next.workersRequired} <User
                   size={13}
                   color="var(--gold)"
                   aria-hidden="true"
@@ -83,7 +83,9 @@
 
   <div class="workers">
     <div class="info">
-      <span class="name">Workers</span>
+      <span class="name">
+        <User size={20} color="var(--gold)" aria-hidden="true" />Workers
+      </span>
       <span class="blurb">{available} idle · {total} total</span>
     </div>
     <div class="action">
@@ -126,6 +128,11 @@
   .name {
     font-family: var(--font-display);
     font-size: 24px;
+  }
+  .workers .name {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
   /* Only the settlement's own name is enlarged — the Workers header keeps the
      base size. */

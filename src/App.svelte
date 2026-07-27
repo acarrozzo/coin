@@ -31,7 +31,7 @@
   import ScrollText from '@lucide/svelte/icons/scroll-text';
   import BuildingStore from './ui/icons/BuildingStore.svelte';
   import Settings from '@lucide/svelte/icons/settings';
-  import Users from '@lucide/svelte/icons/users';
+  import User from '@lucide/svelte/icons/user';
   import Check from '@lucide/svelte/icons/check';
   import TreePine from '@lucide/svelte/icons/tree-pine';
   import Mountain from '@lucide/svelte/icons/mountain';
@@ -343,7 +343,7 @@
               </span>
             </span>
           {/if}
-          <Users class="worker-icon" size={16} color="var(--gold)" aria-hidden="true" />
+          <User class="worker-icon" size={16} color="var(--gold)" aria-hidden="true" />
           {working}<span class="worker-total">/{total}</span>
         </span>
         <button
