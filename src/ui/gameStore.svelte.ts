@@ -1,7 +1,17 @@
-import { createInitialState, type GameState, type ResourceId, type BuildingId } from '../engine/state';
+import {
+  createInitialState,
+  type GameState,
+  type ResourceId,
+  type BuildingId,
+} from '../engine/state';
 import { D, type Decimal } from '../engine/numbers';
 import { tick } from '../engine/tick';
-import { applyOffline, simulate, MAX_OFFLINE_SECONDS, type OfflineSummary } from '../engine/offline';
+import {
+  applyOffline,
+  simulate,
+  MAX_OFFLINE_SECONDS,
+  type OfflineSummary,
+} from '../engine/offline';
 import {
   loadFromStorage,
   saveToStorage,
@@ -12,13 +22,13 @@ import {
 import {
   assignWorker,
   trainWorker,
-  sellResourceTier,
+  sellResource,
   buyRateUnlock,
   buyWorkerContract,
   buyFood,
 } from '../engine/actions';
-import { RATE_UNLOCK_NUMERAL } from '../content/market';
-import type { SellableResource, RateUnlockResource } from '../content/market';
+import { SELL_OFFERS } from '../content/market';
+import type { SellableResource, RateUnlockResource, WorkerContractId } from '../content/market';
 import { RESOURCES } from '../content/resources';
 import { buildBuilding } from '../systems/buildings';
 import { upgradeSettlement } from '../systems/settlement';
@@ -225,21 +235,21 @@ function createGameStore() {
       }
     },
     sell(id: SellableResource): void {
-      if (sellResourceTier(state, id)) {
-        notify.push(`You sell ${RESOURCES[id].name.toLowerCase()}s for coin.`, 'good');
+      if (sellResource(state, id)) {
+        notify.push(`You sell ${SELL_OFFERS[id].noun} for coin.`, 'good');
         sound.play.build();
         persist();
       }
     },
     unlockRate(id: RateUnlockResource): void {
       if (buyRateUnlock(state, id)) {
-        notify.push(`Rate Display ${RATE_UNLOCK_NUMERAL[id]} unlocked.`, 'good');
+        notify.push(`${RESOURCES[id].name} Rate Display unlocked.`, 'good');
         sound.play.build();
         persist();
       }
     },
-    buyWorkerContract(): void {
-      if (buyWorkerContract(state)) {
+    buyWorkerContract(id: WorkerContractId): void {
+      if (buyWorkerContract(state, id)) {
         notify.push('Worker Contract signed — new workers join the pool.', 'good');
         sound.play.train();
         persist();

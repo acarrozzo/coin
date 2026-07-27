@@ -6,17 +6,17 @@ import { PRODUCERS, PRODUCER_INPUTS, getConsumers, type StructureId } from '../c
 import { getTier, SETTLEMENT_TIERS, type ResourceCost } from '../content/settlement';
 import { ASSAULT, HEX, type ThreatConfig } from '../content/combat';
 import {
-  SELL_TIER_DEFS,
+  SELL_OFFERS,
   SELLABLE_RESOURCES,
   RATE_UNLOCK_COST,
   RATE_UNLOCK_RESOURCES,
   WORKER_CONTRACTS,
+  WORKER_CONTRACT_IDS,
   FOOD_PURCHASE_COST,
-  FOOD_PURCHASE_COUNT,
   type SellableResource,
-  type SellTier,
+  type SellOffer,
   type RateUnlockResource,
-  type WorkerContract,
+  type WorkerContractId,
 } from '../content/market';
 
 /** Stat resources whose cap comes from a building level, not a settlement tier. */
@@ -349,15 +349,15 @@ export function needsThreatSupply(state: GameState, stat: 'defense' | 'ward'): b
 
 // ---------- Market ----------
 
-/** The next unsold tier for a sellable resource, or null once all tiers are sold. */
-export function getNextSellTier(state: GameState, id: SellableResource): SellTier | null {
-  return SELL_TIER_DEFS[id][state.market.sellTier[id]] ?? null;
+/** A resource's sale, or null once it has been taken. One per resource, ever. */
+export function getSellOffer(state: GameState, id: SellableResource): SellOffer | null {
+  return state.market.sold[id] ? null : SELL_OFFERS[id];
 }
 
-/** Can the next sell tier be completed — it exists and the stock is on hand. */
-export function canSellTier(state: GameState, id: SellableResource): boolean {
-  const tier = getNextSellTier(state, id);
-  return tier !== null && state.resources[id].amount.gte(tier.amount);
+/** Can the sale be made — still unsold and the stock is on hand. */
+export function canSell(state: GameState, id: SellableResource): boolean {
+  const offer = getSellOffer(state, id);
+  return offer !== null && state.resources[id].amount.gte(offer.amount);
 }
 
 /** Whether a core resource's overall-rate display has been unlocked. */
@@ -373,29 +373,20 @@ export function canBuyRateUnlock(state: GameState, id: RateUnlockResource): bool
   return !state.market.rateUnlocks[id] && state.resources.coin.amount.gte(RATE_UNLOCK_COST);
 }
 
-/** The next Worker Contract to buy, or null once all are purchased. */
-export function getNextWorkerContract(state: GameState): WorkerContract | null {
-  return WORKER_CONTRACTS[state.market.workerContract] ?? null;
+/** Can a Worker Contract be signed — not already signed and coin is on hand. */
+export function canBuyWorkerContract(state: GameState, id: WorkerContractId): boolean {
+  return !state.market.contracts[id] && state.resources.coin.amount.gte(WORKER_CONTRACTS[id].cost);
 }
 
-/** Can the next Worker Contract be bought — it exists and coin is on hand. */
-export function canBuyWorkerContract(state: GameState): boolean {
-  const contract = getNextWorkerContract(state);
-  return contract !== null && state.resources.coin.amount.gte(contract.cost);
-}
-
-/** Can the next food purchase be made — slots remain and coin is on hand. */
+/** Can the food purchase be made — not already bought and coin is on hand. */
 export function canBuyFood(state: GameState): boolean {
-  return (
-    state.market.foodBought < FOOD_PURCHASE_COUNT &&
-    state.resources.coin.amount.gte(FOOD_PURCHASE_COST)
-  );
+  return !state.market.foodBought && state.resources.coin.amount.gte(FOOD_PURCHASE_COST);
 }
 
 /** True if any Market action is currently available. */
 export function hasMarketOpportunity(state: GameState): boolean {
-  if (SELLABLE_RESOURCES.some((id) => canSellTier(state, id))) return true;
+  if (SELLABLE_RESOURCES.some((id) => canSell(state, id))) return true;
   if (RATE_UNLOCK_RESOURCES.some((id) => canBuyRateUnlock(state, id))) return true;
   if (canBuyFood(state)) return true;
-  return canBuyWorkerContract(state);
+  return WORKER_CONTRACT_IDS.some((id) => canBuyWorkerContract(state, id));
 }

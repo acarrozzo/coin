@@ -6,7 +6,7 @@ import { ASSAULT, HEX } from '../content/combat';
 export type { ResourceId, BuildingId };
 
 /** Bumped whenever the save shape changes; drives migrations (see save.ts). */
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 
 /** Trained workers the player starts with. */
 export const STARTING_WORKERS = 0;
@@ -54,17 +54,21 @@ export interface GameState {
   market: MarketState;
 }
 
+/**
+ * Market progress. Every offer is one-and-done, so every field here is simply
+ * "has this been taken?" — no counters, no tier indices, no chains.
+ */
 export interface MarketState {
   /** Lifetime coin ever earned — the "max accumulated" score (never spent down). */
   coinEarned: Decimal;
-  /** Highest sell tier completed per sellable resource (0-N, sold sequentially). */
-  sellTier: { wood: number; stone: number; arrow: number; spear: number };
+  /** Which resources have had their single sale completed. */
+  sold: { wood: boolean; stone: boolean; arrow: boolean; spear: boolean };
   /** Which core-resource rate displays have been unlocked. */
   rateUnlocks: { wood: boolean; stone: boolean; food: boolean };
-  /** Highest Worker Contract purchased (0–3, bought sequentially). */
-  workerContract: number;
-  /** How many one-time food purchases have been made (0–2). */
-  foodBought: number;
+  /** Which Worker Contracts have been signed. Independent, any order. */
+  contracts: { i: boolean; ii: boolean; iii: boolean };
+  /** Whether the one-time food purchase has been made. */
+  foodBought: boolean;
 }
 
 export interface ThreatState {
@@ -106,10 +110,10 @@ export function createInitialState(now: number): GameState {
     },
     market: {
       coinEarned: D(0),
-      sellTier: { wood: 0, stone: 0, arrow: 0, spear: 0 },
+      sold: { wood: false, stone: false, arrow: false, spear: false },
       rateUnlocks: { wood: false, stone: false, food: false },
-      workerContract: 0,
-      foodBought: 0,
+      contracts: { i: false, ii: false, iii: false },
+      foodBought: false,
     },
   };
 }

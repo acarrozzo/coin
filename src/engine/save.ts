@@ -1,8 +1,9 @@
-import { D } from './numbers';
+import { D, Decimal } from './numbers';
 import { createInitialState, SAVE_VERSION, type GameState } from './state';
 import { RESOURCE_IDS, type ResourceId } from '../content/resources';
 import { BUILDING_IDS } from '../content/buildings';
 import { isFractionalResource } from '../content/producers';
+import { SELLABLE_RESOURCES, WORKER_CONTRACT_IDS, MAX_COIN_EARNED } from '../content/market';
 
 export const STORAGE_KEY = 'cc:save';
 
@@ -82,6 +83,56 @@ const migrations: Record<number, (data: RawSave) => RawSave> = {
   // stone added as sellable resources; food purchase slots added. Missing market
   // fields fall back to fresh defaults in deserialize; flags are simply dropped.
   6: (data) => ({ ...data, version: 7 }),
+  // v7 → v8: no schema change needed. This entry exists so the migration chain
+  // doesn't dead-end here — `migrate` stops at the first missing step, so an
+  // absent key would strand v7 saves and skip every migration after it.
+  7: (data) => ({ ...data, version: 8 }),
+  // v8 → v9 (one-and-done Market): sell tiers, the Worker Contract chain, and
+  // repeat food purchases are gone. Every offer is now taken at most once, so
+  // each old counter collapses to "was this taken at all?" — any progress on a
+  // chain counts as having taken that offer, which never revokes something a
+  // player already paid for.
+  //
+  // Coin is also rescaled: the old ceiling was 222,222 and the new one is 22, so
+  // a carried-over balance would be meaningless and would render the header as
+  // "111110/22 earned". Both the balance and the lifetime total are clamped to
+  // the new ceiling. Nothing is lost in practice — purchases already made are
+  // preserved by the flags above, and 22 coin buys everything still on offer.
+  8: (data) => {
+    const market = data.market as
+      | {
+          sellTier?: Record<string, unknown>;
+          workerContract?: unknown;
+          foodBought?: unknown;
+          coinEarned?: unknown;
+        }
+      | undefined;
+
+    const taken = (v: unknown): boolean => typeof v === 'number' && v > 0;
+    const signed = typeof market?.workerContract === 'number' ? market.workerContract : 0;
+
+    const next: Record<string, unknown> = {
+      ...(market ?? {}),
+      sold: Object.fromEntries(SELLABLE_RESOURCES.map((id) => [id, taken(market?.sellTier?.[id])])),
+      contracts: Object.fromEntries(WORKER_CONTRACT_IDS.map((id, i) => [id, signed > i])),
+      foodBought: taken(market?.foodBought),
+    };
+    delete next.sellTier;
+    delete next.workerContract;
+
+    const earned = next.coinEarned;
+    if (typeof earned === 'string' || typeof earned === 'number') {
+      next.coinEarned = Decimal.min(D(earned), MAX_COIN_EARNED).toString();
+    }
+
+    const resources = data.resources as Record<string, { amount?: unknown }> | undefined;
+    const coin = resources?.coin?.amount;
+    if (resources?.coin && (typeof coin === 'string' || typeof coin === 'number')) {
+      resources.coin.amount = Decimal.min(D(coin), MAX_COIN_EARNED).toString();
+    }
+
+    return { ...data, version: 9, market: next };
+  },
 };
 
 function migrate(data: RawSave): RawSave {
@@ -116,9 +167,9 @@ export function serialize(state: GameState): string {
     combat: state.combat,
     market: {
       coinEarned: state.market.coinEarned.toString(),
-      sellTier: state.market.sellTier,
+      sold: state.market.sold,
       rateUnlocks: state.market.rateUnlocks,
-      workerContract: state.market.workerContract,
+      contracts: state.market.contracts,
       foodBought: state.market.foodBought,
     },
   });
@@ -158,8 +209,7 @@ export function deserialize(raw: string, now: number): GameState {
   }
 
   const workers = data.workers as
-    | { trained?: unknown; bonus?: unknown; assigned?: Record<string, unknown> }
-    | undefined;
+    { trained?: unknown; bonus?: unknown; assigned?: Record<string, unknown> } | undefined;
   if (workers) {
     if (typeof workers.trained === 'number') state.workers.trained = workers.trained;
     if (typeof workers.bonus === 'number') state.workers.bonus = workers.bonus;
@@ -180,8 +230,7 @@ export function deserialize(raw: string, now: number): GameState {
   }
 
   const combat = data.combat as
-    | { assault?: Record<string, unknown>; hex?: Record<string, unknown> }
-    | undefined;
+    { assault?: Record<string, unknown>; hex?: Record<string, unknown> } | undefined;
   if (combat) {
     reviveThreat(combat.assault, state.combat.assault);
     reviveThreat(combat.hex, state.combat.hex);
@@ -190,9 +239,9 @@ export function deserialize(raw: string, now: number): GameState {
   const market = data.market as
     | {
         coinEarned?: unknown;
-        sellTier?: { wood?: unknown; stone?: unknown; arrow?: unknown; spear?: unknown };
+        sold?: { wood?: unknown; stone?: unknown; arrow?: unknown; spear?: unknown };
         rateUnlocks?: { wood?: unknown; stone?: unknown; food?: unknown };
-        workerContract?: unknown;
+        contracts?: { i?: unknown; ii?: unknown; iii?: unknown };
         foodBought?: unknown;
       }
     | undefined;
@@ -201,21 +250,27 @@ export function deserialize(raw: string, now: number): GameState {
     if (typeof earned === 'string' || typeof earned === 'number') {
       state.market.coinEarned = D(earned);
     }
-    if (typeof market.sellTier?.wood === 'number') state.market.sellTier.wood = market.sellTier.wood;
-    if (typeof market.sellTier?.stone === 'number') state.market.sellTier.stone = market.sellTier.stone;
-    if (typeof market.sellTier?.arrow === 'number') state.market.sellTier.arrow = market.sellTier.arrow;
-    if (typeof market.sellTier?.spear === 'number') state.market.sellTier.spear = market.sellTier.spear;
-    for (const id of ['wood', 'stone', 'food'] as const) {
-      if (typeof market.rateUnlocks?.[id] === 'boolean') state.market.rateUnlocks[id] = market.rateUnlocks[id];
+    for (const id of SELLABLE_RESOURCES) {
+      if (typeof market.sold?.[id] === 'boolean') state.market.sold[id] = market.sold[id];
     }
-    if (typeof market.workerContract === 'number') state.market.workerContract = market.workerContract;
-    if (typeof market.foodBought === 'number') state.market.foodBought = market.foodBought;
+    for (const id of ['wood', 'stone', 'food'] as const) {
+      if (typeof market.rateUnlocks?.[id] === 'boolean')
+        state.market.rateUnlocks[id] = market.rateUnlocks[id];
+    }
+    for (const id of WORKER_CONTRACT_IDS) {
+      if (typeof market.contracts?.[id] === 'boolean')
+        state.market.contracts[id] = market.contracts[id];
+    }
+    if (typeof market.foodBought === 'boolean') state.market.foodBought = market.foodBought;
   }
 
   return state;
 }
 
-function reviveThreat(raw: Record<string, unknown> | undefined, target: GameState['combat']['assault']): void {
+function reviveThreat(
+  raw: Record<string, unknown> | undefined,
+  target: GameState['combat']['assault'],
+): void {
   if (!raw) return;
   for (const key of ['timer', 'wave', 'wins', 'losses'] as const) {
     if (typeof raw[key] === 'number') target[key] = raw[key];

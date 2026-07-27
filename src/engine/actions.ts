@@ -5,19 +5,20 @@ import {
   isResourceUnlocked,
   canTrainWorker,
   getWorkerCost,
-  canSellTier,
+  canSell,
   canBuyRateUnlock,
   canBuyWorkerContract,
   canBuyFood,
 } from './selectors';
 import {
-  SELL_TIER_DEFS,
+  SELL_OFFERS,
   RATE_UNLOCK_COST,
   WORKER_CONTRACTS,
   FOOD_PURCHASE_COST,
   FOOD_PURCHASE_AMOUNT,
   type SellableResource,
   type RateUnlockResource,
+  type WorkerContractId,
 } from '../content/market';
 
 /**
@@ -50,25 +51,26 @@ export function trainWorker(state: GameState): boolean {
 
 // ---------- Market ----------
 //
-// Coin is earned only here, by selling resources in one-time, escalating
-// tiers (see content/market.ts). It is then spent on food purchases, rate-display
-// unlocks, and Worker Contracts. See selectors.ts for the affordability/availability reads.
+// Coin is earned only here, by selling resources — each sellable resource has
+// exactly one sale, taken once (see content/market.ts). Coin is then spent on
+// the food purchase, rate-display unlocks, and Worker Contracts, all equally
+// one-and-done. See selectors.ts for the affordability/availability reads.
 
 /**
- * Sell the next available tier of a resource: consume the stock, pay out coin, and
- * advance that resource's tier. Returns whether the sale happened.
+ * Take a resource's sale: consume the stock, pay out coin, and mark it sold.
+ * That resource can never be sold again. Returns whether the sale happened.
  */
-export function sellResourceTier(state: GameState, id: SellableResource): boolean {
-  if (!canSellTier(state, id)) return false;
-  const tier = SELL_TIER_DEFS[id][state.market.sellTier[id]];
-  state.resources[id].amount = state.resources[id].amount.minus(tier.amount);
-  state.resources.coin.amount = state.resources.coin.amount.plus(tier.coin);
-  state.market.coinEarned = state.market.coinEarned.plus(tier.coin);
-  state.market.sellTier[id] += 1;
+export function sellResource(state: GameState, id: SellableResource): boolean {
+  if (!canSell(state, id)) return false;
+  const offer = SELL_OFFERS[id];
+  state.resources[id].amount = state.resources[id].amount.minus(offer.amount);
+  state.resources.coin.amount = state.resources.coin.amount.plus(offer.coin);
+  state.market.coinEarned = state.market.coinEarned.plus(offer.coin);
+  state.market.sold[id] = true;
   return true;
 }
 
-/** Reveal a core resource's overall-rate display, paying 10 coin. */
+/** Reveal a core resource's overall-rate display, paying RATE_UNLOCK_COST coin. */
 export function buyRateUnlock(state: GameState, id: RateUnlockResource): boolean {
   if (!canBuyRateUnlock(state, id)) return false;
   state.resources.coin.amount = state.resources.coin.amount.minus(RATE_UNLOCK_COST);
@@ -76,24 +78,24 @@ export function buyRateUnlock(state: GameState, id: RateUnlockResource): boolean
   return true;
 }
 
-/** Buy the next Worker Contract, adding its bonus workers to the pool. */
-export function buyWorkerContract(state: GameState): boolean {
-  if (!canBuyWorkerContract(state)) return false;
-  const contract = WORKER_CONTRACTS[state.market.workerContract];
+/** Sign a Worker Contract, adding its bonus workers to the pool permanently. */
+export function buyWorkerContract(state: GameState, id: WorkerContractId): boolean {
+  if (!canBuyWorkerContract(state, id)) return false;
+  const contract = WORKER_CONTRACTS[id];
   state.resources.coin.amount = state.resources.coin.amount.minus(contract.cost);
   state.workers.bonus += contract.workers;
-  state.market.workerContract += 1;
+  state.market.contracts[id] = true;
   return true;
 }
 
 /**
- * Buy one food purchase: spend FOOD_PURCHASE_COST coin, gain FOOD_PURCHASE_AMOUNT food.
- * Limited to FOOD_PURCHASE_COUNT total purchases. Returns whether it happened.
+ * Make the one-time food purchase: spend FOOD_PURCHASE_COST coin, gain
+ * FOOD_PURCHASE_AMOUNT food. Returns whether it happened.
  */
 export function buyFood(state: GameState): boolean {
   if (!canBuyFood(state)) return false;
   state.resources.coin.amount = state.resources.coin.amount.minus(FOOD_PURCHASE_COST);
   state.resources.food.amount = state.resources.food.amount.plus(FOOD_PURCHASE_AMOUNT);
-  state.market.foodBought += 1;
+  state.market.foodBought = true;
   return true;
 }

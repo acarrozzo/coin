@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, fireEvent, cleanup } from '@testing-library/svelte';
 import ResourcePanel from '../src/ui/ResourcePanel.svelte';
 import SettlementPanel from '../src/ui/SettlementPanel.svelte';
+import MarketPanel from '../src/ui/MarketPanel.svelte';
 import { game } from '../src/ui/gameStore.svelte';
 import { notify } from '../src/ui/notify.svelte';
 import { D } from '../src/engine/numbers';
 import { createInitialState } from '../src/engine/state';
 import { needsThreatSupply } from '../src/engine/selectors';
-import { getNavSections } from '../src/ui/sections';
+import { getNavSections, FULL_MARKET_LEVEL } from '../src/ui/sections';
 import { ASSAULT, HEX } from '../src/content/combat';
 
 // Runtime check: proves Svelte 5 runes reactivity + the store wiring + event
@@ -51,6 +52,78 @@ describe('ResourcePanel (runtime)', () => {
 
     expect(game.state.level).toBe(2);
     expect(notify.toasts.some((t) => t.kind === 'level')).toBe(true);
+  });
+});
+
+// Every Market offer renders through MarketOffer, so mounting the panel proves
+// the whole card system works at runtime — the Decimal-driven shortfall bar,
+// the one-and-done removal, and the level-gated locked state.
+describe('MarketPanel (runtime)', () => {
+  // The store is shared across tests and its `state` is read-only, so the
+  // Market's own fields are reset in place rather than swapping the state.
+  function resetMarket(level: number): void {
+    cleanup();
+    const gs = game.state;
+    gs.level = level;
+    gs.market.sold = { wood: false, stone: false, arrow: false, spear: false };
+    gs.market.rateUnlocks = { wood: false, stone: false, food: false };
+    gs.market.contracts = { i: false, ii: false, iii: false };
+    gs.market.foodBought = false;
+    gs.market.coinEarned = D(0);
+    gs.resources.coin.amount = D(0);
+    gs.resources.arrow.amount = D(0);
+    gs.resources.spear.amount = D(0);
+  }
+
+  it('locks level-gated offers below the full-market level, with the reason', () => {
+    resetMarket(1);
+    render(MarketPanel);
+
+    // Advanced offers stay on the board rather than vanishing...
+    expect(screen.getByText('Arrows Needed')).toBeTruthy();
+    expect(screen.getByText('Worker Contract III')).toBeTruthy();
+    // ...and each states its blocker instead of just looking disabled.
+    expect(
+      screen.getAllByText(`Requires Settlement Level ${FULL_MARKET_LEVEL}`).length,
+    ).toBeGreaterThan(0);
+
+    // Early offers are unaffected by the gate.
+    expect(screen.getByText('Wood Needed')).toBeTruthy();
+  });
+
+  it('unlocks the gated offers, and a sale removes its card for good', async () => {
+    resetMarket(FULL_MARKET_LEVEL);
+    game.state.resources.arrow.amount = D(500);
+    render(MarketPanel);
+
+    expect(screen.getByText('Arrows Needed')).toBeTruthy();
+    expect(screen.queryByText(`Requires Settlement Level ${FULL_MARKET_LEVEL}`)).toBeNull();
+
+    await fireEvent.click(screen.getByText('Sell for 10'));
+
+    expect(game.state.market.sold.arrow).toBe(true);
+    // One and done: the offer leaves the board rather than advancing a tier,
+    // even though 400 arrows are still on hand.
+    expect(screen.queryByText('Arrows Needed')).toBeNull();
+  });
+
+  it('offers all three Worker Contracts at once, in no fixed order', () => {
+    resetMarket(FULL_MARKET_LEVEL);
+    render(MarketPanel);
+
+    expect(screen.getByText('Worker Contract I')).toBeTruthy();
+    expect(screen.getByText('Worker Contract II')).toBeTruthy();
+    expect(screen.getByText('Worker Contract III')).toBeTruthy();
+  });
+
+  it('shows the shortfall on an unaffordable trade', () => {
+    resetMarket(FULL_MARKET_LEVEL);
+    game.state.resources.spear.amount = D(6);
+    render(MarketPanel);
+
+    // 6 of the 10 spears the sale needs.
+    expect(screen.getByText(/6 of 10\s+spears/)).toBeTruthy();
+    expect(screen.getByText('Need 4 more')).toBeTruthy();
   });
 });
 

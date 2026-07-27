@@ -1,30 +1,29 @@
 <script lang="ts">
   import { game } from './gameStore.svelte';
-  import { formatNumber } from '../engine/numbers';
+  import { formatNumber, D } from '../engine/numbers';
   import { RESOURCES } from '../content/resources';
   import {
-    getNextSellTier,
-    canSellTier,
+    getSellOffer,
+    canSell,
     isRateUnlocked,
     canBuyRateUnlock,
-    getNextWorkerContract,
     canBuyWorkerContract,
     canBuyFood,
   } from '../engine/selectors';
   import {
-    SELL_TIER_DEFS,
+    SELL_OFFERS,
     RATE_UNLOCK_RESOURCES,
-    RATE_UNLOCK_NUMERAL,
     RATE_UNLOCK_COST,
     WORKER_CONTRACTS,
+    WORKER_CONTRACT_IDS,
     MAX_COIN_EARNED,
     FOOD_PURCHASE_COST,
     FOOD_PURCHASE_AMOUNT,
-    FOOD_PURCHASE_COUNT,
   } from '../content/market';
   import { FULL_MARKET_LEVEL } from './sections';
   import type { Component } from 'svelte';
   import type { SellableResource, RateUnlockResource } from '../content/market';
+  import MarketOffer from './MarketOffer.svelte';
   import BuildingStore from './icons/BuildingStore.svelte';
   import Coins from './icons/Coins.svelte';
   import Gauge from '@lucide/svelte/icons/gauge';
@@ -37,7 +36,7 @@
   import Trident from './icons/Trident.svelte';
   import Wheat from '@lucide/svelte/icons/wheat';
 
-  // Button icons. Sells carry the stock's own resource icon; the coin sinks get
+  // Offer icons. Sells carry the stock's own resource icon; the coin sinks get
   // an icon for the thing they grant (food) or the feature they unlock.
   const SELL_ICON: Record<SellableResource, Component> = {
     wood: TreePine,
@@ -46,308 +45,345 @@
     spear: Trident,
   };
 
-  // One line under each button's title. Flavour where the button is obvious,
-  // plain explanation where it isn't (rate displays, contracts, food supplies).
+  // One flavour line per offer. Flavour where the offer is obvious, plain
+  // explanation where it isn't (rate displays, contracts, the food supply).
   const SELL_QUIP: Record<SellableResource, string> = {
     wood: 'Timber is cheap. Coin is not.',
     stone: 'Heavy to haul, light to spend.',
     arrow: 'The fletchers have been busy.',
     spear: 'Pointy sticks at premium prices.',
   };
-  const FOOD_QUIP = [
-    'Rations to keep you going until the Farm turns over.',
-    'One more sack. Do not eat it all at once.',
-  ];
+  const FOOD_QUIP = 'Rations to keep you going until the Farm turns over.';
   const RATE_QUIP: Record<RateUnlockResource, string> = {
-    wood: 'Shows live wood per second on its resource row.',
-    stone: 'Shows live stone per second on its resource row.',
-    food: 'Shows live food per second — spot a famine early.',
+    wood: 'Know the timber flow at a glance.',
+    stone: 'Know what the quarry really yields.',
+    food: 'Spot a famine before it starts.',
   };
-  const CONTRACT_QUIP = [
-    'A signature, a seal, and one new pair of hands.',
-    'Word has spread. Two more sign on.',
-    'Three at once. The realm is hiring.',
-  ];
+  const CONTRACT_QUIP: Record<string, string> = {
+    i: 'A signature, a seal, and one new pair of hands.',
+    ii: 'Word has spread. Two more sign on.',
+    iii: 'Three at once. The realm is hiring.',
+  };
 
   const gs = $derived(game.state);
   const coin = $derived(gs.resources.coin.amount);
-  const nextContract = $derived(getNextWorkerContract(gs));
 
-  // Completion states
-  const woodDone = $derived(gs.market.sellTier.wood >= SELL_TIER_DEFS.wood.length);
-  const stoneDone = $derived(gs.market.sellTier.stone >= SELL_TIER_DEFS.stone.length);
-  const arrowsDone = $derived(gs.market.sellTier.arrow >= SELL_TIER_DEFS.arrow.length);
-  const spearsDone = $derived(gs.market.sellTier.spear >= SELL_TIER_DEFS.spear.length);
+  // Level-gated offers stay on the board as locked cards rather than vanishing,
+  // so the coin economy reads as a full ladder from the first minute.
+  const advancedLock = $derived(
+    gs.level < FULL_MARKET_LEVEL ? `Requires Settlement Level ${FULL_MARKET_LEVEL}` : undefined,
+  );
+
+  const sold = $derived(gs.market.sold);
   const unlockedRates = $derived(RATE_UNLOCK_RESOURCES.filter((id) => isRateUnlocked(gs, id)));
-  const signedContracts = $derived(WORKER_CONTRACTS.slice(0, gs.market.workerContract));
+  const signedContracts = $derived(WORKER_CONTRACT_IDS.filter((id) => gs.market.contracts[id]));
+  const openContracts = $derived(WORKER_CONTRACT_IDS.filter((id) => !gs.market.contracts[id]));
 
   // Active section visibility. Each section is split into its coin sells and its
   // coin buys, so the sub-rows are tracked separately from the section itself.
-  const hasEarlySells = $derived(!woodDone || !stoneDone);
-  const hasEarlyBuys = $derived(gs.market.foodBought < FOOD_PURCHASE_COUNT);
+  // A section only disappears once its offers are taken — never because of the
+  // level gate, which is expressed per card.
+  const hasEarlySells = $derived(!sold.wood || !sold.stone);
+  const hasEarlyBuys = $derived(!gs.market.foodBought);
   const hasActiveEarly = $derived(hasEarlySells || hasEarlyBuys);
-  const hasActiveAdvancedSells = $derived(gs.level >= FULL_MARKET_LEVEL && (!arrowsDone || !spearsDone));
-  const hasActiveRates = $derived(gs.level >= FULL_MARKET_LEVEL && unlockedRates.length < RATE_UNLOCK_RESOURCES.length);
-  const hasActiveContracts = $derived(gs.level >= FULL_MARKET_LEVEL && nextContract !== null);
+  const hasActiveAdvancedSells = $derived(!sold.arrow || !sold.spear);
+  const hasActiveRates = $derived(unlockedRates.length < RATE_UNLOCK_RESOURCES.length);
 
   // Completed section visibility — same sell/buy split as the active sections.
-  const doneEarlySells = $derived(woodDone || stoneDone);
-  const doneEarlyBuys = $derived(gs.market.foodBought > 0);
-  const doneAdvancedSells = $derived(arrowsDone || spearsDone);
+  const doneEarlySells = $derived(sold.wood || sold.stone);
+  const doneEarlyBuys = $derived(gs.market.foodBought);
+  const doneAdvancedSells = $derived(sold.arrow || sold.spear);
   const doneAdvancedBuys = $derived(unlockedRates.length > 0 || signedContracts.length > 0);
   const hasEarlyCompleted = $derived(doneEarlySells || doneEarlyBuys);
-  const hasAdvancedCompleted = $derived(
-    gs.level >= FULL_MARKET_LEVEL && (doneAdvancedSells || doneAdvancedBuys),
-  );
+  const hasAdvancedCompleted = $derived(doneAdvancedSells || doneAdvancedBuys);
   const hasCompleted = $derived(hasEarlyCompleted || hasAdvancedCompleted);
+  const completedCount = $derived(
+    (sold.wood ? 1 : 0) +
+      (sold.stone ? 1 : 0) +
+      (sold.arrow ? 1 : 0) +
+      (sold.spear ? 1 : 0) +
+      (gs.market.foodBought ? 1 : 0) +
+      unlockedRates.length +
+      signedContracts.length,
+  );
 </script>
 
+<!-- Every sale is the same offer shape, so one snippet covers all four
+     resources; the caller supplies the level gate (or nothing). -->
+{#snippet sellOffer(id: SellableResource, locked: string | undefined)}
+  {@const offer = getSellOffer(gs, id)}
+  {#if offer}
+    {@const have = gs.resources[id].amount}
+    {@const ok = !locked && canSell(gs, id)}
+    {@const noun = offer.noun}
+    <MarketOffer
+      icon={SELL_ICON[id]}
+      title="{noun[0].toUpperCase() + noun.slice(1)} Needed"
+      kind="trade"
+      give="{formatNumber(offer.amount)} {noun}"
+      receive="+{formatNumber(offer.coin)} coin"
+      quip={SELL_QUIP[id]}
+      stock={{ have, need: offer.amount, noun }}
+      {locked}
+      affordable={ok}
+      actionLabel={locked
+        ? `Level ${FULL_MARKET_LEVEL}`
+        : ok
+          ? `Sell for ${formatNumber(offer.coin)}`
+          : `Need ${formatNumber(D(offer.amount).sub(have))} more`}
+      onact={() => game.sell(id)}
+    />
+  {/if}
+{/snippet}
+
 <!-- The Market: the coin economy. Sell resources for coin, then spend it on
-     food, rate-display unlocks, and Worker Contracts. data-nav lets the rail scroll here. -->
+     food, rate-display unlocks, and Worker Contracts. Every offer here is taken
+     at most once. data-nav lets the rail scroll here. -->
 <section class="panel market" data-nav="market" aria-label="Market">
   <header class="head">
     <BuildingStore size={22} color="var(--accent)" aria-hidden="true" />
     <h2>Market</h2>
-    <span class="coins" title="Coin on hand — lifetime coin earned (of {MAX_COIN_EARNED} possible)">
+    <span
+      class="coins"
+      title="Coin on hand — lifetime coin earned (of {formatNumber(MAX_COIN_EARNED)} possible)"
+    >
       <Coins size={16} aria-hidden="true" />
       <span class="now">{formatNumber(coin)}</span>
-      <span class="lifetime">{formatNumber(gs.market.coinEarned)}/{MAX_COIN_EARNED} earned</span>
+      <span class="lifetime"
+        >{formatNumber(gs.market.coinEarned)}/{formatNumber(MAX_COIN_EARNED)} earned</span
+      >
     </span>
   </header>
 
-  <!-- 1-coin tier: active wood/stone sells + food buys. -->
+  <!-- 1-coin tier: wood/stone sells + the food purchase. -->
   {#if hasActiveEarly}
-  <div class="block">
-    <h3><HandCoins size={16} aria-hidden="true" /> Early Market</h3>
-    <p class="hint">One-time sales and food purchases — 1 coin each.</p>
-    {#if hasEarlySells}
+    <div class="block">
+      <h3><HandCoins size={16} aria-hidden="true" /> Early Market</h3>
+      <p class="hint">One-time sales and a food purchase — 1 coin each.</p>
+      {#if hasEarlySells}
+        <p class="sub-label">Sell</p>
+        <div class="actions">
+          {#if !sold.wood}{@render sellOffer('wood', undefined)}{/if}
+          {#if !sold.stone}{@render sellOffer('stone', undefined)}{/if}
+        </div>
+      {/if}
+      {#if hasEarlyBuys}
+        {@const ok = canBuyFood(gs)}
+        <p class="sub-label">Buy</p>
+        <div class="actions">
+          <MarketOffer
+            icon={Wheat}
+            title="Emergency Food Supply"
+            kind="buy"
+            benefit="+{FOOD_PURCHASE_AMOUNT} food"
+            cost="−{FOOD_PURCHASE_COST} coin"
+            quip={FOOD_QUIP}
+            stock={{ have: coin, need: FOOD_PURCHASE_COST, noun: 'coin' }}
+            affordable={ok}
+            actionLabel={ok ? 'Buy food' : `Need ${FOOD_PURCHASE_COST} coin`}
+            onact={() => game.buyFood()}
+          />
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  <!-- 10-coin tier: arrow/spear sells. Locked below FULL_MARKET_LEVEL. -->
+  {#if hasActiveAdvancedSells}
+    <div class="block">
+      <h3><HandCoins size={16} aria-hidden="true" /> Advanced Market</h3>
+      <p class="hint">One sale per resource. The stock is consumed.</p>
       <p class="sub-label">Sell</p>
       <div class="actions">
-        {#if !woodDone}
-          {@const tier = getNextSellTier(gs, 'wood')}
-          {@const ok = canSellTier(gs, 'wood')}
-          {#if tier}
-            <button class="buy" onclick={() => game.sell('wood')} disabled={!ok}>
-              <span class="bicon"><TreePine size={14} aria-hidden="true" /></span>
-              <span class="buy-main">
-                <span class="lbl">Sell {formatNumber(tier.amount)} woods</span>
-                <span class="sub">{SELL_QUIP.wood}</span>
-              </span>
-              <span class="gain-pill" class:short={!ok}>+{tier.coin} coin</span>
-            </button>
-          {/if}
-        {/if}
-        {#if !stoneDone}
-          {@const tier = getNextSellTier(gs, 'stone')}
-          {@const ok = canSellTier(gs, 'stone')}
-          {#if tier}
-            <button class="buy" onclick={() => game.sell('stone')} disabled={!ok}>
-              <span class="bicon"><Mountain size={14} aria-hidden="true" /></span>
-              <span class="buy-main">
-                <span class="lbl">Sell {formatNumber(tier.amount)} stones</span>
-                <span class="sub">{SELL_QUIP.stone}</span>
-              </span>
-              <span class="gain-pill" class:short={!ok}>+{tier.coin} coin</span>
-            </button>
-          {/if}
-        {/if}
+        {#if !sold.arrow}{@render sellOffer('arrow', advancedLock)}{/if}
+        {#if !sold.spear}{@render sellOffer('spear', advancedLock)}{/if}
       </div>
-    {/if}
-    {#if hasEarlyBuys}
+    </div>
+  {/if}
+
+  <!-- Rate displays. -->
+  {#if hasActiveRates}
+    <div class="block">
+      <h3><Gauge size={16} aria-hidden="true" /> Rate Displays</h3>
+      <p class="hint">
+        Unlock the live net-rate readout for each core resource — {RATE_UNLOCK_COST} coin each.
+      </p>
       <p class="sub-label">Buy</p>
       <div class="actions">
-        {#each { length: FOOD_PURCHASE_COUNT } as _, i (i)}
-          {#if gs.market.foodBought <= i}
-            {@const ok = canBuyFood(gs) && gs.market.foodBought === i}
-            <button class="buy" onclick={() => game.buyFood()} disabled={!ok}>
-              <span class="bicon"><Wheat size={14} aria-hidden="true" /></span>
-              <span class="buy-main">
-                <span class="lbl">Food Supply {i + 1} — {FOOD_PURCHASE_AMOUNT} food</span>
-                <span class="sub">{FOOD_QUIP[i]}</span>
-              </span>
-              <span class="cost-pill" class:short={!ok}>−{FOOD_PURCHASE_COST} coin</span>
-            </button>
+        {#each RATE_UNLOCK_RESOURCES as id (id)}
+          {#if !isRateUnlocked(gs, id)}
+            {@const ok = !advancedLock && canBuyRateUnlock(gs, id)}
+            <MarketOffer
+              icon={Gauge}
+              title="{RESOURCES[id].name} Rate Display"
+              kind="buy"
+              benefit="Live {RESOURCES[id].name.toLowerCase()} / sec"
+              cost="−{RATE_UNLOCK_COST} coin"
+              quip={RATE_QUIP[id]}
+              stock={{ have: coin, need: RATE_UNLOCK_COST, noun: 'coin' }}
+              locked={advancedLock}
+              affordable={ok}
+              actionLabel={advancedLock
+                ? `Level ${FULL_MARKET_LEVEL}`
+                : ok
+                  ? 'Unlock'
+                  : `Need ${RATE_UNLOCK_COST} coin`}
+              onact={() => game.unlockRate(id)}
+            />
           {/if}
         {/each}
       </div>
-    {/if}
-  </div>
-  {/if}
-
-  <!-- 10-coin tier: active arrow/spear sells. -->
-  {#if hasActiveAdvancedSells}
-  <div class="block">
-    <h3><HandCoins size={16} aria-hidden="true" /> Advanced Market</h3>
-    <p class="hint">Each tier is a one-time sale. Stock is consumed.</p>
-    <p class="sub-label">Sell</p>
-    <div class="actions">
-      {#each (['arrow', 'spear'] as const) as id (id)}
-        {#if !(id === 'arrow' ? arrowsDone : spearsDone)}
-          {@const tier = getNextSellTier(gs, id)}
-          {@const done = gs.market.sellTier[id]}
-          {@const total = SELL_TIER_DEFS[id].length}
-          {@const ok = canSellTier(gs, id)}
-          {@const Icon = SELL_ICON[id]}
-          {#if tier}
-            <button class="buy" onclick={() => game.sell(id)} disabled={!ok}>
-              <span class="bicon"><Icon size={14} aria-hidden="true" /></span>
-              <span class="buy-main">
-                <span class="lbl">Sell {formatNumber(tier.amount)} {RESOURCES[id].name.toLowerCase()}s</span>
-                <span class="sub">{SELL_QUIP[id]} <span class="tier">· tier {done + 1} of {total}</span></span>
-              </span>
-              <span class="gain-pill" class:short={!ok}>+{tier.coin} coin</span>
-            </button>
-          {/if}
-        {/if}
-      {/each}
     </div>
-  </div>
   {/if}
 
-  <!-- Active rate displays. -->
-  {#if hasActiveRates}
-  <div class="block">
-    <h3><Gauge size={16} aria-hidden="true" /> Rate Displays</h3>
-    <p class="hint">Unlock the live net-rate readout for each core resource — {RATE_UNLOCK_COST} coin each.</p>
-    <p class="sub-label">Buy</p>
-    <div class="actions">
-      {#each RATE_UNLOCK_RESOURCES as id (id)}
-        {#if !isRateUnlocked(gs, id)}
-          {@const ok = canBuyRateUnlock(gs, id)}
-          <button class="buy" onclick={() => game.unlockRate(id)} disabled={!ok}>
-            <span class="bicon"><Gauge size={14} aria-hidden="true" /></span>
-            <span class="buy-main">
-              <span class="lbl">Rate Display {RATE_UNLOCK_NUMERAL[id]} — {RESOURCES[id].name}</span>
-              <span class="sub">{RATE_QUIP[id]}</span>
-            </span>
-            <span class="cost-pill" class:short={!ok}>−{RATE_UNLOCK_COST} coin</span>
-          </button>
-        {/if}
-      {/each}
+  <!-- Worker contracts — three independent hires, offered together. -->
+  {#if openContracts.length}
+    <div class="block">
+      <h3><Users size={16} aria-hidden="true" /> Worker Contracts</h3>
+      <p class="hint">Hire permanent workers with coin. Sign them in any order.</p>
+      <p class="sub-label">Buy</p>
+      <div class="actions">
+        {#each openContracts as id (id)}
+          {@const contract = WORKER_CONTRACTS[id]}
+          {@const ok = !advancedLock && canBuyWorkerContract(gs, id)}
+          <MarketOffer
+            icon={Users}
+            title="Worker Contract {contract.numeral}"
+            kind="buy"
+            benefit="+{contract.workers} permanent worker{contract.workers > 1 ? 's' : ''}"
+            cost="−{formatNumber(contract.cost)} coin"
+            quip={CONTRACT_QUIP[id]}
+            stock={{ have: coin, need: contract.cost, noun: 'coin' }}
+            locked={advancedLock}
+            affordable={ok}
+            actionLabel={advancedLock
+              ? `Level ${FULL_MARKET_LEVEL}`
+              : ok
+                ? `Hire ×${contract.workers}`
+                : `Need ${formatNumber(contract.cost)} coin`}
+            onact={() => game.buyWorkerContract(id)}
+          />
+        {/each}
+      </div>
     </div>
-  </div>
   {/if}
 
-  <!-- Active worker contracts. -->
-  {#if hasActiveContracts}
-  <div class="block">
-    <h3><Users size={16} aria-hidden="true" /> Worker Contracts</h3>
-    <p class="hint">Hire permanent workers with coin. Signed in order.</p>
-    <p class="sub-label">Buy</p>
-    <div class="actions">
-      {#if nextContract}
-        {@const n = gs.market.workerContract + 1}
-        {@const ok = canBuyWorkerContract(gs)}
-        <button class="buy" onclick={() => game.buyWorkerContract()} disabled={!ok}>
-          <span class="bicon"><Users size={14} aria-hidden="true" /></span>
-          <span class="buy-main">
-            <span class="lbl">Worker Contract {'I'.repeat(n)} — +{nextContract.workers} worker{nextContract.workers > 1 ? 's' : ''}</span>
-            <span class="sub">{CONTRACT_QUIP[gs.market.workerContract]}</span>
-          </span>
-          <span class="cost-pill" class:short={!ok}>−{nextContract.cost} coin</span>
-        </button>
-      {/if}
-    </div>
-  </div>
-  {/if}
-
-  <!-- Completed items — all done purchases/sales, grouped by tier. -->
+  <!-- Everything already taken, collapsed into a ledger so finished offers stay
+       available as history rather than sitting on the board as dead cards. -->
   {#if hasCompleted}
-  <div class="block completed-block">
-    <h3 class="completed-head">Completed</h3>
+    <div class="block">
+      <details class="ledger">
+        <summary>
+          <span class="ledger-title">Unlock Ledger</span>
+          <span class="ledger-count">{completedCount} completed</span>
+        </summary>
 
-    {#if hasEarlyCompleted}
-    <div class="tier-group">
-      <p class="tier-label">Early Market</p>
-      {#if doneEarlySells}
-        <p class="sub-label">Sell</p>
-        <div class="actions">
-          {#if woodDone}
-            {@const total = SELL_TIER_DEFS.wood[0]}
-            <div class="done-item">
-              <Check size={11} aria-hidden="true" />
-              <span class="bicon"><TreePine size={11} aria-hidden="true" /></span>
-              <span class="lbl">Sold {formatNumber(total.amount)} woods</span>
-              <span class="sub">+{total.coin} coin</span>
+        <div class="ledger-body">
+          {#if hasEarlyCompleted}
+            <div class="tier-group">
+              <p class="tier-label">Early Market</p>
+              {#if doneEarlySells}
+                <p class="sub-label">Sell</p>
+                <div class="done-list">
+                  {#if sold.wood}
+                    <div class="done-item">
+                      <Check size={11} aria-hidden="true" />
+                      <span class="bicon"><TreePine size={11} aria-hidden="true" /></span>
+                      <span class="lbl"
+                        >Sold {formatNumber(SELL_OFFERS.wood.amount)} {SELL_OFFERS.wood.noun}</span
+                      >
+                      <span class="sub">+{SELL_OFFERS.wood.coin} coin</span>
+                    </div>
+                  {/if}
+                  {#if sold.stone}
+                    <div class="done-item">
+                      <Check size={11} aria-hidden="true" />
+                      <span class="bicon"><Mountain size={11} aria-hidden="true" /></span>
+                      <span class="lbl"
+                        >Sold {formatNumber(SELL_OFFERS.stone.amount)}
+                        {SELL_OFFERS.stone.noun}</span
+                      >
+                      <span class="sub">+{SELL_OFFERS.stone.coin} coin</span>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+              {#if doneEarlyBuys}
+                <p class="sub-label">Buy</p>
+                <div class="done-list">
+                  <div class="done-item">
+                    <Check size={11} aria-hidden="true" />
+                    <span class="bicon"><Wheat size={11} aria-hidden="true" /></span>
+                    <span class="lbl">Emergency Food Supply — {FOOD_PURCHASE_AMOUNT} food</span>
+                    <span class="sub">-{FOOD_PURCHASE_COST} coin</span>
+                  </div>
+                </div>
+              {/if}
             </div>
           {/if}
-          {#if stoneDone}
-            {@const total = SELL_TIER_DEFS.stone[0]}
-            <div class="done-item">
-              <Check size={11} aria-hidden="true" />
-              <span class="bicon"><Mountain size={11} aria-hidden="true" /></span>
-              <span class="lbl">Sold {formatNumber(total.amount)} stones</span>
-              <span class="sub">+{total.coin} coin</span>
-            </div>
-          {/if}
-        </div>
-      {/if}
-      {#if doneEarlyBuys}
-        <p class="sub-label">Buy</p>
-        <div class="actions">
-          {#each { length: FOOD_PURCHASE_COUNT } as _, i (i)}
-            {#if gs.market.foodBought > i}
-              <div class="done-item">
-                <Check size={11} aria-hidden="true" />
-                <span class="bicon"><Wheat size={11} aria-hidden="true" /></span>
-                <span class="lbl">Food Supply {i + 1} — {FOOD_PURCHASE_AMOUNT} food</span>
-                <span class="sub">-{FOOD_PURCHASE_COST} coin</span>
-              </div>
-            {/if}
-          {/each}
-        </div>
-      {/if}
-    </div>
-    {/if}
 
-    {#if hasAdvancedCompleted}
-    <div class="tier-group">
-      <p class="tier-label">Advanced Market</p>
-      {#if doneAdvancedSells}
-        <p class="sub-label">Sell</p>
-        <div class="actions">
-          {#if arrowsDone}
-            {@const total = SELL_TIER_DEFS.arrow.length}
-            <div class="done-item">
-              <Check size={11} aria-hidden="true" />
-              <span class="bicon"><Needle size={11} aria-hidden="true" /></span>
-              <span class="lbl">Arrows — all {total} tiers sold</span>
-            </div>
-          {/if}
-          {#if spearsDone}
-            {@const total = SELL_TIER_DEFS.spear.length}
-            <div class="done-item">
-              <Check size={11} aria-hidden="true" />
-              <span class="bicon"><Trident size={11} aria-hidden="true" /></span>
-              <span class="lbl">Spears — all {total} tiers sold</span>
+          {#if hasAdvancedCompleted}
+            <div class="tier-group">
+              <p class="tier-label">Advanced Market</p>
+              {#if doneAdvancedSells}
+                <p class="sub-label">Sell</p>
+                <div class="done-list">
+                  {#if sold.arrow}
+                    <div class="done-item">
+                      <Check size={11} aria-hidden="true" />
+                      <span class="bicon"><Needle size={11} aria-hidden="true" /></span>
+                      <span class="lbl"
+                        >Sold {formatNumber(SELL_OFFERS.arrow.amount)}
+                        {SELL_OFFERS.arrow.noun}</span
+                      >
+                      <span class="sub">+{SELL_OFFERS.arrow.coin} coin</span>
+                    </div>
+                  {/if}
+                  {#if sold.spear}
+                    <div class="done-item">
+                      <Check size={11} aria-hidden="true" />
+                      <span class="bicon"><Trident size={11} aria-hidden="true" /></span>
+                      <span class="lbl"
+                        >Sold {formatNumber(SELL_OFFERS.spear.amount)}
+                        {SELL_OFFERS.spear.noun}</span
+                      >
+                      <span class="sub">+{SELL_OFFERS.spear.coin} coin</span>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+              {#if doneAdvancedBuys}
+                <p class="sub-label">Buy</p>
+                <div class="done-list">
+                  {#each unlockedRates as id (id)}
+                    <div class="done-item">
+                      <Check size={11} aria-hidden="true" />
+                      <span class="bicon"><Gauge size={11} aria-hidden="true" /></span>
+                      <span class="lbl">{RESOURCES[id].name} Rate Display</span>
+                      <span class="sub">-{RATE_UNLOCK_COST} coin</span>
+                    </div>
+                  {/each}
+                  {#each signedContracts as id (id)}
+                    {@const contract = WORKER_CONTRACTS[id]}
+                    <div class="done-item">
+                      <Check size={11} aria-hidden="true" />
+                      <span class="bicon"><Users size={11} aria-hidden="true" /></span>
+                      <span class="lbl"
+                        >Worker Contract {contract.numeral} — +{contract.workers} worker{contract.workers >
+                        1
+                          ? 's'
+                          : ''}</span
+                      >
+                      <span class="sub">-{contract.cost} coin</span>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
             </div>
           {/if}
         </div>
-      {/if}
-      {#if doneAdvancedBuys}
-        <p class="sub-label">Buy</p>
-        <div class="actions">
-          {#each unlockedRates as id (id)}
-            <div class="done-item">
-              <Check size={11} aria-hidden="true" />
-              <span class="bicon"><Gauge size={11} aria-hidden="true" /></span>
-              <span class="lbl">Rate Display {RATE_UNLOCK_NUMERAL[id]} — {RESOURCES[id].name}</span>
-              <span class="sub">-{RATE_UNLOCK_COST} coin</span>
-            </div>
-          {/each}
-          {#each signedContracts as contract, i (i)}
-            <div class="done-item">
-              <Check size={11} aria-hidden="true" />
-              <span class="bicon"><Users size={11} aria-hidden="true" /></span>
-              <span class="lbl">Worker Contract {'I'.repeat(i + 1)} — +{contract.workers} worker{contract.workers > 1 ? 's' : ''}</span>
-              <span class="sub">-{contract.cost} coin</span>
-            </div>
-          {/each}
-        </div>
-      {/if}
+      </details>
     </div>
-    {/if}
-  </div>
   {/if}
 </section>
 
@@ -395,172 +431,92 @@
     margin-top: 0;
     padding-top: 0;
   }
+  /* Section heading and its hint share one line — the hint is a caption, not a
+     paragraph, and stacking them cost a row on every section. */
   .block h3 {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     font-family: var(--font-display);
-    font-size: 17px;
+    font-size: 16px;
     color: var(--text);
   }
   .hint {
+    display: inline;
     color: var(--text-muted);
-    font-size: 13px;
-    margin: 2px 0 var(--space-3);
+    font-size: 11.5px;
+    margin: 0 0 0 8px; /* no global p reset — kill the UA's vertical 1em */
   }
+  /* Offers are cards on a responsive grid — as many per row as the panel can
+     fit at a readable width, reflowing on narrow screens without a breakpoint.
+     `stretch` keeps every card in a row the same height so their pinned action
+     buttons land on one line. */
   .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
+    align-items: stretch;
+    gap: 8px;
+    margin-top: 7px;
   }
   /* Sell / Buy divider inside a section. */
   .sub-label {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--text-muted);
+    opacity: 0.75;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin: var(--space-3) 0 6px;
+    letter-spacing: 0.08em;
+    margin: var(--space-2) 0 0;
   }
-  /* The first sub-row sits directly under the section's hint / tier label, which
-     already spaces itself. (:first-of-type can't be used — .hint and .tier-label
-     are <p> siblings too.) */
-  .hint + .sub-label,
+  /* The first sub-row sits directly under a tier label, which already spaces
+     itself. (:first-of-type can't be used — .tier-label is a <p> sibling too.) */
   .tier-label + .sub-label {
     margin-top: 0;
   }
-  /* Icon column on the left, title + quip beside it, and the price tag on its
-     own line underneath — so the price reads as the consequence of the content
-     above it rather than competing with it across the row. */
-  .buy {
-    display: inline-grid;
-    grid-template-columns: auto 1fr;
-    grid-template-areas:
-      'icon main'
-      '.    price';
-    align-items: center;
-    justify-items: start;
-    column-gap: 10px;
-    row-gap: 8px;
-    padding: 8px 12px;
-    font-size: 15px;
-    text-align: left;
-    border: 1px solid var(--border);
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-    color: var(--text);
-    border-radius: var(--radius);
-    transition: background var(--transition);
-  }
-  button.buy:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent) 28%, transparent);
-  }
-  /* Unaffordable buttons drop to muted text — still readable enough to see what
-     you're working toward, but clearly recessed against the ones you can press.
-     The flattened background and the red price tag finish the signal. */
-  button.buy:disabled {
-    background: transparent;
-    border-color: color-mix(in srgb, var(--border) 60%, transparent);
-    color: var(--text-muted);
-    cursor: not-allowed;
-  }
-  button.buy:disabled .bicon {
-    color: color-mix(in srgb, var(--text-muted) 70%, transparent);
-  }
-  button.buy:disabled .sub {
-    color: color-mix(in srgb, var(--text-muted) 70%, transparent);
-  }
-  .buy .bicon {
-    grid-area: icon;
-  }
-  .buy-main {
-    grid-area: main;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    align-items: flex-start;
-  }
-  .lbl {
-    white-space: nowrap;
-    font-weight: 500;
-  }
-  .sub {
-    color: var(--text-muted);
-    font-size: 11px;
-  }
-  /* The quip line is the only thing here allowed to wrap — .lbl stays on one
-     line, so a long quip widens the button rather than stretching the row. */
-  .buy-main .sub {
-    white-space: normal;
-    max-width: 46ch;
-  }
-  /* Tier counter, trailing the quip. */
-  .tier {
-    opacity: 0.7;
-  }
-  /* Small resource/feature icon leading each button and completed pill. */
-  .bicon {
-    display: inline-flex;
-    align-items: center;
-    color: var(--accent);
-    flex-shrink: 0;
-  }
-  .done-item .bicon {
-    color: inherit;
-  }
-  /* Two price tags: coin you PAY (.cost-pill, every buy) vs coin you RECEIVE
-     (.gain-pill, every sell). Colour alone can't carry the difference — both go
-     red when the button is unpressable — so the SHAPE is the tell and it holds
-     in every state: a gain is a solid rounded capsule, a cost is a squared,
-     dashed, hollow tag. Read the outline, not the sign. */
-  .cost-pill,
-  .gain-pill {
-    grid-area: price;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 10px;
-    font-size: 13px;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  .gain-pill {
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--good) 22%, transparent);
-    border: 1px solid color-mix(in srgb, var(--good) 45%, transparent);
-    color: var(--good);
-    font-weight: 600;
-  }
-  .cost-pill {
-    border-radius: 3px;
-    background: transparent;
-    border: 1px dashed color-mix(in srgb, var(--gold) 55%, transparent);
-    color: var(--gold);
-  }
-  .gain-pill.short {
-    background: color-mix(in srgb, var(--bad) 22%, transparent);
-    border-color: color-mix(in srgb, var(--bad) 45%, transparent);
-    color: var(--bad);
-  }
-  .cost-pill.short {
-    border-color: color-mix(in srgb, var(--bad) 50%, transparent);
-    color: var(--bad);
-  }
 
-  /* Completed section */
-  .completed-block {
-    opacity: 0.6;
+  /* Completed ledger */
+  .ledger summary {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    cursor: pointer;
+    color: var(--text-muted);
+    list-style: none;
   }
-  .completed-head {
+  .ledger summary::-webkit-details-marker {
+    display: none;
+  }
+  /* Own disclosure caret, so the row matches the panel's type rather than the
+     browser's default triangle. */
+  .ledger summary::after {
+    content: '▾';
+    font-size: 11px;
+    transition: transform var(--transition);
+  }
+  .ledger[open] summary::after {
+    transform: rotate(180deg);
+  }
+  .ledger summary:hover {
+    color: var(--text);
+  }
+  .ledger-title {
     font-family: var(--font-display);
     font-size: 14px;
-    color: var(--text-muted);
-    margin-bottom: var(--space-2);
+  }
+  .ledger-count {
+    font-size: 11px;
+    opacity: 0.8;
+    font-variant-numeric: tabular-nums;
+  }
+  .ledger-body {
+    margin-top: var(--space-2);
+    opacity: 0.6;
   }
   .tier-label {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin: var(--space-2) 0 6px;
+    letter-spacing: 0.08em;
+    margin: var(--space-2) 0 4px;
   }
   .tier-label:first-of-type {
     margin-top: 0;
@@ -568,18 +524,29 @@
   .tier-group + .tier-group {
     margin-top: var(--space-3);
   }
+  .done-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 4px;
+  }
   .done-item {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 4px 10px 4px 7px;
-    font-size: 12px;
+    padding: 3px 9px 3px 6px;
+    font-size: 11px;
     color: var(--text-muted);
     border-radius: 999px;
     background: color-mix(in srgb, var(--border) 22%, transparent);
     border: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
     flex-direction: row;
     flex-wrap: nowrap;
+  }
+  .done-item .bicon {
+    display: inline-flex;
+    align-items: center;
+    color: inherit;
   }
   .done-item .lbl {
     white-space: nowrap;

@@ -5,7 +5,7 @@ import { tick } from '../src/engine/tick';
 import {
   assignWorker,
   trainWorker,
-  sellResourceTier,
+  sellResource,
   buyRateUnlock,
   buyWorkerContract,
   buyFood,
@@ -27,13 +27,20 @@ import {
   canTrainWorker,
   getNetProductionRate,
   getLiveNetProductionRate,
-  canSellTier,
+  canSell,
+  getSellOffer,
   isRateUnlocked,
   canBuyRateUnlock,
   canBuyWorkerContract,
   canBuyFood,
+  hasMarketOpportunity,
 } from '../src/engine/selectors';
-import { MAX_COIN_EARNED } from '../src/content/market';
+import {
+  MAX_COIN_EARNED,
+  SELLABLE_RESOURCES,
+  RATE_UNLOCK_RESOURCES,
+  WORKER_CONTRACT_IDS,
+} from '../src/content/market';
 
 describe('gathering', () => {
   it('produces at the producer rate', () => {
@@ -257,7 +264,10 @@ describe('settlement', () => {
       for (const [rid, amount] of Object.entries(next.cost) as [ResourceId, number][]) {
         const cap = tier.caps[rid];
         if (cap === undefined) continue; // uncapped resource (honor/wisdom/mithril)
-        expect(amount, `L${tier.level} cap for ${rid} must hold L${next.level} cost`).toBeLessThanOrEqual(cap);
+        expect(
+          amount,
+          `L${tier.level} cap for ${rid} must hold L${next.level} cost`,
+        ).toBeLessThanOrEqual(cap);
       }
     }
   });
@@ -438,6 +448,59 @@ describe('save', () => {
     expect(restored.resources.coin.amount.toNumber()).toBe(0);
   });
 
+  it('collapses tiered market progress to one-and-done flags (v8 → v9)', () => {
+    const v8 = JSON.stringify({
+      version: 8,
+      createdAt: 1,
+      playtime: 1,
+      level: 5,
+      resources: { coin: { amount: '5000' } },
+      market: {
+        coinEarned: '111110',
+        sellTier: { wood: 1, stone: 0, arrow: 3, spear: 0 },
+        rateUnlocks: { wood: true, stone: false, food: false },
+        workerContract: 2,
+        foodBought: 1,
+      },
+    });
+    const restored = deserialize(v8, 0);
+
+    // Any progress on a chain counts as having taken that offer — a player is
+    // never billed twice for something they already paid for.
+    expect(restored.market.sold).toEqual({
+      wood: true,
+      stone: false,
+      arrow: true,
+      spear: false,
+    });
+    // Two of three signed, in order, under the old sequential chain.
+    expect(restored.market.contracts).toEqual({ i: true, ii: true, iii: false });
+    expect(restored.market.foodBought).toBe(true);
+    expect(restored.market.rateUnlocks.wood).toBe(true);
+
+    // Old-economy coin is meaningless against the new 22 ceiling, so both the
+    // balance and the lifetime total are clamped to it.
+    expect(restored.market.coinEarned.toNumber()).toBe(MAX_COIN_EARNED);
+    expect(restored.resources.coin.amount.toNumber()).toBe(MAX_COIN_EARNED);
+  });
+
+  it('carries a v7 save through the chain instead of stranding it', () => {
+    // `migrate` stops at the first missing step, so v7 needs its own entry or
+    // every later migration is skipped and the market reshape never runs.
+    const v7 = JSON.stringify({
+      version: 7,
+      createdAt: 1,
+      playtime: 1,
+      level: 5,
+      resources: {},
+      market: { sellTier: { wood: 1, stone: 1, arrow: 0, spear: 0 }, workerContract: 1 },
+    });
+    const restored = deserialize(v7, 0);
+    expect(restored.version).toBe(SAVE_VERSION);
+    expect(restored.market.sold.wood).toBe(true);
+    expect(restored.market.contracts.i).toBe(true);
+  });
+
   it('falls back to a fresh state on garbage', () => {
     const restored = deserialize('not json', 500);
     expect(restored.level).toBe(0);
@@ -535,133 +598,138 @@ describe('net production rate — live vs nominal', () => {
 });
 
 describe('market — coin economy', () => {
-  it('sells wood/stone for coin in a single one-time tier', () => {
+  it('sells each resource exactly once', () => {
     const s = createInitialState(0);
     s.resources.wood.amount = D(3);
     s.resources.stone.amount = D(3);
 
-    expect(canSellTier(s, 'wood')).toBe(true);
-    expect(sellResourceTier(s, 'wood')).toBe(true);
+    expect(canSell(s, 'wood')).toBe(true);
+    expect(sellResource(s, 'wood')).toBe(true);
     expect(s.resources.wood.amount.toNumber()).toBe(0);
     expect(s.resources.coin.amount.toNumber()).toBe(1);
-    expect(s.market.sellTier.wood).toBe(1);
-    // Only one tier — already sold.
-    expect(canSellTier(s, 'wood')).toBe(false);
+    expect(s.market.sold.wood).toBe(true);
 
-    expect(sellResourceTier(s, 'stone')).toBe(true);
+    // One and done — the offer is gone even with stock back on hand.
+    s.resources.wood.amount = D(999);
+    expect(canSell(s, 'wood')).toBe(false);
+    expect(sellResource(s, 'wood')).toBe(false);
+    expect(s.resources.coin.amount.toNumber()).toBe(1);
+
+    expect(sellResource(s, 'stone')).toBe(true);
     expect(s.resources.coin.amount.toNumber()).toBe(2);
-    expect(canSellTier(s, 'stone')).toBe(false);
+    expect(canSell(s, 'stone')).toBe(false);
   });
 
-  it('sells arrows in five sequential one-time tiers, consuming stock', () => {
+  it('sells arrows once, consuming stock, with no further tier', () => {
     const s = createInitialState(0);
     s.resources.arrow.amount = D(2_000);
 
-    // Tier 1: consume 100 arrows → +10 coin.
-    expect(canSellTier(s, 'arrow')).toBe(true);
-    expect(sellResourceTier(s, 'arrow')).toBe(true);
+    expect(canSell(s, 'arrow')).toBe(true);
+    expect(sellResource(s, 'arrow')).toBe(true);
     expect(s.resources.arrow.amount.toNumber()).toBe(1_900);
     expect(s.resources.coin.amount.toNumber()).toBe(10);
     expect(s.market.coinEarned.toNumber()).toBe(10);
-    expect(s.market.sellTier.arrow).toBe(1);
+    expect(s.market.sold.arrow).toBe(true);
 
-    // Tier 2: consume 1,000 → still have 1,900, can sell.
-    expect(canSellTier(s, 'arrow')).toBe(true);
-    expect(sellResourceTier(s, 'arrow')).toBe(true);
-    expect(s.resources.arrow.amount.toNumber()).toBe(900);
-    expect(s.resources.coin.amount.toNumber()).toBe(110);
-
-    // Tier 3 needs 10,000 — not enough on hand.
-    expect(canSellTier(s, 'arrow')).toBe(false);
-    expect(sellResourceTier(s, 'arrow')).toBe(false);
+    // Plenty of stock left, but there is no second sale.
+    expect(canSell(s, 'arrow')).toBe(false);
+    expect(sellResource(s, 'arrow')).toBe(false);
+    expect(getSellOffer(s, 'arrow')).toBeNull();
   });
 
   it('caps lifetime coin earned at MAX_COIN_EARNED across all sellable resources', () => {
     const s = createInitialState(0);
-
-    // Sell all tiers of arrow and spear (5 tiers each, need enough stock).
-    for (const id of ['arrow', 'spear'] as const) {
-      s.resources[id].amount = D(2_000_000);
-      for (let i = 0; i < 5; i++) {
-        expect(sellResourceTier(s, id)).toBe(true);
-      }
-      expect(canSellTier(s, id)).toBe(false); // all 5 tiers sold
+    for (const id of SELLABLE_RESOURCES) {
+      s.resources[id].amount = D(1_000);
+      expect(sellResource(s, id)).toBe(true);
+      expect(canSell(s, id)).toBe(false);
     }
-
-    // Sell the single wood and stone tiers.
-    s.resources.wood.amount = D(3);
-    expect(sellResourceTier(s, 'wood')).toBe(true);
-    s.resources.stone.amount = D(3);
-    expect(sellResourceTier(s, 'stone')).toBe(true);
-
     expect(s.market.coinEarned.toNumber()).toBe(MAX_COIN_EARNED);
     expect(s.resources.coin.amount.toNumber()).toBe(MAX_COIN_EARNED);
   });
 
-  it('buys food twice with coin, then the slot is exhausted', () => {
+  it('closes the economy: every sale exactly funds every purchase', () => {
+    const s = createInitialState(0);
+    for (const id of SELLABLE_RESOURCES) {
+      s.resources[id].amount = D(1_000);
+      sellResource(s, id);
+    }
+    expect(s.resources.coin.amount.toNumber()).toBe(MAX_COIN_EARNED);
+
+    expect(buyFood(s)).toBe(true);
+    for (const id of RATE_UNLOCK_RESOURCES) expect(buyRateUnlock(s, id)).toBe(true);
+    for (const id of WORKER_CONTRACT_IDS) expect(buyWorkerContract(s, id)).toBe(true);
+
+    // Nothing left to buy, and not a coin wasted.
+    expect(s.resources.coin.amount.toNumber()).toBe(0);
+    expect(hasMarketOpportunity(s)).toBe(false);
+  });
+
+  it('buys food once, then the offer is spent', () => {
     const s = createInitialState(0);
     s.resources.coin.amount = D(3);
 
     expect(canBuyFood(s)).toBe(true);
     expect(buyFood(s)).toBe(true);
-    expect(s.resources.food.amount.toNumber()).toBe(5);
-    expect(s.resources.coin.amount.toNumber()).toBe(2);
-    expect(s.market.foodBought).toBe(1);
-
-    expect(buyFood(s)).toBe(true);
     expect(s.resources.food.amount.toNumber()).toBe(10);
-    expect(s.resources.coin.amount.toNumber()).toBe(1);
-    expect(s.market.foodBought).toBe(2);
+    expect(s.resources.coin.amount.toNumber()).toBe(2);
+    expect(s.market.foodBought).toBe(true);
 
-    // Both slots used — can't buy again even with coin remaining.
+    // One and done, even with coin remaining.
     expect(canBuyFood(s)).toBe(false);
     expect(buyFood(s)).toBe(false);
-    expect(s.resources.coin.amount.toNumber()).toBe(1);
+    expect(s.resources.coin.amount.toNumber()).toBe(2);
   });
 
-  it('unlocks a core rate display for 10 coin, in any order', () => {
+  it('unlocks a core rate display for its cost, in any order', () => {
     const s = createInitialState(0);
-    s.resources.coin.amount = D(25);
+    s.resources.coin.amount = D(6);
     expect(isRateUnlocked(s, 'food')).toBe(false);
     expect(canBuyRateUnlock(s, 'food')).toBe(true);
     expect(buyRateUnlock(s, 'food')).toBe(true);
     expect(isRateUnlocked(s, 'food')).toBe(true);
-    expect(s.resources.coin.amount.toNumber()).toBe(15);
+    expect(s.resources.coin.amount.toNumber()).toBe(4);
     // Buying the same one again is a no-op.
     expect(canBuyRateUnlock(s, 'food')).toBe(false);
     expect(buyRateUnlock(s, 'food')).toBe(false);
   });
 
-  it('signs Worker Contracts in order, adding bonus workers', () => {
+  it('signs Worker Contracts independently, in any order', () => {
     const s = createInitialState(0);
-    s.resources.coin.amount = D(1_200);
+    s.resources.coin.amount = D(15);
     const before = s.workers.bonus;
 
-    expect(buyWorkerContract(s)).toBe(true); // I: +1 worker, 10 coin
-    expect(s.workers.bonus).toBe(before + 1);
-    expect(s.market.workerContract).toBe(1);
+    // III first — there is no chain, so nothing gates it.
+    expect(buyWorkerContract(s, 'iii')).toBe(true); // +3 workers, 7 coin
+    expect(s.workers.bonus).toBe(before + 3);
+    expect(s.market.contracts.iii).toBe(true);
+    expect(s.market.contracts.i).toBe(false);
 
-    expect(buyWorkerContract(s)).toBe(true); // II: +2 workers, 100 coin
-    expect(buyWorkerContract(s)).toBe(true); // III: +3 workers, 1000 coin
+    expect(buyWorkerContract(s, 'i')).toBe(true); // +1 worker, 3 coin
+    expect(buyWorkerContract(s, 'ii')).toBe(true); // +2 workers, 5 coin
     expect(s.workers.bonus).toBe(before + 6);
-    expect(s.resources.coin.amount.toNumber()).toBe(1_200 - 1_110);
+    expect(s.resources.coin.amount.toNumber()).toBe(0);
 
-    // All contracts signed.
-    expect(canBuyWorkerContract(s)).toBe(false);
-    expect(buyWorkerContract(s)).toBe(false);
+    // Each is one and done.
+    expect(canBuyWorkerContract(s, 'iii')).toBe(false);
+    expect(buyWorkerContract(s, 'iii')).toBe(false);
   });
 
   it('persists market progress through a save round-trip', () => {
     const s = createInitialState(0);
     s.resources.wood.amount = D(3);
     s.resources.arrow.amount = D(100);
-    sellResourceTier(s, 'wood');  // +1 coin
-    sellResourceTier(s, 'arrow'); // +10 coin → 11 total
-    buyRateUnlock(s, 'wood');     // -10 coin → 1 remaining
+    sellResource(s, 'wood'); // +1 coin
+    sellResource(s, 'arrow'); // +10 coin → 11 total
+    buyRateUnlock(s, 'wood'); // -2 coin → 9 remaining
+    buyWorkerContract(s, 'ii');
     const restored = deserialize(serialize(s), 0);
-    expect(restored.market.sellTier.wood).toBe(1);
-    expect(restored.market.sellTier.arrow).toBe(1);
+    expect(restored.market.sold.wood).toBe(true);
+    expect(restored.market.sold.arrow).toBe(true);
+    expect(restored.market.sold.spear).toBe(false);
     expect(restored.market.coinEarned.toNumber()).toBe(11);
     expect(restored.market.rateUnlocks.wood).toBe(true);
+    expect(restored.market.contracts.ii).toBe(true);
+    expect(restored.market.contracts.i).toBe(false);
   });
 });
