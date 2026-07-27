@@ -3,7 +3,12 @@
   import { onMount } from 'svelte';
   import { game } from './ui/gameStore.svelte';
   import { sound } from './ui/sound.svelte';
-  import { getAvailableWorkers, getTotalWorkers, getCapacity } from './engine/selectors';
+  import {
+    getAvailableWorkers,
+    getTotalWorkers,
+    getCapacity,
+    hasMarketOpportunity,
+  } from './engine/selectors';
   import { RESOURCES, type ResourceId } from './content/resources';
   import { formatNumber } from './engine/numbers';
   import SettlementPanel from './ui/SettlementPanel.svelte';
@@ -12,9 +17,19 @@
   import SettingsPanel from './ui/SettingsPanel.svelte';
   import MarketPanel from './ui/MarketPanel.svelte';
   import WelcomeBack from './ui/WelcomeBack.svelte';
+  import MainTabs, { type MainTab, type TabDef } from './ui/MainTabs.svelte';
   import Toasts from './ui/Toasts.svelte';
-  import { getNavSections, isMarketUnlocked } from './ui/sections';
+  import {
+    getNavSections,
+    isMarketUnlocked,
+    isQuestsUnlocked,
+    hasQuestsOpportunity,
+  } from './ui/sections';
+  import { getTier } from './content/settlement';
   import Castle from '@lucide/svelte/icons/castle';
+  import House from '@lucide/svelte/icons/house';
+  import ScrollText from '@lucide/svelte/icons/scroll-text';
+  import BuildingStore from './ui/icons/BuildingStore.svelte';
   import Settings from '@lucide/svelte/icons/settings';
   import Users from '@lucide/svelte/icons/users';
   import Check from '@lucide/svelte/icons/check';
@@ -36,10 +51,60 @@
   // Measured so the settings drawer and rails can park just below the header,
   // whose height shifts with the chosen font/layout.
   let headerH = $state(0);
+  // The zone bar is sticky under the header, so everything that scrolls to the
+  // top has to clear both. Measured rather than assumed — it wraps to two rows
+  // on narrow screens, and the settlement tab's label grows with the tier.
+  let tabsH = $state(0);
+  /**
+   * Extra breathing room above a jumped-to section, so it doesn't butt right up
+   * against the sticky chrome and you can still see a sliver of what's above it.
+   */
+  const SCROLL_PEEK = 22;
 
   const gs = $derived(game.state);
-  // The Market (coin economy) unlocks at settlement level 2.
+  // The Market (coin economy) unlocks at settlement level 1. Until then there's
+  // only one tab, so the whole bar stays hidden rather than showing a lone tab.
   const showMarket = $derived(isMarketUnlocked(gs));
+
+  const showQuests = $derived(isQuestsUnlocked(gs));
+  const questsAlert = $derived(hasQuestsOpportunity(gs));
+
+  // The first tab wears the settlement's own title, e.g. "Lvl 6 Small Town".
+  const settlementTitle = $derived(getTier(gs.level)?.name ?? 'Settlement');
+
+  // Each tab appears only once its content exists, so the bar grows 1 → 2 → 3
+  // as the game opens up. A single tab is no tab bar at all.
+  const tabs = $derived.by(() => {
+    const list: TabDef[] = [
+      {
+        id: 'settlement',
+        label: `Lvl ${gs.level} ${settlementTitle}`,
+        shortLabel: settlementTitle,
+        icon: House,
+      },
+    ];
+    if (showQuests) {
+      list.push({
+        id: 'quests',
+        label: 'Quests',
+        icon: ScrollText,
+        alert: questsAlert,
+      });
+    }
+    if (showMarket) {
+      list.push({
+        id: 'market',
+        label: 'Market',
+        icon: BuildingStore,
+        alert: hasMarketOpportunity(gs),
+      });
+    }
+    return list;
+  });
+
+  // Which zone is currently under the header line. The whole page is one scroll,
+  // so the zone bar reflects where you are rather than choosing what renders.
+  let activeZone = $state<MainTab>('settlement');
 
   // Left-rail jump targets: one per visible main-content section, each with a
   // worker count and an opportunity/danger indicator.
@@ -64,6 +129,14 @@
     tip = null;
   }
 
+  /** Scroll a zone to just under the sticky header, like the rail's jumps. */
+  function jumpToZone(zone: MainTab) {
+    const el = document.querySelector<HTMLElement>(`[data-zone="${zone}"]`);
+    if (!el) return;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  }
+
   function jumpTo(id: string) {
     const el = document.querySelector<HTMLElement>(`[data-nav="${id}"]`);
     if (!el) return;
@@ -71,15 +144,36 @@
 
     el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
 
-    // Light the ring up right away, concurrently with the scroll, so it's
-    // already glowing as the section slides into view rather than snapping on
-    // after it lands. The animation fades in, holds, then drifts out slowly, and
-    // is long enough that it's still lit when a distant section arrives. Restart
-    // the animation cleanly if the same target is jumped to again.
+    flash(el);
+  }
+
+  // Ring state: the class holds it lit; dropping the class fades it out via the
+  // CSS transition, so the timer only covers fade-in + hold.
+  const FLASH_HOLD_MS = 1080;
+  let flashTimer = 0;
+  let flashEl: HTMLElement | null = null;
+
+  /**
+   * Light the accent ring on a jumped-to section, concurrently with the scroll,
+   * so it's already glowing as the section slides into view rather than
+   * snapping on after it lands.
+   */
+  function flash(el: HTMLElement) {
+    // Cancel any ring still lit elsewhere, so two quick jumps don't leave one on.
+    if (flashTimer) {
+      clearTimeout(flashTimer);
+      flashEl?.classList.remove('nav-flash');
+    }
+    flashEl = el;
+    // Re-adding the class in the same frame wouldn't restart the transition, so
+    // force a style flush between removing and re-adding for repeat jumps.
     el.classList.remove('nav-flash');
     void el.offsetWidth;
     el.classList.add('nav-flash');
-    window.setTimeout(() => el.classList.remove('nav-flash'), 2400);
+    flashTimer = window.setTimeout(() => {
+      el.classList.remove('nav-flash');
+      flashTimer = 0;
+    }, FLASH_HOLD_MS);
   }
   const available = $derived(getAvailableWorkers(gs));
   const total = $derived(getTotalWorkers(gs));
@@ -150,13 +244,23 @@
     let raf = 0;
     const recompute = () => {
       raf = 0;
-      const line = headerH + 20;
+      const line = headerH + tabsH + SCROLL_PEEK + 4;
       const els = Array.from(document.querySelectorAll<HTMLElement>('[data-nav]'));
       let current = els[0]?.dataset.nav ?? null;
       for (const el of els) {
         if (el.getBoundingClientRect().top - line <= 1) current = el.dataset.nav ?? current;
       }
       activeSection = current;
+
+      // Same pass, coarser grain: which of the three zones is under the line.
+      const zones = Array.from(document.querySelectorAll<HTMLElement>('[data-zone]'));
+      let zone = (zones[0]?.dataset.zone as MainTab | undefined) ?? 'settlement';
+      for (const el of zones) {
+        if (el.getBoundingClientRect().top - line <= 1) {
+          zone = (el.dataset.zone as MainTab | undefined) ?? zone;
+        }
+      }
+      activeZone = zone;
     };
     const onScroll = () => {
       if (!raf) raf = requestAnimationFrame(recompute);
@@ -257,7 +361,10 @@
   </header>
 </div>
 
-<div class="layout" style="--header-h: {headerH}px">
+<div
+  class="layout"
+  style="--header-h: {headerH}px; --scroll-offset: {headerH + tabsH + SCROLL_PEEK}px"
+>
   <!-- Left jump rail: one button per visible section. Clicking scrolls to it;
        a dot flags an affordable upgrade (gold) or an under-supplied threat
        track (amber), and a
@@ -265,9 +372,9 @@
        edge, mirroring the panel rail on the right. -->
   {#if gs.workers.trained >= 1}
     <nav class="jump-rail" aria-label="Jump to section">
-      {#each navSections as s (s.id)}
+      {#each navSections as s, i (s.id)}
         {@const Icon = s.icon}
-        {#if s.separated}
+        {#if i > 0 && navSections[i - 1].zone !== s.zone}
           <span class="rail-divider" aria-hidden="true"></span>
         {/if}
         <button
@@ -301,17 +408,36 @@
   <div class="app">
     <main>
       <WelcomeBack />
-      <SettlementPanel />
-      <CombatPanel />
-      <ResourcePanel />
-      {#if showMarket}
-        <!-- The Market is set apart from the resource sections by a divider, and
-             sits last in the main content. -->
-        <hr class="section-divider" />
-        <MarketPanel />
+
+      <!-- Zone bar. Sticky, and it jumps rather than switches: everything below
+           stays on the page and remains reachable by scrolling. Hidden until
+           there's more than one zone to move between. -->
+      {#if tabs.length > 1}
+        <div class="tabbar" bind:clientHeight={tabsH}>
+          <MainTabs {tabs} active={activeZone} onselect={jumpToZone} />
+        </div>
       {/if}
+
+      <div class="zone" data-zone="settlement">
+        <SettlementPanel />
+        <CombatPanel />
+        <ResourcePanel />
+      </div>
+
+      {#if showQuests}
+        <div class="zone" data-zone="quests">
+          <ResourcePanel scope="quests" />
+        </div>
+      {/if}
+
+      {#if showMarket}
+        <div class="zone" data-zone="market">
+          <MarketPanel />
+        </div>
+      {/if}
+
       <!-- Breathing room so the last (possibly short) section can scroll up to
-           the header line, triggering its active state in the left rail. -->
+           the header line, triggering its active state in the rail and bar. -->
       <div class="tail-space" aria-hidden="true"></div>
     </main>
 
@@ -405,16 +531,6 @@
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
-  /* Sets the shop apart from the main-content sections in the rail. */
-  .rail-divider {
-    flex: 0 0 auto;
-    align-self: center;
-    width: 24px;
-    height: 1px;
-    margin: var(--space-1) 0;
-    background: var(--border);
-  }
-
   /* Instant hover/focus label for both icon rails. Fixed-positioned (see
      showTip) so it clears the left rail's scroll clipping; JS supplies the
      left/top of the anchoring edge and the side class picks which way it grows
@@ -475,40 +591,36 @@
     color: var(--accent);
   }
 
-  /* Sections land clear of the sticky header when jumped to. */
+  /* Sections land clear of the sticky header AND the sticky zone bar when
+     jumped to, plus a little peek at whatever sits above them. */
   :global([data-nav]) {
-    scroll-margin-top: calc(var(--header-h, 72px) + var(--space-3));
+    scroll-margin-top: var(--scroll-offset, 96px);
   }
-  /* Subtle accent ring that fades out once a section is jumped to. Uses outline
-     (not box-shadow) so it never disturbs the panels' own drop shadow. */
-  :global([data-nav].nav-flash) {
+  /* Subtle accent ring shown when a section is jumped to. Uses outline (not
+     box-shadow) so it never disturbs the panels' own drop shadow.
+     
+     Deliberately a TRANSITION rather than a keyframe animation. Three of the
+     four [data-nav] elements are panels already running `animation: fadeIn`, on
+     the very same element — a keyframe animation here would override that
+     shorthand while the ring showed, then hand it back when the class was
+     removed, which the browser treats as a brand-new animation and replays.
+     That re-ran each panel's fade-in from opacity 0 the instant the ring
+     finished: the flicker. A transition touches `animation` not at all. */
+  :global([data-nav]) {
     outline: 2px solid transparent;
     outline-offset: 3px;
-    animation: navFlash 2.4s;
+    /* Fade OUT — applies when .nav-flash is removed. */
+    transition: outline-color 1.32s ease-in-out;
   }
-  /* Each phase gets its own easing (set on the keyframe that begins it): a slow,
-     smooth ease-in-out on the way in so the ring never pops, a brief hold, then
-     an even longer ease-in-out fade out. */
-  @keyframes navFlash {
-    0% {
-      outline-color: transparent;
-      animation-timing-function: ease-in-out; /* fade in: 0 → 30% (~720ms) */
-    }
-    30% {
-      outline-color: color-mix(in srgb, var(--accent) 75%, transparent);
-      animation-timing-function: linear; /* hold: 30 → 45% */
-    }
-    45% {
-      outline-color: color-mix(in srgb, var(--accent) 75%, transparent);
-      animation-timing-function: ease-in-out; /* fade out: 45 → 100% (~1.3s) */
-    }
-    100% {
-      outline-color: transparent;
-    }
+  :global([data-nav].nav-flash) {
+    outline-color: color-mix(in srgb, var(--accent) 75%, transparent);
+    /* Fade IN — quicker than the fade out, as before. */
+    transition-duration: 0.72s;
   }
   @media (prefers-reduced-motion: reduce) {
+    :global([data-nav]),
     :global([data-nav].nav-flash) {
-      animation: none;
+      transition: none;
     }
   }
 
@@ -745,11 +857,31 @@
     flex-direction: column;
     gap: var(--panel-gap);
   }
-  /* Sets the shop apart from the resource sections in the main content. */
-  .section-divider {
-    border: 0;
-    border-top: 1px solid var(--border);
-    margin: var(--space-2) 0;
+  /* Pins the zone bar directly under the sticky header. Owned here rather than
+     inside MainTabs so its height can be measured for --scroll-offset. */
+  .tabbar {
+    position: sticky;
+    top: var(--header-h, 0px);
+    z-index: 20;
+    background: var(--bg);
+  }
+
+  /* A page zone (settlement / quests / market). Stacks its panels with the same
+     rhythm `main` uses, so zones read as one continuous column. */
+  .zone {
+    display: flex;
+    flex-direction: column;
+    gap: var(--panel-gap);
+    scroll-margin-block-start: var(--scroll-offset, 96px);
+  }
+  /* Separates one zone's rail buttons from the next. */
+  .rail-divider {
+    flex: 0 0 auto;
+    align-self: center;
+    width: 24px;
+    height: 1px;
+    margin: var(--space-1) 0;
+    background: var(--border);
   }
 
   /* Roughly one viewport of slack, so even a single-row final section can be

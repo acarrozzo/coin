@@ -22,12 +22,19 @@
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate, formatSignedRate } from '../engine/numbers';
   import { RESOURCE_ICON } from './resourceIcons';
-  import { getResourceGroups } from './sections';
+  import { getSettlementGroups, getQuestGroups } from './sections';
+  import ScrollText from '@lucide/svelte/icons/scroll-text';
+
+  interface Props {
+    /** Which tab is rendering this panel — decides which groups appear. */
+    scope?: 'settlement' | 'quests';
+  }
+  const { scope = 'settlement' }: Props = $props();
 
   const gs = $derived(game.state);
   const available = $derived(getAvailableWorkers(gs));
 
-  const groups = $derived(getResourceGroups(gs));
+  const groups = $derived(scope === 'quests' ? getQuestGroups(gs) : getSettlementGroups(gs));
 
   function inputEntries(id: ResourceId) {
     return Object.entries(PRODUCERS[id]?.inputs ?? {}) as [ResourceId, number][];
@@ -108,6 +115,14 @@
 {/snippet}
 
 <section class="panel">
+  <!-- The Settlement and Market zones are headed by their own panels; the
+       Quests zone is just group cards, so it gets a matching heading here. -->
+  {#if scope === 'quests'}
+    <header class="zone-head">
+      <ScrollText size={22} color="var(--accent)" aria-hidden="true" />
+      <h2>Quests</h2>
+    </header>
+  {/if}
   <div class="stack">
     {#each groups as group (group.key)}
       {@const GroupIcon = group.icon}
@@ -177,10 +192,14 @@
               </div>
 
               <span class="label">
-                <span class="amount">{formatNumber(gs.resources[id].amount, resourceDecimals(id))}</span>
+                <span class="amount"
+                  >{formatNumber(gs.resources[id].amount, resourceDecimals(id))}</span
+                >
                 <span class="name" class:jumped={highlighted === id}>{RESOURCES[id].name}</span>
                 {#if isStorageFull(gs, id)}
-                  <span class="at-cap" title="{RESOURCES[id].name} storage is full — upgrade to raise the cap."
+                  <span
+                    class="at-cap"
+                    title="{RESOURCES[id].name} storage is full — upgrade to raise the cap."
                     >MAX</span
                   >
                 {/if}
@@ -207,47 +226,55 @@
 
               <div class="trail">
                 <span class="rate" class:idle={assigned === 0}>
-                {#if starved}
-                  <span class="warn">needs {RESOURCES[starved].name}</span>
-                {:else}
-                  +{formatCycleRate(assigned * outputPerCycle, RESOURCES[id].name.toLowerCase(), cycleSeconds)}
-                {/if}
-              </span>
-
-              <span class="rcost">
-                {#if group.key === 'core'}
-                  {#if isRateUnlocked(gs, id)}
-                    {@const live = getLiveNetProductionRate(gs, id)}
-                    {@const nominal = getNetProductionRate(gs, id)}
-                    <span class="netrates">
-                      <span
-                        class="netrate"
-                        class:pos={live.gt(0)}
-                        class:neg={live.lt(0)}
-                        title="Live {RESOURCES[id].name.toLowerCase()} rate — what's actually happening now: production minus only the lines that can currently run (starved or at-cap lines draw nothing), held at 0 when full."
-                        >{formatSignedRate(live)}</span
-                      >
-                      <span
-                        class="netrate target"
-                        title="Target rate — production minus every staffed consumer at full throughput, ignoring starvation and caps."
-                        >{formatSignedRate(nominal)} target</span
-                      >
-                    </span>
+                  {#if starved}
+                    <span class="warn">needs {RESOURCES[starved].name}</span>
                   {:else}
-                    <span class="netrate-locked" title="Unlock this rate display in the Market."
-                      >rate locked</span
-                    >
+                    +{formatCycleRate(
+                      assigned * outputPerCycle,
+                      RESOURCES[id].name.toLowerCase(),
+                      cycleSeconds,
+                    )}
                   {/if}
-                {:else}
-                  {#each inputEntries(id) as [rid, amt] (rid)}
-                    <span class="pill" class:short={gs.resources[rid].amount.lt(amt)}>
-                      <button type="button" class="req jump" onclick={() => jumpTo(rid)}
-                        >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
-                      ><span class="held">/{formatNumber(gs.resources[rid].amount, resourceDecimals(rid))}</span>
-                    </span>
-                  {/each}
-                {/if}
-              </span>
+                </span>
+
+                <span class="rcost">
+                  {#if group.key === 'core'}
+                    {#if isRateUnlocked(gs, id)}
+                      {@const live = getLiveNetProductionRate(gs, id)}
+                      {@const nominal = getNetProductionRate(gs, id)}
+                      <span class="netrates">
+                        <span
+                          class="netrate"
+                          class:pos={live.gt(0)}
+                          class:neg={live.lt(0)}
+                          title="Live {RESOURCES[
+                            id
+                          ].name.toLowerCase()} rate — what's actually happening now: production minus only the lines that can currently run (starved or at-cap lines draw nothing), held at 0 when full."
+                          >{formatSignedRate(live)}</span
+                        >
+                        <span
+                          class="netrate target"
+                          title="Target rate — production minus every staffed consumer at full throughput, ignoring starvation and caps."
+                          >{formatSignedRate(nominal)} target</span
+                        >
+                      </span>
+                    {:else}
+                      <span class="netrate-locked" title="Unlock this rate display in the Market."
+                        >rate locked</span
+                      >
+                    {/if}
+                  {:else}
+                    {#each inputEntries(id) as [rid, amt] (rid)}
+                      <span class="pill" class:short={gs.resources[rid].amount.lt(amt)}>
+                        <button type="button" class="req jump" onclick={() => jumpTo(rid)}
+                          >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
+                        ><span class="held"
+                          >/{formatNumber(gs.resources[rid].amount, resourceDecimals(rid))}</span
+                        >
+                      </span>
+                    {/each}
+                  {/if}
+                </span>
               </div>
             </div>
           {/each}
@@ -282,6 +309,18 @@
 </section>
 
 <style>
+  .zone-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+  .zone-head h2 {
+    font-family: var(--font-display);
+    font-size: 24px;
+    color: var(--text);
+  }
+
   .panel {
     animation: fadeIn var(--fade-in);
   }
@@ -654,7 +693,7 @@
      name label, fading over ~1.6s. */
   .row {
     /* Land clear of the sticky header (--header-h set on the layout). */
-    scroll-margin-block: calc(var(--header-h, 72px) + var(--space-3));
+    scroll-margin-block: var(--scroll-offset, 96px);
   }
   .name.jumped {
     border-radius: 3px;

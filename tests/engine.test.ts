@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState, SAVE_VERSION } from '../src/engine/state';
+import { PRODUCER_INPUTS } from '../src/content/producers';
 import { D, formatNumber, setRoundingSource } from '../src/engine/numbers';
 import { tick } from '../src/engine/tick';
 import {
@@ -34,12 +35,15 @@ import {
   canBuyWorkerContract,
   canBuyFood,
   hasMarketOpportunity,
+  countSellOpportunities,
+  countBuyOpportunities,
 } from '../src/engine/selectors';
 import {
   MAX_COIN_EARNED,
   SELLABLE_RESOURCES,
   RATE_UNLOCK_RESOURCES,
   WORKER_CONTRACT_IDS,
+  FULL_MARKET_LEVEL,
 } from '../src/content/market';
 
 describe('gathering', () => {
@@ -597,6 +601,17 @@ describe('net production rate — live vs nominal', () => {
   });
 });
 
+describe('producer recipes', () => {
+  // Input order is display order (both the panel rows and the cost pills read
+  // Object.entries), so the ordering here is intentional, not incidental.
+  it('lists warrior first in the magic orb recipe, at 1 warrior', () => {
+    expect(PRODUCER_INPUTS.magicorb).toEqual([
+      ['warrior', 1],
+      ['archer', 2],
+    ]);
+  });
+});
+
 describe('market — coin economy', () => {
   it('sells each resource exactly once', () => {
     const s = createInitialState(0);
@@ -713,6 +728,47 @@ describe('market — coin economy', () => {
     // Each is one and done.
     expect(canBuyWorkerContract(s, 'iii')).toBe(false);
     expect(buyWorkerContract(s, 'iii')).toBe(false);
+  });
+
+  it('counts only offers that can be acted on right now', () => {
+    const s = createInitialState(0);
+    s.level = FULL_MARKET_LEVEL;
+    expect(countSellOpportunities(s)).toBe(0);
+    expect(countBuyOpportunities(s)).toBe(0);
+    expect(hasMarketOpportunity(s)).toBe(false);
+
+    // Stock for two sales; coin for the food supply and one rate display.
+    s.resources.wood.amount = D(3);
+    s.resources.spear.amount = D(10);
+    s.resources.coin.amount = D(2);
+    expect(countSellOpportunities(s)).toBe(2);
+    // food (1 coin) + all three rate displays (2 coin each) are affordable at 2
+    // coin; the cheapest contract is 3, so no contract counts.
+    expect(countBuyOpportunities(s)).toBe(4);
+    expect(hasMarketOpportunity(s)).toBe(true);
+
+    // Taking an offer removes it from the count.
+    sellResource(s, 'wood');
+    expect(countSellOpportunities(s)).toBe(1);
+  });
+
+  it('never counts a level-gated offer, however much stock or coin is on hand', () => {
+    const s = createInitialState(0);
+    s.level = FULL_MARKET_LEVEL - 1;
+    s.resources.arrow.amount = D(9_999);
+    s.resources.spear.amount = D(9_999);
+    s.resources.coin.amount = D(999);
+
+    // Weapon sales, rate displays and contracts are all still gated...
+    expect(countSellOpportunities(s)).toBe(0);
+    // ...leaving only the ungated food supply.
+    expect(countBuyOpportunities(s)).toBe(1);
+
+    s.level = FULL_MARKET_LEVEL;
+    expect(countSellOpportunities(s)).toBe(2);
+    expect(countBuyOpportunities(s)).toBe(
+      1 + RATE_UNLOCK_RESOURCES.length + WORKER_CONTRACT_IDS.length,
+    );
   });
 
   it('persists market progress through a save round-trip', () => {

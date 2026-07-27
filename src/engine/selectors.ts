@@ -13,6 +13,7 @@ import {
   WORKER_CONTRACTS,
   WORKER_CONTRACT_IDS,
   FOOD_PURCHASE_COST,
+  FULL_MARKET_LEVEL,
   type SellableResource,
   type SellOffer,
   type RateUnlockResource,
@@ -383,10 +384,52 @@ export function canBuyFood(state: GameState): boolean {
   return !state.market.foodBought && state.resources.coin.amount.gte(FOOD_PURCHASE_COST);
 }
 
-/** True if any Market action is currently available. */
+/** Whether the level-gated half of the Market (rates, contracts) is open yet. */
+export function isFullMarketOpen(state: GameState): boolean {
+  return state.level >= FULL_MARKET_LEVEL;
+}
+
+/** Whether a sale is past its level gate — it may still be unaffordable. */
+export function isSellUnlocked(state: GameState, id: SellableResource): boolean {
+  return state.level >= SELL_OFFERS[id].minLevel;
+}
+
+/**
+ * Sales that can be completed right now: unsold, past their level gate, and
+ * with the stock on hand. Drives the Market's Sell tab badge.
+ */
+export function countSellOpportunities(state: GameState): number {
+  return SELLABLE_RESOURCES.filter((id) => isSellUnlocked(state, id) && canSell(state, id)).length;
+}
+
+/**
+ * Purchases that can be made right now: unbought, past their level gate, and
+ * affordable. Drives the Market's Buy tab badge.
+ */
+export function countBuyOpportunities(state: GameState): number {
+  // The food supply is the one purchase available before the full Market opens.
+  let n = canBuyFood(state) ? 1 : 0;
+  if (isFullMarketOpen(state)) {
+    n += RATE_UNLOCK_RESOURCES.filter((id) => canBuyRateUnlock(state, id)).length;
+    n += WORKER_CONTRACT_IDS.filter((id) => canBuyWorkerContract(state, id)).length;
+  }
+  return n;
+}
+
+/**
+ * Everything actionable in the Market right now — the main Market tab's badge.
+ * By construction it is exactly the sum of the two sub-tab badges, so the number
+ * on the outside always equals the two you find inside.
+ */
+export function countMarketOpportunities(state: GameState): number {
+  return countSellOpportunities(state) + countBuyOpportunities(state);
+}
+
+/**
+ * True if any Market action is currently available. Derived from the same count
+ * the tab badges use, so no two places can disagree about whether there's
+ * something to do.
+ */
 export function hasMarketOpportunity(state: GameState): boolean {
-  if (SELLABLE_RESOURCES.some((id) => canSell(state, id))) return true;
-  if (RATE_UNLOCK_RESOURCES.some((id) => canBuyRateUnlock(state, id))) return true;
-  if (canBuyFood(state)) return true;
-  return WORKER_CONTRACT_IDS.some((id) => canBuyWorkerContract(state, id));
+  return countMarketOpportunities(state) > 0;
 }

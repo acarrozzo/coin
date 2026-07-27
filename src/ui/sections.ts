@@ -37,10 +37,10 @@ import Swords from '@lucide/svelte/icons/swords';
 import Skull from '@lucide/svelte/icons/skull';
 import BuildingStore from './icons/BuildingStore.svelte';
 
-/** The Market (coin economy) unlocks at settlement level 1. */
-export const MARKET_UNLOCK_LEVEL = 1;
-/** Rate displays, worker contracts, and late-game sells unlock at this level. */
-export const FULL_MARKET_LEVEL = 3;
+// The Market's level gates are content (content/market.ts); re-exported here
+// because the nav rail and the Market panel both reach for them via sections.
+import { MARKET_UNLOCK_LEVEL } from '../content/market';
+export { MARKET_UNLOCK_LEVEL, FULL_MARKET_LEVEL } from '../content/market';
 export function isMarketUnlocked(gs: GameState): boolean {
   return gs.level >= MARKET_UNLOCK_LEVEL;
 }
@@ -126,8 +126,16 @@ export interface ResourceGroup extends GroupDef {
 }
 
 /**
- * The resource groups currently on screen, with their live producer rows.
- * Mirrors exactly what ResourcePanel renders.
+ * Group keys belonging to the Quests zone rather than the Settlement zone. The
+ * Castle is named "Quest Lands" and produces most of the quest-item chain
+ * (magic orbs, soul gems, star metal, holy water); the Cloud Shaman weaves the
+ * last one, dream leaf, so both sit here.
+ */
+export const QUEST_GROUP_KEYS: readonly string[] = ['castle', 'cloudshaman'];
+
+/**
+ * Every visible resource group, across all tabs. Prefer getSettlementGroups /
+ * getQuestGroups — those say which tab they belong to.
  */
 export function getResourceGroups(gs: GameState): ResourceGroup[] {
   const unlocked = unlockedResources(gs);
@@ -154,6 +162,29 @@ export function getResourceGroups(gs: GameState): ResourceGroup[] {
   );
 }
 
+/** The groups in the Settlement zone — everything not claimed by Quests. */
+export function getSettlementGroups(gs: GameState): ResourceGroup[] {
+  return getResourceGroups(gs).filter((g) => !QUEST_GROUP_KEYS.includes(g.key));
+}
+
+/** The groups in the Quests zone. */
+export function getQuestGroups(gs: GameState): ResourceGroup[] {
+  return getResourceGroups(gs).filter((g) => QUEST_GROUP_KEYS.includes(g.key));
+}
+
+/** The Quests zone appears only once it has something in it. */
+export function isQuestsUnlocked(gs: GameState): boolean {
+  return getQuestGroups(gs).length > 0;
+}
+
+/** Whether an affordable build/upgrade is waiting in the Quests zone. */
+export function hasQuestsOpportunity(gs: GameState): boolean {
+  return getQuestGroups(gs).some((g) => g.building !== null && canBuild(gs, g.building));
+}
+
+/** The three top-level zones of the single scrolling page. */
+export type Zone = 'settlement' | 'quests' | 'market';
+
 /** A navigable section in the main content, rendered as a left-rail button. */
 export interface NavSection {
   /** Matches the target element's `data-nav` attribute. */
@@ -167,14 +198,18 @@ export interface NavSection {
    * under-supplied (stat below cap, or line unstaffed); 'bad' = danger.
    */
   alert: 'good' | 'warn' | 'bad' | null;
-  /** Render a divider before this button — separates the shop from the main sections. */
-  separated?: boolean;
+  /** Which page zone this section falls in — the rail rules a line between zones. */
+  zone: Zone;
 }
 
 /**
- * The ordered list of jump-rail sections for the current state: Settlement,
- * Combat (once unlocked), then each visible resource group — each carrying a
- * worker count and an opportunity/danger indicator.
+ * The ordered list of jump-rail sections for the current state, in page order:
+ * the Settlement zone (settlement, combat, its resource groups), then the
+ * Quests zone, then the Market — each carrying a worker count and an
+ * opportunity/danger indicator.
+ *
+ * Everything on the page is listed. The tabs jump between the three coarse
+ * zones; the rail is the fine-grained table of contents inside them.
  */
 export function getNavSections(gs: GameState): NavSection[] {
   const sections: NavSection[] = [];
@@ -187,6 +222,7 @@ export function getNavSections(gs: GameState): NavSection[] {
     // Flag either affordable action in this section: a settlement upgrade or
     // training the next worker (both live in SettlementPanel).
     alert: canUpgradeSettlement(gs) || canTrainWorker(gs) ? 'good' : null,
+    zone: 'settlement',
   });
 
   // The two threat tracks share one panel but get their own rail buttons — each
@@ -198,6 +234,7 @@ export function getNavSections(gs: GameState): NavSection[] {
       icon: Swords,
       count: gs.workers.assigned.defense ?? 0,
       alert: needsThreatSupply(gs, 'defense') ? 'warn' : null,
+      zone: 'settlement',
     });
   }
 
@@ -208,21 +245,22 @@ export function getNavSections(gs: GameState): NavSection[] {
       icon: Skull,
       count: gs.workers.assigned.ward ?? 0,
       alert: needsThreatSupply(gs, 'ward') ? 'warn' : null,
+      zone: 'settlement',
     });
   }
 
-  for (const g of getResourceGroups(gs)) {
-    const count = g.ids.reduce((n, id) => n + (gs.workers.assigned[id] ?? 0), 0);
-    sections.push({
-      id: `group:${g.key}`,
-      label: g.label,
-      icon: g.icon,
-      count,
-      alert: g.building && canBuild(gs, g.building) ? 'good' : null,
-    });
-  }
+  const groupSection = (g: ResourceGroup, zone: Zone): NavSection => ({
+    id: `group:${g.key}`,
+    label: g.label,
+    icon: g.icon,
+    count: g.ids.reduce((n, id) => n + (gs.workers.assigned[id] ?? 0), 0),
+    alert: g.building && canBuild(gs, g.building) ? 'good' : null,
+    zone,
+  });
 
-  // The Market is the final section, set apart from the resource groups.
+  for (const g of getSettlementGroups(gs)) sections.push(groupSection(g, 'settlement'));
+  for (const g of getQuestGroups(gs)) sections.push(groupSection(g, 'quests'));
+
   if (isMarketUnlocked(gs)) {
     sections.push({
       id: 'market',
@@ -230,7 +268,7 @@ export function getNavSections(gs: GameState): NavSection[] {
       icon: BuildingStore,
       count: 0,
       alert: hasMarketOpportunity(gs) ? 'good' : null,
-      separated: true,
+      zone: 'market',
     });
   }
 

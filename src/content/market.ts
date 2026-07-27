@@ -18,6 +18,15 @@
  */
 import type { ResourceId } from './resources';
 
+/** The Market (coin economy) unlocks at this settlement level. */
+export const MARKET_UNLOCK_LEVEL = 1;
+/**
+ * Rate displays, Worker Contracts, and the weapon sales are held back to this
+ * level. Lives here rather than in the UI because the engine needs it too: a
+ * level-gated offer must not count as an available opportunity.
+ */
+export const FULL_MARKET_LEVEL = 3;
+
 /** Resources that can be sold for coin at the Market. */
 export const SELLABLE_RESOURCES = ['wood', 'stone', 'arrow', 'spear'] as const;
 export type SellableResource = (typeof SELLABLE_RESOURCES)[number];
@@ -33,14 +42,16 @@ export interface SellOffer {
    * are mass nouns ("3 wood", not "3 woods").
    */
   noun: string;
+  /** Settlement level before which this sale is offered but locked. */
+  minLevel: number;
 }
 
 /** The single sale available per resource. Once taken, that resource is done. */
 export const SELL_OFFERS: Record<SellableResource, SellOffer> = {
-  wood: { amount: 3, coin: 1, noun: 'wood' },
-  stone: { amount: 3, coin: 1, noun: 'stone' },
-  arrow: { amount: 100, coin: 10, noun: 'arrows' },
-  spear: { amount: 10, coin: 10, noun: 'spears' },
+  wood: { amount: 3, coin: 1, noun: 'wood', minLevel: MARKET_UNLOCK_LEVEL },
+  stone: { amount: 3, coin: 1, noun: 'stone', minLevel: MARKET_UNLOCK_LEVEL },
+  arrow: { amount: 100, coin: 10, noun: 'arrows', minLevel: FULL_MARKET_LEVEL },
+  spear: { amount: 10, coin: 10, noun: 'spears', minLevel: FULL_MARKET_LEVEL },
 };
 
 /** Lifetime coin ceiling: every sale, once. */

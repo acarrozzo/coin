@@ -87,7 +87,9 @@
       disabled={assigned === 0}
       aria-label="Remove worker from {RESOURCES[id].name}">−</button
     >
-    <span class="count">{assigned}{#if showMax}/{maxWorkers}{/if}</span>
+    <span class="count"
+      >{assigned}{#if showMax}/{maxWorkers}{/if}</span
+    >
     <button
       onclick={() => game.assign(id, 1)}
       disabled={available <= 0 || assigned >= maxWorkers}
@@ -100,7 +102,11 @@
       {#if starved}
         <span class="warn">needs {RESOURCES[starved].name}</span>
       {:else}
-        +{formatCycleRate(assigned * outputPerCycle, RESOURCES[id].name.toLowerCase(), cycleSeconds)}
+        +{formatCycleRate(
+          assigned * outputPerCycle,
+          RESOURCES[id].name.toLowerCase(),
+          cycleSeconds,
+        )}
       {/if}
     </span>
 
@@ -124,7 +130,7 @@
     grid-template-columns: 20px 96px 150px 116px minmax(0, 1fr);
     column-gap: var(--space-3);
     align-items: center;
-    scroll-margin-block: calc(var(--header-h, 72px) + var(--space-3));
+    scroll-margin-block: var(--scroll-offset, 96px);
   }
   .ricon {
     display: inline-flex;
