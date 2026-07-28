@@ -59,13 +59,13 @@
     return null;
   }
 
-  // Clicking a resource name inside a recipe/build cost jumps to that
-  // resource's producer row — switching tabs first when it lives on another one.
+  // Clicking a resource name inside a recipe/build cost scrolls to that
+  // resource's producer row, wherever it sits in the page.
   let highlighted = $state<ResourceId | null>(null);
   let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 
   function jumpTo(rid: ResourceId) {
-    jumpToResource(gs, rid, (r) => {
+    jumpToResource(rid, (r) => {
       highlighted = r;
       clearTimeout(highlightTimer);
       highlightTimer = setTimeout(() => (highlighted = null), 1600);
@@ -113,192 +113,199 @@
 {/snippet}
 
 <!-- No heading of its own: the tab bar already names what this is, and every
-     card carries its own structure header. -->
-<section class="panel">
-  <div class="stack">
-    {#each groups as group (group.key)}
-      {@const GroupIcon = group.icon}
-      {@const level = group.building ? getStructureLevel(gs, group.building) : 0}
-      {@const next = group.building ? getNextBuildingLevel(gs, group.building) : null}
-      {@const gated = group.building ? isNextBuildingLevelGated(gs, group.building) : false}
-      {@const buildName = group.building ? BUILDINGS[group.building].name : ''}
-      <div class="group" data-nav="group:{group.key}" transition:fly={{ y: 10, duration: 300 }}>
-        <header class="ghead">
-          <div class="gtitle">
-            <GroupIcon size={22} color="var(--accent)" aria-hidden="true" />
-            <span class="gname"
-              >{group.label}{#if !group.upgradeInFooter && level > 0}<span class="lvl">
-                  Lvl {level}</span
-                >{/if}{#if group.key === 'core'}<span class="subtitle">
-                  Land of Plenty</span
-                >{/if}</span
-            >
-          </div>
-          {#if !group.upgradeInFooter && group.building && !next}
-            <span class="maxed">MAX</span>
-          {/if}
-        </header>
+     card carries its own structure header.
 
-        <!-- A settlement-gated next level shows nothing at all: no summary, no
+     Every slice of the group list is mounted at once now, so a slice with
+     nothing unlocked in it yet must render NOTHING — an empty .panel would sit
+     in the page as a stray empty box, and its gap would push the sections
+     around it apart. -->
+{#if groups.length > 0}
+  <section class="panel">
+    <div class="stack">
+      {#each groups as group (group.key)}
+        {@const GroupIcon = group.icon}
+        {@const level = group.building ? getStructureLevel(gs, group.building) : 0}
+        {@const next = group.building ? getNextBuildingLevel(gs, group.building) : null}
+        {@const gated = group.building ? isNextBuildingLevelGated(gs, group.building) : false}
+        {@const buildName = group.building ? BUILDINGS[group.building].name : ''}
+        <div class="group" data-nav="group:{group.key}" transition:fly={{ y: 10, duration: 300 }}>
+          <header class="ghead">
+            <div class="gtitle">
+              <GroupIcon size={22} color="var(--accent)" aria-hidden="true" />
+              <span class="gname"
+                >{group.label}{#if !group.upgradeInFooter && level > 0}<span class="lvl">
+                    Lvl {level}</span
+                  >{/if}{#if group.key === 'core'}<span class="subtitle">
+                    Land of Plenty</span
+                  >{/if}</span
+              >
+            </div>
+            {#if !group.upgradeInFooter && group.building && !next}
+              <span class="maxed">MAX</span>
+            {/if}
+          </header>
+
+          <!-- A settlement-gated next level shows nothing at all: no summary, no
              cost, no button. It reappears when the settlement reaches its tier. -->
-        {#if !group.upgradeInFooter && next && !gated}
-          <div class="upgrade-row">
-            <button
-              class="upgrade"
-              onclick={() => game.build(group.building!)}
-              disabled={!canBuild(gs, group.building!)}
-            >
-              {level === 0 ? 'Build' : 'Upgrade'}
-            </button>
-            <div class="uinfo">
-              <p class="gsummary">{next.summary}</p>
-              {@render costLine(next.cost, requiredSettlementLevel(group.building!, next))}
-            </div>
-          </div>
-        {/if}
-
-        <div class="rows">
-          {#each group.ids as id (id)}
-            {@const Icon = RESOURCE_ICON[id]}
-            {@const assigned = gs.workers.assigned[id]}
-            {@const maxWorkers = getMaxWorkers(gs, id)}
-            {@const showMax = PRODUCERS[id]?.workerCap === 'level'}
-            {@const starved = starvedInput(id)}
-            {@const cycleSeconds = PRODUCERS[id]?.cycleSeconds ?? 1}
-            {@const outputPerCycle = PRODUCERS[id]?.outputPerCycle ?? 0}
-            {@const producing = assigned > 0 && canStartCycle(gs, id)}
-            <div class="row" data-res={id} transition:fly={{ y: 8, duration: 260 }}>
-              <span class="ricon">
-                {#if Icon}<Icon size={18} color="var(--text-muted)" aria-hidden="true" />{/if}
-              </span>
-
-              <div class="bars">
-                <div
-                  class="cyc"
-                  class:producing
-                  style:--cyc={cycleSeconds + 's'}
-                  title="Production cycle: {cycleSeconds}s"
-                >
-                  <div class="cyc-fill"></div>
-                </div>
-              </div>
-
-              <span class="label">
-                <span class="amount"
-                  >{formatNumber(gs.resources[id].amount, resourceDecimals(id))}</span
-                >
-                <span class="name" class:jumped={highlighted === id}>{RESOURCES[id].name}</span>
-                {#if isStorageFull(gs, id)}
-                  <span
-                    class="at-cap"
-                    title="{RESOURCES[id].name} storage is full — upgrade to raise the cap."
-                    >MAX</span
-                  >
-                {/if}
-                {#each game.pops.filter((p) => p.id === id) as p (p.seq)}
-                  <span class="pop">+{formatNumber(p.amount)}</span>
-                {/each}
-              </span>
-
-              <div class="workers">
-                <button
-                  onclick={() => game.assign(id, -1)}
-                  disabled={assigned === 0}
-                  aria-label="Remove worker from {RESOURCES[id].name}">−</button
-                >
-                <span class="count"
-                  >{assigned}{#if showMax}/{maxWorkers}{/if}</span
-                >
-                <button
-                  onclick={() => game.assign(id, 1)}
-                  disabled={available <= 0 || assigned >= maxWorkers}
-                  aria-label="Add worker to {RESOURCES[id].name}">+</button
-                >
-              </div>
-
-              <div class="trail">
-                <span class="rate" class:idle={assigned === 0}>
-                  {#if starved}
-                    <span class="warn">needs {RESOURCES[starved].name}</span>
-                  {:else}
-                    +{formatCycleRate(
-                      assigned * outputPerCycle,
-                      RESOURCES[id].name.toLowerCase(),
-                      cycleSeconds,
-                    )}
-                  {/if}
-                </span>
-
-                <span class="rcost">
-                  {#if group.key === 'core'}
-                    {#if isRateUnlocked(gs, id)}
-                      {@const live = getLiveNetProductionRate(gs, id)}
-                      {@const nominal = getNetProductionRate(gs, id)}
-                      <span class="netrates">
-                        <span
-                          class="netrate"
-                          class:pos={live.gt(0)}
-                          class:neg={live.lt(0)}
-                          title="Live {RESOURCES[
-                            id
-                          ].name.toLowerCase()} rate — what's actually happening now: production minus only the lines that can currently run (starved or at-cap lines draw nothing), held at 0 when full."
-                          >{formatSignedRate(live)}</span
-                        >
-                        <span
-                          class="netrate target"
-                          title="Target rate — production minus every staffed consumer at full throughput, ignoring starvation and caps."
-                          >{formatSignedRate(nominal)} target</span
-                        >
-                      </span>
-                    {:else}
-                      <span class="netrate-locked" title="Unlock this rate display in the Market."
-                        >rate locked</span
-                      >
-                    {/if}
-                  {:else}
-                    {#each inputEntries(id) as [rid, amt] (rid)}
-                      <span class="pill" class:short={gs.resources[rid].amount.lt(amt)}>
-                        <button type="button" class="req jump" onclick={() => jumpTo(rid)}
-                          >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
-                        ><span class="held"
-                          >/{formatNumber(gs.resources[rid].amount, resourceDecimals(rid))}</span
-                        >
-                      </span>
-                    {/each}
-                  {/if}
-                </span>
-              </div>
-            </div>
-          {/each}
-        </div>
-
-        {#if group.upgradeInFooter && group.building && gs.level >= 2 && !gated}
-          {@const fLevel = getStructureLevel(gs, group.building)}
-          {@const fNext = getNextBuildingLevel(gs, group.building)}
-          <div class="footer">
-            {#if fNext}
+          {#if !group.upgradeInFooter && next && !gated}
+            <div class="upgrade-row">
               <button
                 class="upgrade"
                 onclick={() => game.build(group.building!)}
-                disabled={!canBuild(gs, group.building)}
+                disabled={!canBuild(gs, group.building!)}
               >
-                {fLevel === 0
-                  ? `Build ${buildName}`
-                  : `Upgrade ${buildName} to Level ${fLevel + 1}`}
+                {level === 0 ? 'Build' : 'Upgrade'}
               </button>
-              <div class="finfo">
-                <p class="gsummary">{fNext.summary}</p>
-                {@render costLine(fNext.cost, requiredSettlementLevel(group.building, fNext))}
+              <div class="uinfo">
+                <p class="gsummary">{next.summary}</p>
+                {@render costLine(next.cost, requiredSettlementLevel(group.building!, next))}
               </div>
-            {:else}
-              <span class="maxed">MAX</span>
-            {/if}
+            </div>
+          {/if}
+
+          <div class="rows">
+            {#each group.ids as id (id)}
+              {@const Icon = RESOURCE_ICON[id]}
+              {@const assigned = gs.workers.assigned[id]}
+              {@const maxWorkers = getMaxWorkers(gs, id)}
+              {@const showMax = PRODUCERS[id]?.workerCap === 'level'}
+              {@const starved = starvedInput(id)}
+              {@const cycleSeconds = PRODUCERS[id]?.cycleSeconds ?? 1}
+              {@const outputPerCycle = PRODUCERS[id]?.outputPerCycle ?? 0}
+              {@const producing = assigned > 0 && canStartCycle(gs, id)}
+              <div class="row" data-res={id} transition:fly={{ y: 8, duration: 260 }}>
+                <span class="ricon">
+                  {#if Icon}<Icon size={18} color="var(--text-muted)" aria-hidden="true" />{/if}
+                </span>
+
+                <div class="bars">
+                  <div
+                    class="cyc"
+                    class:producing
+                    style:--cyc={cycleSeconds + 's'}
+                    title="Production cycle: {cycleSeconds}s"
+                  >
+                    <div class="cyc-fill"></div>
+                  </div>
+                </div>
+
+                <span class="label">
+                  <span class="amount"
+                    >{formatNumber(gs.resources[id].amount, resourceDecimals(id))}</span
+                  >
+                  <span class="name" class:jumped={highlighted === id}>{RESOURCES[id].name}</span>
+                  {#if isStorageFull(gs, id)}
+                    <span
+                      class="at-cap"
+                      title="{RESOURCES[id].name} storage is full — upgrade to raise the cap."
+                      >MAX</span
+                    >
+                  {/if}
+                  {#each game.pops.filter((p) => p.id === id) as p (p.seq)}
+                    <span class="pop">+{formatNumber(p.amount)}</span>
+                  {/each}
+                </span>
+
+                <div class="workers">
+                  <button
+                    onclick={() => game.assign(id, -1)}
+                    disabled={assigned === 0}
+                    aria-label="Remove worker from {RESOURCES[id].name}">−</button
+                  >
+                  <span class="count"
+                    >{assigned}{#if showMax}/{maxWorkers}{/if}</span
+                  >
+                  <button
+                    onclick={() => game.assign(id, 1)}
+                    disabled={available <= 0 || assigned >= maxWorkers}
+                    aria-label="Add worker to {RESOURCES[id].name}">+</button
+                  >
+                </div>
+
+                <div class="trail">
+                  <span class="rate" class:idle={assigned === 0}>
+                    {#if starved}
+                      <span class="warn">needs {RESOURCES[starved].name}</span>
+                    {:else}
+                      +{formatCycleRate(
+                        assigned * outputPerCycle,
+                        RESOURCES[id].name.toLowerCase(),
+                        cycleSeconds,
+                      )}
+                    {/if}
+                  </span>
+
+                  <span class="rcost">
+                    {#if group.key === 'core'}
+                      {#if isRateUnlocked(gs, id)}
+                        {@const live = getLiveNetProductionRate(gs, id)}
+                        {@const nominal = getNetProductionRate(gs, id)}
+                        <span class="netrates">
+                          <span
+                            class="netrate"
+                            class:pos={live.gt(0)}
+                            class:neg={live.lt(0)}
+                            title="Live {RESOURCES[
+                              id
+                            ].name.toLowerCase()} rate — what's actually happening now: production minus only the lines that can currently run (starved or at-cap lines draw nothing), held at 0 when full."
+                            >{formatSignedRate(live)}</span
+                          >
+                          <span
+                            class="netrate target"
+                            title="Target rate — production minus every staffed consumer at full throughput, ignoring starvation and caps."
+                            >{formatSignedRate(nominal)} target</span
+                          >
+                        </span>
+                      {:else}
+                        <span class="netrate-locked" title="Unlock this rate display in the Market."
+                          >rate locked</span
+                        >
+                      {/if}
+                    {:else}
+                      {#each inputEntries(id) as [rid, amt] (rid)}
+                        <span class="pill" class:short={gs.resources[rid].amount.lt(amt)}>
+                          <button type="button" class="req jump" onclick={() => jumpTo(rid)}
+                            >{formatNumber(amt)} {RESOURCES[rid].name.toLowerCase()}</button
+                          ><span class="held"
+                            >/{formatNumber(gs.resources[rid].amount, resourceDecimals(rid))}</span
+                          >
+                        </span>
+                      {/each}
+                    {/if}
+                  </span>
+                </div>
+              </div>
+            {/each}
           </div>
-        {/if}
-      </div>
-    {/each}
-  </div>
-</section>
+
+          {#if group.upgradeInFooter && group.building && gs.level >= 2 && !gated}
+            {@const fLevel = getStructureLevel(gs, group.building)}
+            {@const fNext = getNextBuildingLevel(gs, group.building)}
+            <div class="footer">
+              {#if fNext}
+                <button
+                  class="upgrade"
+                  onclick={() => game.build(group.building!)}
+                  disabled={!canBuild(gs, group.building)}
+                >
+                  {fLevel === 0
+                    ? `Build ${buildName}`
+                    : `Upgrade ${buildName} to Level ${fLevel + 1}`}
+                </button>
+                <div class="finfo">
+                  <p class="gsummary">{fNext.summary}</p>
+                  {@render costLine(fNext.cost, requiredSettlementLevel(group.building, fNext))}
+                </div>
+              {:else}
+                <span class="maxed">MAX</span>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  </section>
+{/if}
 
 <style>
   .panel {

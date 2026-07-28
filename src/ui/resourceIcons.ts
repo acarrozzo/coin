@@ -1,6 +1,6 @@
 /**
  * Shared resource → icon map, used by any panel that renders a producer row
- * (ResourcePanel's structure cards and CombatPanel's Defense line). Kept in one
+ * (ResourcePanel's structure cards and ThreatPanel's stat line). Kept in one
  * place so the two stay in sync.
  *
  * Most icons come from Lucide. The handful Lucide has no good glyph for are

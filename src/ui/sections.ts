@@ -3,15 +3,22 @@
  * them, shared by App (which renders the tab bar and the left rail) and
  * ResourcePanel (which renders a tab's structure cards).
  *
- * Content is split across real tabs: only the selected tab's panels are
- * mounted. Every group knows which tab it belongs to, so the bar, the rail and
- * the rendered content can never drift apart.
+ * Every tab's content is mounted at once, in one long scroll — the "tabs" are
+ * regions of that page, not alternatives to it. Every group still knows which
+ * tab it belongs to, which is what lets the bar, the rail and the page order
+ * agree: getNavSections returns the sections in PAGE order, so grouping them by
+ * `tab` gives the regions, and the first section of a region is what its tab
+ * scrolls to.
+ *
+ * That makes page order load-bearing (see assertTabContiguity's test): the tab
+ * bar can only be a set of jump targets while each tab's sections form one
+ * unbroken run, in TAB_DEFS order.
  */
 import type { Component } from 'svelte';
 import type { GameState } from '../engine/state';
-import type { ResourceId } from '../content/resources';
+import { RESOURCES, type ResourceId } from '../content/resources';
 import { PRODUCERS, type StructureId } from '../content/producers';
-import type { BuildingId } from '../content/buildings';
+import { BUILDINGS, type BuildingId } from '../content/buildings';
 import {
   unlockedResources,
   isBuildingAvailable,
@@ -21,8 +28,11 @@ import {
   canUpgradeSettlement,
   canTrainWorker,
   getTotalWorkers,
-  needsThreatSupply,
+  threatSupplyGaps,
+  threatInputGaps,
+  getStructureLevel,
   hasMarketOpportunity,
+  countMarketOpportunities,
   isPrestigeUnlocked,
   canPrestige,
 } from '../engine/selectors';
@@ -41,6 +51,7 @@ import Deer from './icons/Deer.svelte';
 import UsersGroup from './icons/UsersGroup.svelte';
 // Rail-only icons for the non-resource sections.
 import Swords from '@lucide/svelte/icons/swords';
+import Shield from '@lucide/svelte/icons/shield';
 import Skull from '@lucide/svelte/icons/skull';
 import BuildingStore from './icons/BuildingStore.svelte';
 import Crown from '@lucide/svelte/icons/crown';
@@ -61,6 +72,7 @@ export function isMarketUnlocked(gs: GameState): boolean {
 /** The top-level content tabs, in bar order. */
 export type TabId =
   | 'settlement'
+  | 'threats'
   | 'resources'
   | 'crafting'
   | 'mysticism'
@@ -171,7 +183,8 @@ export function getResourceGroups(gs: GameState): ResourceGroup[] {
   return GROUP_DEFS.map((g) => ({
     ...g,
     // Once assault unlocks, Defense leaves the Castle card for the Assault
-    // panel; likewise Ward leaves the Wizard Tower for the Hex panel.
+    // panel over on Threats; likewise Ward leaves the Wizard Tower for the Hex
+    // panel.
     ids: unlocked.filter(
       (id) =>
         g.structures.includes(PRODUCERS[id]?.structure as StructureId) &&
@@ -193,24 +206,93 @@ export function getGroupsForTab(gs: GameState, tab: TabId): ResourceGroup[] {
   return getResourceGroups(gs).filter((g) => g.tab === tab);
 }
 
+/** How urgent an alert is. 'bad' outranks 'warn', which outranks 'good'. */
+export type Severity = 'good' | 'warn' | 'bad';
+const SEVERITY_RANK: Record<Severity, number> = { good: 0, warn: 1, bad: 2 };
+
 /**
- * Which tab shows a resource's producer row — used to follow a recipe/cost link
- * across the tab split. Defense and Ward move to the Combat panel (Settlement
- * tab) once their track is live, exactly as getResourceGroups drops them.
+ * Something waiting in a section, and — crucially — what it is. The reason is
+ * what turns a coloured dot from "look somewhere in here" into an answer.
  */
-export function tabForResource(gs: GameState, id: ResourceId): TabId | null {
-  // Defense and Ward leave their structure card for the Combat panel, which
-  // lives on the Settlement tab.
-  if (id === 'defense' && isCombatUnlocked(gs)) return 'settlement';
-  if (id === 'ward' && isHexUnlocked(gs)) return 'settlement';
-  const structure = PRODUCERS[id]?.structure;
-  if (!structure) return null;
-  return GROUP_DEFS.find((g) => g.structures.includes(structure))?.tab ?? null;
+export interface Alert {
+  severity: Severity;
+  /** Human sentence naming what's waiting, shown in the dot's flyout. */
+  reason: string;
 }
 
-/** An opportunity/danger signal. 'bad' outranks 'warn', which outranks 'good'. */
-export type Alert = 'good' | 'warn' | 'bad';
-const ALERT_RANK: Record<Alert, number> = { good: 0, warn: 1, bad: 2 };
+/** An alert plus the section it belongs to, for a tab listing all of its own. */
+export interface TabAlert extends Alert {
+  /** The section's rail id, so the listing can key on it. */
+  id: string;
+  label: string;
+}
+
+/** What's affordable in the settlement panel: an upgrade, a worker, or both. */
+function settlementAlert(gs: GameState): Alert | null {
+  const upgrade = canUpgradeSettlement(gs);
+  const worker = canTrainWorker(gs);
+  if (!upgrade && !worker) return null;
+  const reason =
+    upgrade && worker
+      ? 'Upgrade and new worker affordable'
+      : upgrade
+        ? 'Settlement upgrade affordable'
+        : 'New worker affordable';
+  return { severity: 'good', reason };
+}
+
+/**
+ * A threat track's alert.
+ *
+ * Deliberately says nothing about whether the next wave will be repelled. Waves
+ * outgrow your walls as a matter of course, and a dot telling you about a loss
+ * you cannot prevent is noise — the panel's own verdict line still forecasts it
+ * for anyone reading the track itself.
+ *
+ * What it does report is the three things you can act on, worst first:
+ *
+ *   red    the line is BLOCKED — you lack the archers/mages/skulls it consumes,
+ *          so no amount of staffing produces anything
+ *   red    the stat is below its cap — you are not as defended as you could be
+ *   amber  the line is simply unstaffed, with everything else in order
+ *
+ * Quiet at cap with the line staffed: the converter is idle by design there, so
+ * missing inputs aren't yet a problem worth raising.
+ */
+function threatAlert(gs: GameState, stat: 'defense' | 'ward'): Alert | null {
+  const { belowCap, understaffed } = threatSupplyGaps(gs, stat);
+  if (!belowCap && !understaffed) return null;
+
+  const name = RESOURCES[stat].name;
+
+  // The blocking problem outranks the others: it's the one that makes fixing
+  // them pointless.
+  const missing = threatInputGaps(gs, stat);
+  if (missing.length > 0) {
+    const names = missing.map((id) => RESOURCES[id].name);
+    const list =
+      names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
+    return { severity: 'bad', reason: `No ${list} to raise ${name}` };
+  }
+
+  if (belowCap) {
+    return {
+      severity: 'bad',
+      reason: understaffed ? `${name} below cap, line unstaffed` : `${name} below cap`,
+    };
+  }
+  return { severity: 'warn', reason: `${name} line unstaffed` };
+}
+
+/** An affordable build or upgrade on a structure card. */
+function buildAlert(gs: GameState, building: BuildingId | null): Alert | null {
+  if (!building || !canBuild(gs, building)) return null;
+  const level = getStructureLevel(gs, building);
+  return {
+    severity: 'good',
+    reason: level === 0 ? `Build ${BUILDINGS[building].name}` : `Upgrade to level ${level + 1}`,
+  };
+}
 
 /** A navigable section in the main content, rendered as a left-rail button. */
 export interface NavSection {
@@ -221,8 +303,8 @@ export interface NavSection {
   /** Workers assigned to this section (0 = hide the badge). */
   count: number;
   /**
-   * 'good' = an affordable build/upgrade waits here; 'warn' = a threat track is
-   * under-supplied (stat below cap, or line unstaffed); 'bad' = danger.
+   * What's waiting here, or null. 'good' = an affordable build/upgrade; 'warn' =
+   * a threat track you can top up; 'bad' = one you cannot (see threatAlert).
    */
   alert: Alert | null;
   /** Which tab this section lives on — the rail only shows the active tab's. */
@@ -246,20 +328,22 @@ export function getNavSections(gs: GameState): NavSection[] {
     count: getTotalWorkers(gs),
     // Flag either affordable action in this section: a settlement upgrade or
     // training the next worker (both live in SettlementPanel).
-    alert: canUpgradeSettlement(gs) || canTrainWorker(gs) ? 'good' : null,
+    alert: settlementAlert(gs),
     tab: 'settlement',
   });
 
-  // The two threat tracks share one panel but get their own rail buttons — each
-  // flags only its own supply problem, so the player knows which one to feed.
+  // The two threat tracks share one panel, on their own tab, but get their own
+  // rail buttons — each flags only its own supply problem, so the player knows
+  // which one to feed. Splitting them off Settlement also stops an amber
+  // under-supplied warning being masked by a gold "you can upgrade" dot.
   if (isCombatUnlocked(gs)) {
     sections.push({
       id: 'combat:assault',
       label: 'Assault',
       icon: Swords,
       count: gs.workers.assigned.defense ?? 0,
-      alert: needsThreatSupply(gs, 'defense') ? 'warn' : null,
-      tab: 'settlement',
+      alert: threatAlert(gs, 'defense'),
+      tab: 'threats',
     });
   }
 
@@ -269,8 +353,8 @@ export function getNavSections(gs: GameState): NavSection[] {
       label: 'Hex',
       icon: Skull,
       count: gs.workers.assigned.ward ?? 0,
-      alert: needsThreatSupply(gs, 'ward') ? 'warn' : null,
-      tab: 'settlement',
+      alert: threatAlert(gs, 'ward'),
+      tab: 'threats',
     });
   }
 
@@ -280,7 +364,7 @@ export function getNavSections(gs: GameState): NavSection[] {
       label: g.label,
       icon: g.icon,
       count: g.ids.reduce((n, id) => n + (gs.workers.assigned[id] ?? 0), 0),
-      alert: g.building && canBuild(gs, g.building) ? 'good' : null,
+      alert: buildAlert(gs, g.building),
       tab: g.tab,
     });
   }
@@ -291,7 +375,14 @@ export function getNavSections(gs: GameState): NavSection[] {
       label: 'Market',
       icon: BuildingStore,
       count: 0,
-      alert: hasMarketOpportunity(gs) ? 'good' : null,
+      alert: hasMarketOpportunity(gs)
+        ? {
+            severity: 'good',
+            // One section, but it can hold several trades — so unlike every
+            // other alert its reason carries its own count.
+            reason: `${countMarketOpportunities(gs)} offers ready`,
+          }
+        : null,
       tab: 'market',
     });
   }
@@ -302,12 +393,28 @@ export function getNavSections(gs: GameState): NavSection[] {
       label: gs.prestige.level > 0 ? `Prestige Lvl ${gs.prestige.level}` : 'Prestige',
       icon: Crown,
       count: 0,
-      alert: canPrestige(gs) ? 'good' : null,
+      alert: canPrestige(gs) ? { severity: 'good', reason: 'Prestige available' } : null,
       tab: 'prestige',
     });
   }
 
   return sections;
+}
+
+/**
+ * The first section of a tab's region — where its tab-bar button scrolls to.
+ * Null when the tab has no content yet (getTabs would have dropped it).
+ */
+export function firstSectionForTab(gs: GameState, tab: TabId): NavSection | null {
+  return getNavSections(gs).find((s) => s.tab === tab) ?? null;
+}
+
+/**
+ * Which tab region a section id belongs to — the scroll-spy's lookup, turning
+ * "the section under the header line" into "the tab to highlight".
+ */
+export function tabForSection(gs: GameState, id: string): TabId | null {
+  return getNavSections(gs).find((s) => s.id === id)?.tab ?? null;
 }
 
 export interface TabDef {
@@ -316,8 +423,11 @@ export interface TabDef {
   /** Used below 560px, where the full label is too long. */
   shortLabel?: string;
   icon: Component;
-  /** The most severe alert among the sections on this tab. */
-  alert?: Alert | null;
+  /**
+   * Everything waiting on this tab, most severe first — so the dot can colour
+   * itself from the worst one, count them, and name them all on hover.
+   */
+  alerts?: TabAlert[];
 }
 
 /**
@@ -326,6 +436,7 @@ export interface TabDef {
  */
 export const TAB_DEFS: readonly TabDef[] = [
   { id: 'settlement', label: 'Settlement', icon: House },
+  { id: 'threats', label: 'Threats', icon: Shield },
   { id: 'resources', label: 'Resources', icon: Boxes },
   { id: 'crafting', label: 'Crafting', icon: Anvil },
   { id: 'mysticism', label: 'Mysticism', shortLabel: 'Mystic', icon: Sparkles },
@@ -334,32 +445,30 @@ export const TAB_DEFS: readonly TabDef[] = [
   { id: 'prestige', label: 'Prestige', icon: Crown },
 ];
 
+/** A tab's display name — used to label the jump rail's matching cluster. */
+export function tabLabel(id: TabId): string {
+  return TAB_DEFS.find((t) => t.id === id)?.label ?? id;
+}
+
 /**
- * The tabs that currently have content, each with the most severe alert among
- * its sections. Derived from getNavSections rather than from its own gate list,
- * so a tab can never appear empty or hide something the rail would have shown.
+ * The tabs that currently have content, each carrying every alert among its own
+ * sections. Derived from getNavSections rather than from its own gate list, so a
+ * tab can never appear empty or hide something the rail would have shown.
  *
- * Because only one tab's content is mounted at a time, the dot is the player's
- * only signal that something is waiting on a tab they aren't looking at.
+ * The whole list is kept, not just the worst one: the dot takes its colour from
+ * the most severe, its count from how many there are, and its flyout names each
+ * one — which is what saves scrolling the region to find out what it meant.
  */
 export function getTabs(gs: GameState): TabDef[] {
   const sections = getNavSections(gs);
 
-  return TAB_DEFS.filter((t) => sections.some((s) => s.tab === t.id)).map((t) => {
-    let alert: Alert | null = null;
-    for (const s of sections) {
-      if (s.tab !== t.id || s.alert === null) continue;
-      if (alert === null || ALERT_RANK[s.alert] > ALERT_RANK[alert]) alert = s.alert;
-    }
-    return {
-      ...t,
-      // Wears its level once earned — but stays a bare "Prestige" before the
-      // first one, when there's no level to show.
-      label:
-        t.id === 'prestige' && gs.prestige.level > 0
-          ? `Prestige Lvl ${gs.prestige.level}`
-          : t.label,
-      alert,
-    };
-  });
+  return TAB_DEFS.filter((t) => sections.some((s) => s.tab === t.id)).map((t) => ({
+    ...t,
+    alerts: sections
+      .filter((s) => s.tab === t.id && s.alert !== null)
+      // Worst first. Array#sort is stable, so equally severe alerts stay in
+      // page order — the order you'd meet them scrolling the region.
+      .map((s) => ({ id: s.id, label: s.label, ...s.alert! }))
+      .sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity]),
+  }));
 }

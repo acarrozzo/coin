@@ -11,8 +11,8 @@ import { game } from '../src/ui/gameStore.svelte';
 import { notify } from '../src/ui/notify.svelte';
 import { D } from '../src/engine/numbers';
 import { createInitialState } from '../src/engine/state';
-import { needsThreatSupply } from '../src/engine/selectors';
-import { getNavSections, FULL_MARKET_LEVEL } from '../src/ui/sections';
+import { needsThreatSupply, willRepelAssault } from '../src/engine/selectors';
+import { getNavSections, getTabs, FULL_MARKET_LEVEL } from '../src/ui/sections';
 import { nav } from '../src/ui/nav.svelte';
 import { ASSAULT, HEX } from '../src/content/combat';
 import { SELLABLE_RESOURCES } from '../src/content/market';
@@ -197,17 +197,18 @@ describe('MarketPanel (runtime)', () => {
   });
 });
 
-// The tab bar switches content: only the selected tab's panels are mounted, and
-// the left rail is the table of contents inside the tab you're on.
+// One long page: every tab's content is mounted at once, the tab bar jumps
+// between regions of it, and the left rail is the table of contents for the
+// whole thing. Both bars are highlighted from scroll position, not from a click.
 describe('content tabs (runtime)', () => {
   // Rendering the real App needs two things jsdom/vitest don't provide:
   // `__APP_VERSION__` (a Vite build-time `define`) and ResizeObserver (used by
-  // the header's `bind:clientHeight`). scrollIntoView is unimplemented in jsdom.
+  // the header's `bind:clientHeight`).
   //
-  // So is the Web Animations API, and that one bites: switching tabs unmounts
-  // ResourcePanel's cards, whose `transition:fly` outro calls element.animate().
-  // The resulting throw aborts the whole flush — including the $effect that
-  // guards the active tab — so it has to be stubbed, not merely tolerated.
+  // The Web Animations API is missing too, and that one bites: a locking
+  // structure unmounts ResourcePanel's cards, whose `transition:fly` outro
+  // calls element.animate(). The resulting throw aborts the whole flush, so it
+  // has to be stubbed, not merely tolerated.
   beforeAll(() => {
     vi.stubGlobal('__APP_VERSION__', '0.0.0-test');
     vi.stubGlobal(
@@ -218,9 +219,13 @@ describe('content tabs (runtime)', () => {
         disconnect() {}
       },
     );
-    Element.prototype.scrollIntoView = vi.fn();
-    // Switching tabs returns the page to the top; jsdom has no scrollTo.
-    vi.stubGlobal('scrollTo', vi.fn());
+    vi.stubGlobal(
+      'scrollTo',
+      vi.fn(() => {
+        scrollTop = 0;
+        layout();
+      }),
+    );
     Element.prototype.animate = vi.fn(() => ({
       cancel() {},
       finished: Promise.resolve(),
@@ -231,16 +236,83 @@ describe('content tabs (runtime)', () => {
       addEventListener() {},
       removeEventListener() {},
     })) as never;
+
+    // jsdom has no layout: every getBoundingClientRect() returns zeroes, which
+    // would make the scroll-spy believe every anchor sits exactly on the header
+    // line and pick whichever came last. So fake a page — every spy anchor
+    // stacked in document order, section headers short and sections tall — and
+    // let scrollIntoView actually move us. That makes the spy testable end to
+    // end rather than something we have to mock around.
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      const anchor = this.closest(ANCHORS) as HTMLElement | null;
+      // Scrolls to something that isn't an anchor (MainTabs pulling a tab
+      // button into view) move nothing.
+      if (!anchor) return;
+      scrollTop = offsets().get(anchor) ?? 0;
+      layout();
+    });
   });
+
+  /** The two things the spy measures: section headers and rail sections. */
+  const ANCHORS = '[data-nav],[data-region]';
+  const SECTION_H = 500;
+  const HEADER_H = 60;
+  let scrollTop = 0;
+
+  const anchorEls = () => Array.from(document.querySelectorAll<HTMLElement>(ANCHORS));
+  const sectionEls = () => Array.from(document.querySelectorAll<HTMLElement>('[data-nav]'));
+
+  /** Where each anchor sits down the fake page, in document order. */
+  function offsets(): Map<HTMLElement, number> {
+    const out = new Map<HTMLElement, number>();
+    let y = 0;
+    for (const el of anchorEls()) {
+      out.set(el, y);
+      // A section header is a single line; a section is a whole panel. The
+      // difference is the point — it's the gap a header opens above its region
+      // that a sections-only spy would fall into.
+      y += el.dataset.region ? HEADER_H : SECTION_H;
+    }
+    return out;
+  }
+
+  /** Stack the currently-mounted anchors down a fake page at the current scroll. */
+  function layout() {
+    for (const [el, y] of offsets()) {
+      const top = y - scrollTop;
+      const height = el.dataset.region ? HEADER_H : SECTION_H;
+      el.getBoundingClientRect = () =>
+        ({ top, bottom: top + height, height, left: 0, right: 0, width: 0 }) as DOMRect;
+    }
+  }
+
+  /** Scroll so a given section sits right on the header line. */
+  function scrollToNav(id: string) {
+    const el = document.querySelector<HTMLElement>(`[data-nav="${id}"]`);
+    scrollTop = el ? (offsets().get(el) ?? 0) : 0;
+    layout();
+  }
+
+  /**
+   * Re-lay-out, fire a scroll, and let the spy's rAF (and Svelte) catch up.
+   * The spy schedules its own frame first, so ours resolves after it has run.
+   */
+  async function settle() {
+    layout();
+    window.dispatchEvent(new Event('scroll'));
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    await tick();
+  }
 
   /** A state deep enough that every tab exists. */
   function full(level = 8) {
     cleanup();
     nav.select('settlement'); // the tab store is a module singleton — reset it
+    scrollTop = 0;
     const gs = game.state;
     gs.level = level;
     gs.workers.trained = 4;
-    gs.prestige.level = 0; // keeps the Prestige tab's label off the level suffix
+    gs.prestige.level = 0;
     gs.market.sold = { wood: false, stone: false, arrow: false, spear: false };
     gs.market.rateUnlocks = { wood: false, stone: false, food: false };
     gs.market.contracts = { i: false, ii: false, iii: false };
@@ -249,20 +321,29 @@ describe('content tabs (runtime)', () => {
     for (const id of SELLABLE_RESOURCES) gs.resources[id].amount = D(0);
   }
 
-  const tabBar = () => screen.getByRole('tablist', { name: 'Page sections' });
+  // The bar is a `navigation` landmark, not a tablist: it scrolls to a region
+  // rather than swapping what's rendered, so there is no tabpanel to own.
+  const tabBar = () => screen.getByRole('navigation', { name: 'Page sections' });
   /** Scoped to the tab bar — the rail has same-named buttons. */
-  const tabBtn = (name: RegExp) => within(tabBar()).getByRole('tab', { name }) as HTMLButtonElement;
+  const tabBtn = (name: RegExp) =>
+    within(tabBar()).getByRole('button', { name }) as HTMLButtonElement;
+  const railLabels = () =>
+    within(screen.getByRole('navigation', { name: 'Jump to section' }))
+      .getAllByRole('button')
+      .map((b) => b.getAttribute('aria-label'));
+  const sectionIds = () => sectionEls().map((el) => el.dataset.nav);
 
   it('lists the tabs in progression order, each named for what it holds', () => {
     full();
     render(App);
 
     const labels = within(tabBar())
-      .getAllByRole('tab')
+      .getAllByRole('button')
       .map((t) => t.textContent?.replace(/\s+/g, ' ').trim());
 
     expect(labels).toEqual([
       'Settlement',
+      'Threats',
       'Resources',
       'Crafting',
       'Mysticism Mystic',
@@ -272,69 +353,281 @@ describe('content tabs (runtime)', () => {
     ]);
   });
 
-  it('mounts only the selected tab, and swaps content when another is picked', async () => {
+  it('mounts every tab’s content at once, in one long page', () => {
     full();
     render(App);
 
-    // Settlement opens: the settlement itself and its two threat tracks.
-    expect(document.querySelector('[data-nav="settlement"]')).toBeTruthy();
-    expect(document.querySelector('[data-nav="combat:assault"]')).toBeTruthy();
-    // ...and nothing from any other tab.
-    expect(document.querySelector('[data-nav="group:core"]')).toBeNull();
-    expect(document.querySelector('[data-nav="group:blacksmith"]')).toBeNull();
-    expect(document.querySelector('[data-nav="market"]')).toBeNull();
-
-    await fireEvent.click(tabBtn(/^Resources/));
-
-    // Now the gathering cards are mounted and the Settlement panels are gone.
-    expect(document.querySelector('[data-nav="group:core"]')).toBeTruthy();
-    expect(document.querySelector('[data-nav="group:deepmine"]')).toBeTruthy();
-    expect(document.querySelector('[data-nav="settlement"]')).toBeNull();
-    expect(document.querySelector('[data-nav="combat:assault"]')).toBeNull();
-  });
-
-  it('groups the workshops under Crafting and leaves the Quest Hall alone on Quests', async () => {
-    full();
-    render(App);
-
-    // All three workshops share one tab.
-    await fireEvent.click(tabBtn(/^Crafting/));
-    for (const key of ['group:hunterscabin', 'group:blacksmith', 'group:barracks']) {
-      expect(document.querySelector(`[data-nav="${key}"]`), `${key} not on Crafting`).toBeTruthy();
+    // Nothing is hidden behind a tab: the settlement, every structure card, the
+    // Market and Prestige are all in the document from the start.
+    for (const key of [
+      'settlement',
+      'combat:assault',
+      'combat:hex',
+      'group:core',
+      'group:deepmine',
+      'group:hunterscabin',
+      'group:blacksmith',
+      'group:barracks',
+      'group:wizardtower',
+      'group:cloudshaman',
+      'group:castle',
+      'market',
+      'prestige',
+    ]) {
+      expect(document.querySelector(`[data-nav="${key}"]`), `${key} missing`).toBeTruthy();
     }
-
-    // Quests holds the Quest Hall and nothing else — the Cloud Shaman moved to
-    // Mysticism, alongside the Wizard Tower.
-    await fireEvent.click(tabBtn(/^Quests/));
-    expect(document.querySelector('[data-nav="group:castle"]')).toBeTruthy();
-    expect(document.querySelector('[data-nav="group:cloudshaman"]')).toBeNull();
-    expect(screen.getByText('Quest Hall')).toBeTruthy();
-
-    await fireEvent.click(tabBtn(/^Mystic/));
-    expect(document.querySelector('[data-nav="group:wizardtower"]')).toBeTruthy();
-    expect(document.querySelector('[data-nav="group:cloudshaman"]')).toBeTruthy();
   });
 
-  it('shows only the active tab’s sections in the jump rail', async () => {
+  it('lays the page out in tab order, each tab an unbroken run', () => {
     full();
     render(App);
 
-    const railLabels = () =>
-      within(screen.getByRole('navigation', { name: 'Jump to section' }))
+    // The whole jump model rests on this: a tab can only be a scroll target
+    // while its sections sit together, in bar order. Interleave two tabs in
+    // GROUP_DEFS and clicking one would land you in the middle of another.
+    expect(sectionIds()).toEqual([
+      'settlement',
+      'combat:assault',
+      'combat:hex',
+      'group:core',
+      'group:deepmine',
+      'group:hunterscabin',
+      'group:blacksmith',
+      'group:barracks',
+      'group:wizardtower',
+      'group:cloudshaman',
+      'group:castle',
+      'market',
+      'prestige',
+    ]);
+  });
+
+  it('groups the workshops under Crafting and leaves the Quest Hall alone on Quests', () => {
+    const s = createInitialState(0);
+    s.level = 8;
+    s.workers.trained = 4;
+    const idsOn = (tab: string) =>
+      getNavSections(s)
+        .filter((sec) => sec.tab === tab)
+        .map((sec) => sec.id);
+
+    // All three workshops share one region...
+    expect(idsOn('crafting')).toEqual(['group:hunterscabin', 'group:blacksmith', 'group:barracks']);
+    // ...the Cloud Shaman sits with the Wizard Tower under Mysticism...
+    expect(idsOn('mysticism')).toEqual(['group:wizardtower', 'group:cloudshaman']);
+    // ...and Quests holds the Quest Hall alone.
+    expect(idsOn('quests')).toEqual(['group:castle']);
+
+    full(); // cleanup() — otherwise the previous test's App is still mounted
+    render(App);
+    expect(screen.getByText('Quest Hall')).toBeTruthy();
+  });
+
+  it('lists every section in the jump rail, across all tabs', () => {
+    full();
+    render(App);
+
+    // The rail is now the table of contents for the whole page, not for one tab.
+    expect(railLabels()).toEqual([
+      'Settlement',
+      'Assault',
+      'Hex',
+      'Core Resources',
+      'Deep Mine',
+      "Hunter's Cabin",
+      'Blacksmith',
+      'Barracks',
+      'Wizard Tower',
+      'Cloud Shaman',
+      'Quest Hall',
+      'Market',
+      'Prestige',
+    ]);
+  });
+
+  it('gives each region a big header, matching the tab bar', () => {
+    full();
+    render(App);
+
+    const heads = Array.from(document.querySelectorAll<HTMLElement>('[data-region]'));
+    // One header per tab, same names, same order — the page's sections and the
+    // tab bar are the same list read two ways.
+    expect(heads.map((h) => h.dataset.region)).toEqual([
+      'threats',
+      'resources',
+      'crafting',
+      'mysticism',
+      'quests',
+      'market',
+      'prestige',
+    ]);
+    // Every tab but the first, which deliberately opens the page bare.
+    expect(heads.map((h) => h.textContent?.trim())).toEqual(
+      within(tabBar())
+        .getAllByRole('button')
+        .map((t) => t.textContent?.replace(/\s+/g, ' ').trim().split(' ')[0])
+        .slice(1),
+    );
+    // Real headings, so the page has an outline rather than styled divs.
+    expect(heads.every((h) => h.tagName === 'H2')).toBe(true);
+  });
+
+  it('gives the opening region no header, whichever region that is', () => {
+    // Settlement opens the page, so it goes bare — before Threats exists...
+    full(1);
+    render(App);
+    expect(tabBtn(/^Settlement/)).toBeTruthy();
+    expect(document.querySelector('[data-region="settlement"]')).toBeNull();
+    expect(document.querySelector('[data-region="threats"]')).toBeNull(); // no tab yet
+
+    // ...and after, when Threats slots in behind it and takes a header.
+    full();
+    render(App);
+    expect(document.querySelector('[data-region="settlement"]')).toBeNull();
+    expect(document.querySelector('[data-region="threats"]')).toBeTruthy();
+  });
+
+  it('hides the section headers while there is only one region', () => {
+    // A brand-new run: no workers trained yet, so Core Resources hasn't opened
+    // and the settlement is the only region. The tab bar hides at that point —
+    // and a lone "SETTLEMENT" banner with nothing to distinguish it from is
+    // just noise, so the headers hide with it.
+    full(0);
+    game.state.workers.trained = 0;
+    render(App);
+
+    expect(screen.queryByRole('navigation', { name: 'Page sections' })).toBeNull();
+    expect(document.querySelectorAll('[data-region]').length).toBe(0);
+  });
+
+  it('renders the two threat tracks as sibling panels, not one nested pair', () => {
+    full();
+    render(App);
+
+    const assault = document.querySelector<HTMLElement>('[data-nav="combat:assault"]');
+    const hex = document.querySelector<HTMLElement>('[data-nav="combat:hex"]');
+    expect(assault).toBeTruthy();
+    expect(hex).toBeTruthy();
+
+    // Each is its own panel — the hex used to be a bare div inside the
+    // assault's frame, which meant it could never carry its own accent.
+    expect(assault?.tagName).toBe('SECTION');
+    expect(hex?.tagName).toBe('SECTION');
+    expect(hex?.classList.contains('panel')).toBe(true);
+    expect(assault?.contains(hex!)).toBe(false);
+    expect(assault?.parentElement).toBe(hex?.parentElement);
+  });
+
+  it('clusters the rail by tab, one divider per boundary', () => {
+    full();
+    render(App);
+
+    const rail = screen.getByRole('navigation', { name: 'Jump to section' });
+    const groups = Array.from(rail.querySelectorAll<HTMLElement>('[role="group"]'));
+
+    // One cluster per tab, labelled with — and in the same order as — the tabs.
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual(
+      within(tabBar())
+        .getAllByRole('button')
+        .map((t) => t.textContent?.replace(/\s+/g, ' ').trim().split(' ')[0]),
+    );
+
+    // Each cluster holds exactly the sections behind its tab.
+    const labelsIn = (g: HTMLElement) =>
+      within(g)
         .getAllByRole('button')
         .map((b) => b.getAttribute('aria-label'));
+    expect(labelsIn(groups[0])).toEqual(['Settlement']);
+    expect(labelsIn(groups[1])).toEqual(['Assault', 'Hex']);
+    expect(labelsIn(groups[2])).toEqual(['Core Resources', 'Deep Mine']);
+    expect(labelsIn(groups[3])).toEqual(["Hunter's Cabin", 'Blacksmith', 'Barracks']);
+    expect(labelsIn(groups[4])).toEqual(['Wizard Tower', 'Cloud Shaman']);
+    expect(labelsIn(groups[5])).toEqual(['Quest Hall']);
 
-    // Settlement tab: the settlement itself plus both threat tracks.
-    expect(railLabels()).toEqual(['Settlement', 'Assault', 'Hex']);
-
-    await fireEvent.click(tabBtn(/^Resources/));
-    expect(railLabels()).toEqual(['Core Resources', 'Deep Mine']);
-
-    await fireEvent.click(tabBtn(/^Crafting/));
-    expect(railLabels()).toEqual(["Hunter's Cabin", 'Blacksmith', 'Barracks']);
+    // Dividers sit BETWEEN clusters — never a leading or trailing one.
+    expect(rail.querySelectorAll('.rail-div').length).toBe(groups.length - 1);
   });
 
-  it('flags a tab with a dot, never a number', async () => {
+  it('lights the rail divider for the chapter being read', async () => {
+    full();
+    render(App);
+    await settle();
+
+    const lit = () =>
+      document
+        .querySelector<HTMLElement>('.rail-div.lit')
+        ?.nextElementSibling?.getAttribute('aria-label') ?? null;
+
+    // At the top we're in Settlement — the first cluster, which has no divider
+    // above it, so nothing is lit.
+    expect(lit()).toBeNull();
+
+    scrollToNav('group:blacksmith');
+    await settle();
+    expect(lit()).toBe('Crafting');
+  });
+
+  it('scrolls to a tab’s section header when its tab is clicked', async () => {
+    full();
+    render(App);
+    await settle();
+
+    const jumped = () =>
+      (Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock.contexts as Element[];
+
+    // The header, not the first section — so you land on the name of the place
+    // you asked for rather than halfway into its first card.
+    await fireEvent.click(tabBtn(/^Crafting/));
+    expect(jumped().at(-1)).toBe(document.querySelector('[data-region="crafting"]'));
+
+    await fireEvent.click(tabBtn(/^Mystic/));
+    expect(jumped().at(-1)).toBe(document.querySelector('[data-region="mysticism"]'));
+  });
+
+  it('keeps the tab highlighted after its own header scrolls past the line', async () => {
+    full();
+    render(App);
+    await settle();
+
+    // The regression this guards: a header sits ABOVE its region's first
+    // section, so landing on the header leaves that section still below the
+    // sticky line. A sections-only spy reads the section before it — and
+    // clicking "Crafting" would leave "Resources" highlighted.
+    await fireEvent.click(tabBtn(/^Crafting/));
+    await settle();
+
+    expect(nav.tab).toBe('crafting');
+    expect(tabBtn(/^Crafting/).getAttribute('aria-current')).toBe('true');
+    // The rail agrees, pointing at the first section under that header.
+    expect(document.querySelector('.jump-btn.active')?.getAttribute('aria-label')).toBe(
+      "Hunter's Cabin",
+    );
+  });
+
+  it('follows the scroll position with both the tab and the rail', async () => {
+    full();
+    render(App);
+    await settle();
+
+    // Top of the page: the settlement, on the Settlement tab.
+    expect(nav.tab).toBe('settlement');
+    expect(tabBtn(/^Settlement/).getAttribute('aria-current')).toBe('true');
+
+    // Scroll into the Blacksmith — no click anywhere — and both bars follow.
+    scrollToNav('group:blacksmith');
+    await settle();
+
+    expect(nav.tab).toBe('crafting');
+    expect(tabBtn(/^Crafting/).getAttribute('aria-current')).toBe('true');
+    expect(tabBtn(/^Settlement/).hasAttribute('aria-current')).toBe(false);
+
+    // Keep going and the Market region takes over.
+    scrollToNav('market');
+    await settle();
+    expect(nav.tab).toBe('market');
+  });
+
+  it('keeps any number inside the dot, never beside the label', () => {
     full();
     game.state.resources.wood.amount = D(50); // one sellable
     game.state.resources.coin.amount = D(1); // one affordable (the food supply)
@@ -342,16 +635,48 @@ describe('content tabs (runtime)', () => {
     render(App);
 
     const market = tabBtn(/^Market/);
-    // A bare count beside "Market" reads as a coin balance, so there is none.
-    expect(market.textContent).not.toMatch(/\d/);
-    expect(within(market).getByLabelText('Something is waiting here')).toBeTruthy();
-    expect(tabBtn(/^Quests/).textContent).not.toMatch(/\d/);
+    // A bare count beside "Market" reads as a coin balance. A count INSIDE the
+    // dot reads as a notification badge, which is the point — so the rule is
+    // about where the digits sit, not whether any exist.
+    const outsideDot = (btn: HTMLElement) => {
+      const clone = btn.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll('.dot').forEach((d) => d.remove());
+      return clone.textContent ?? '';
+    };
+    expect(outsideDot(market)).not.toMatch(/\d/);
+    expect(outsideDot(tabBtn(/^Quests/))).not.toMatch(/\d/);
+    // The dot names what's waiting rather than saying "something is".
+    expect(within(market).getByRole('img').getAttribute('aria-label')).toMatch(/offers ready/);
 
     // The counts still live inside, on the Sell/Buy sub-tabs, where they mean
-    // something specific.
-    await fireEvent.click(market);
+    // something specific. No click needed to reach them any more.
     expect(screen.getByRole('tab', { name: /^Sell/ }).textContent).toContain('1');
     expect(screen.getByRole('tab', { name: /^Buy/ }).textContent).toContain('1');
+  });
+
+  it('counts the dot only when more than one thing waits', () => {
+    full();
+    // Crafting has three workshops; make two of them affordable at once.
+    game.state.resources.wood.amount = D(100_000);
+    game.state.resources.stone.amount = D(100_000);
+    game.state.resources.food.amount = D(100_000);
+    render(App);
+
+    const dotOf = (btn: HTMLElement) => btn.querySelector('.dot');
+    const crafting = dotOf(tabBtn(/^Crafting/));
+    expect(crafting).toBeTruthy();
+    // Whatever the exact count, a multi-alert tab shows it and says so.
+    const n = Number(crafting?.textContent);
+    expect(n).toBeGreaterThan(1);
+    expect(crafting?.getAttribute('aria-label')).toMatch(new RegExp(`^${n} need attention:`));
+
+    // A tab with exactly one waiting item stays a bare dot — "1" is noise.
+    const single = getTabs(game.state).find((t) => t.alerts?.length === 1);
+    if (single) {
+      const dot = dotOf(tabBtn(new RegExp(`^${single.label}`)));
+      expect(dot?.textContent).toBe('');
+      expect(dot?.getAttribute('aria-label')).toMatch(/^1 needs attention:/);
+    }
   });
 
   it('hides a tab until its content unlocks', () => {
@@ -359,26 +684,35 @@ describe('content tabs (runtime)', () => {
     render(App);
 
     const names = within(tabBar())
-      .getAllByRole('tab')
+      .getAllByRole('button')
       .map((t) => t.textContent);
     expect(names.some((n) => /Quests/.test(n ?? ''))).toBe(false);
     expect(names.some((n) => /Crafting/.test(n ?? ''))).toBe(false);
     expect(names.some((n) => /Market/.test(n ?? ''))).toBe(true);
   });
 
-  it('falls back to Settlement when the active tab stops existing', async () => {
+  it('re-measures when a region closes under the player', async () => {
     full();
     render(App);
 
-    await fireEvent.click(tabBtn(/^Crafting/));
-    expect(document.querySelector('[data-nav="group:blacksmith"]')).toBeTruthy();
+    // Park in the Crafting region.
+    scrollToNav('group:blacksmith');
+    await settle();
+    expect(nav.tab).toBe('crafting');
 
-    // A prestige drops the settlement to level 0, closing every structure tab.
+    // A prestige drops the settlement to level 0, closing the workshops. No
+    // scroll happens — the spy has to notice the section list changed on its
+    // own, or both bars would keep pointing at a card that no longer exists.
     game.state.level = 0;
     await tick();
+    layout();
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    await tick();
 
-    expect(nav.tab).toBe('settlement');
+    expect(document.querySelector('[data-nav="group:blacksmith"]')).toBeNull();
     expect(document.querySelector('[data-nav="settlement"]')).toBeTruthy();
+    // Whatever it settles on, it must be a section that still exists.
+    expect(sectionIds()).toContain(nav.tab === 'settlement' ? 'settlement' : 'group:core');
   });
 
   it('tags every section with the tab that shows it', () => {
@@ -396,24 +730,53 @@ describe('content tabs (runtime)', () => {
     expect(tabOf('group:wizardtower')).toBe('mysticism');
     expect(tabOf('settlement')).toBe('settlement');
     expect(tabOf('market')).toBe('market');
+    // Both threat tracks left Settlement for their own region, so an amber
+    // under-supplied dot can't be masked by Settlement's gold upgrade dot.
+    expect(tabOf('combat:assault')).toBe('threats');
+    expect(tabOf('combat:hex')).toBe('threats');
   });
 
-  it('follows a recipe link onto the tab that produces the ingredient', async () => {
+  it('opens the Threats tab only once assaults begin', () => {
+    const s = createInitialState(0);
+    s.workers.trained = 1;
+
+    // Before combat unlocks there is no threat section, so no tab and no
+    // header — the bar goes straight from Settlement to Resources.
+    s.level = 1;
+    expect(getTabs(s).map((t) => t.id)).not.toContain('threats');
+
+    // Once it does, the tab inserts itself between the two.
+    s.level = 8;
+    expect(
+      getTabs(s)
+        .map((t) => t.id)
+        .slice(0, 3),
+    ).toEqual(['settlement', 'threats', 'resources']);
+  });
+
+  it('follows a recipe link to the row that produces the ingredient', async () => {
     full();
     render(App);
+    await settle();
 
-    // The Blacksmith is built from wood and stone, both gathered over on
-    // Resources — so its cost links point off the Crafting tab.
-    await fireEvent.click(tabBtn(/^Crafting/));
+    // The Blacksmith is built from wood and stone, both gathered up in the
+    // Resources region — so its cost links point a long way up the page. The
+    // row is already mounted (that's the point of the single page), so this is
+    // purely a scroll, and the assertion is where it scrolled to.
     const card = document.querySelector('[data-nav="group:blacksmith"]') as HTMLElement;
     expect(card).toBeTruthy();
-    expect(document.querySelector('[data-res="stone"]')).toBeNull();
+    const stone = document.querySelector('[data-res="stone"]');
+    expect(stone).toBeTruthy();
 
     await fireEvent.click(within(card).getByRole('button', { name: /stone/ }));
     await tick();
 
+    const calls = (Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock
+      .contexts as Element[];
+    expect(calls.at(-1)).toBe(stone);
+    // ...and having scrolled up there, we're reading the Resources region.
+    await settle();
     expect(nav.tab).toBe('resources');
-    expect(document.querySelector('[data-res="stone"]')).toBeTruthy();
   });
 });
 
@@ -467,9 +830,85 @@ describe('threat supply alerts', () => {
 
     const assault = getNavSections(s).find((sec) => sec.id === 'combat:assault');
     const hex = getNavSections(s).find((sec) => sec.id === 'combat:hex');
-    expect(assault?.alert).toBe('warn');
+    // Below its cap, so red — while the hex track, at cap and staffed, is quiet.
+    expect(assault?.alert?.severity).toBe('bad');
     expect(hex?.alert).toBe(null);
     expect(assault?.count).toBe(1); // workers on the defense line only
+  });
+
+  it('never flags a wave you cannot do anything about', () => {
+    const s = armed();
+    // Hopelessly outmatched, but at cap with the line staffed and stocked:
+    // losing is now unavoidable, so there is nothing worth a dot.
+    s.combat.assault.wave = 40;
+    s.resources.archer.amount = D(10);
+    expect(willRepelAssault(s)).toBe(false);
+    expect(getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert).toBe(null);
+  });
+
+  it('flags a line blocked for want of its inputs', () => {
+    const s = armed();
+    s.resources.defense.amount = D(3); // room to produce...
+    s.resources.archer.amount = D(0); // ...but nothing to produce it from
+    const alert = getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert;
+    expect(alert?.severity).toBe('bad');
+    expect(alert?.reason).toBe('No Archer to raise Defense');
+  });
+
+  it('names every missing input, not just the first', () => {
+    const s = armed();
+    s.resources.ward.amount = D(3);
+    s.resources.mage.amount = D(0);
+    s.resources.trollskull.amount = D(0); // ward needs both
+    expect(getNavSections(s).find((sec) => sec.id === 'combat:hex')?.alert?.reason).toBe(
+      'No Mage and Troll Skull to raise Ward',
+    );
+  });
+
+  it('reports the shortage before the staffing, not after', () => {
+    const s = armed();
+    // Nobody on the line AND nothing to feed it. Reporting "unstaffed" would
+    // send you to assign a worker who then couldn't do anything.
+    s.workers.assigned.defense = 0;
+    s.resources.archer.amount = D(0);
+    expect(getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert?.reason).toMatch(
+      /^No Archer/,
+    );
+  });
+
+  it('reds a stat below its cap, ambers a merely unstaffed line', () => {
+    const s = armed();
+    s.resources.archer.amount = D(10); // stocked, so inputs are not the issue
+
+    s.resources.defense.amount = D(3);
+    expect(getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert).toEqual({
+      severity: 'bad',
+      reason: 'Defense below cap',
+    });
+
+    // At cap but nobody on the line: worth mentioning, not worth alarming.
+    s.resources.defense.amount = D(5);
+    s.workers.assigned.defense = 0;
+    expect(getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert).toEqual({
+      severity: 'warn',
+      reason: 'Defense line unstaffed',
+    });
+  });
+
+  it('gives a tab every alert in it, worst first', () => {
+    const s = armed();
+    s.workers.trained = 1;
+    s.resources.archer.amount = D(10);
+    s.resources.mage.amount = D(10);
+    s.resources.trollskull.amount = D(100);
+    s.resources.ward.amount = D(3); // hex red — below cap
+    s.workers.assigned.defense = 0; // assault amber — merely unstaffed
+
+    const threats = getTabs(s).find((t) => t.id === 'threats');
+    expect(threats?.alerts?.map((a) => [a.id, a.severity])).toEqual([
+      ['combat:hex', 'bad'],
+      ['combat:assault', 'warn'],
+    ]);
   });
 
   it('omits the hex section until hexes unlock', () => {

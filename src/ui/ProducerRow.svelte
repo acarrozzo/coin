@@ -49,7 +49,7 @@
   let highlighted = $state<ResourceId | null>(null);
   let highlightTimer: ReturnType<typeof setTimeout> | undefined;
   function jump(rid: ResourceId) {
-    jumpToResource(gs, rid, (r) => {
+    jumpToResource(rid, (r) => {
       highlighted = r;
       clearTimeout(highlightTimer);
       highlightTimer = setTimeout(() => (highlighted = null), 1600);

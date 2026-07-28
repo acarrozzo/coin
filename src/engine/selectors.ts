@@ -341,12 +341,49 @@ export function willBreakHex(state: GameState): boolean {
  * there's nothing actionable on the line until the structure exists.
  */
 export function needsThreatSupply(state: GameState, stat: 'defense' | 'ward'): boolean {
+  const gaps = threatSupplyGaps(state, stat);
+  return gaps.belowCap || gaps.understaffed;
+}
+
+/**
+ * The two separate reasons a threat track can be under-supplied. Split out
+ * because they call for different actions — feed the stat, or staff the line —
+ * and the alert dots name which one is actually wrong.
+ */
+export function threatSupplyGaps(
+  state: GameState,
+  stat: 'defense' | 'ward',
+): { belowCap: boolean; understaffed: boolean } {
   const cap = getCapacity(state, stat);
-  if (cap === null || cap.lte(0)) return false;
-  return (
-    state.resources[stat].amount.lt(cap) ||
-    (state.workers.assigned[stat] ?? 0) < getMaxWorkers(state, stat)
-  );
+  // A cap of 0 (building not yet raised) means nothing is actionable yet.
+  if (cap === null || cap.lte(0)) return { belowCap: false, understaffed: false };
+  return {
+    belowCap: state.resources[stat].amount.lt(cap),
+    understaffed: (state.workers.assigned[stat] ?? 0) < getMaxWorkers(state, stat),
+  };
+}
+
+/**
+ * The inputs a threat line couldn't cover at FULL staffing — the things you'd
+ * have to make before putting anyone on it would achieve anything. Defense is
+ * built from archers, ward from mages and troll skulls; without them the line
+ * is blocked however well staffed it is.
+ *
+ * Deliberately measured against getMaxWorkers rather than current staffing: an
+ * empty line with no archers should report the archers, not the empty slot, or
+ * you fix the staffing and only then discover the real problem.
+ *
+ * Empty before the capping building exists — nothing on this track is
+ * actionable until there's somewhere to put the stat.
+ */
+export function threatInputGaps(state: GameState, stat: 'defense' | 'ward'): ResourceId[] {
+  const cap = getCapacity(state, stat);
+  if (cap === null || cap.lte(0)) return [];
+  const workers = getMaxWorkers(state, stat);
+  if (workers <= 0) return [];
+  return PRODUCER_INPUTS[stat]
+    .filter(([rid, qty]) => state.resources[rid].amount.lt(workers * qty))
+    .map(([rid]) => rid);
 }
 
 // ---------- Market ----------

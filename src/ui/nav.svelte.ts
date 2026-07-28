@@ -1,16 +1,20 @@
 /**
- * Which content tab is showing. Lives outside App because two places need it:
- * App (renders the bar and the tab's panels) and ResourcePanel (whose cost and
- * recipe links point at resources that now sit on *other* tabs — following one
- * has to switch tabs before it can scroll).
+ * Which content tab the player is currently *looking at*.
+ *
+ * Every tab's content is mounted at once, in one long scroll — the tab bar
+ * navigates rather than filters. So this is an OUTPUT of the scroll position,
+ * not an input to rendering: App's scroll-spy writes it from whichever section
+ * currently sits under the sticky chrome, and MainTabs reads it to decide which
+ * tab is highlighted. Nothing mounts or unmounts because of it.
+ *
+ * It still lives outside App because MainTabs and the spy are on opposite sides
+ * of the component, and because it survives a re-render of either.
  *
  * Deliberately not part of GameState: it's view state, not simulation state, so
  * it stays out of the save file and resets to Settlement on load.
  */
-import { tick } from 'svelte';
-import type { GameState } from '../engine/state';
 import type { ResourceId } from '../content/resources';
-import { tabForResource, type TabId } from './sections';
+import type { TabId } from './sections';
 
 class Nav {
   tab = $state<TabId>('settlement');
@@ -23,24 +27,14 @@ class Nav {
 export const nav = new Nav();
 
 /**
- * Follow a recipe/cost link to a resource's producer row: switch to whichever
- * tab shows it, scroll it into view and briefly call it out (see [data-res]).
+ * Follow a recipe/cost link to a resource's producer row: scroll it into view
+ * and briefly call it out (see [data-res]).
  *
- * The tab hop is the whole reason this is async — most ingredients now live on
- * a different tab from the recipe that wants them (a Blacksmith recipe needs
- * wood, which is on Resources), and the row doesn't exist to scroll to until
- * that tab's content has mounted.
+ * No tab switching any more — every producer row is mounted all the time, so
+ * the row an ingredient link points at is always already in the document, even
+ * when it belongs to a different part of the page than the recipe naming it.
  */
-export async function jumpToResource(
-  gs: GameState,
-  rid: ResourceId,
-  onHighlight: (rid: ResourceId) => void,
-): Promise<void> {
-  const target = tabForResource(gs, rid);
-  if (target && target !== nav.tab) {
-    nav.select(target);
-    await tick();
-  }
+export function jumpToResource(rid: ResourceId, onHighlight: (rid: ResourceId) => void): void {
   const el = document.querySelector<HTMLElement>(`[data-res="${rid}"]`);
   if (!el) return;
   const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;

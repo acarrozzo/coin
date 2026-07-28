@@ -7,16 +7,28 @@
   import { RESOURCES, type ResourceId } from './content/resources';
   import { formatNumber } from './engine/numbers';
   import SettlementPanel from './ui/SettlementPanel.svelte';
-  import CombatPanel from './ui/CombatPanel.svelte';
+  import ThreatPanel from './ui/ThreatPanel.svelte';
   import ResourcePanel from './ui/ResourcePanel.svelte';
   import SettingsPanel from './ui/SettingsPanel.svelte';
   import MarketPanel from './ui/MarketPanel.svelte';
   import PrestigePanel from './ui/PrestigePanel.svelte';
   import WelcomeBack from './ui/WelcomeBack.svelte';
   import MainTabs from './ui/MainTabs.svelte';
+  import AlertFlyout from './ui/AlertFlyout.svelte';
   import Toasts from './ui/Toasts.svelte';
-  import { getNavSections, getTabs, type TabId } from './ui/sections';
-  import { nav } from './ui/nav.svelte';
+  import {
+    getNavSections,
+    getTabs,
+    firstSectionForTab,
+    tabForSection,
+    isMarketUnlocked,
+    isPrestigeUnlocked,
+    tabLabel,
+    type TabId,
+    type NavSection,
+    type TabAlert,
+  } from './ui/sections';
+  import { nav, jumpToResource } from './ui/nav.svelte';
   import Castle from '@lucide/svelte/icons/castle';
   import Settings from '@lucide/svelte/icons/settings';
   import User from '@lucide/svelte/icons/user';
@@ -55,33 +67,64 @@
   // opens up. A single tab is no tab bar at all.
   const tabs = $derived(getTabs(gs));
 
-  // Which tab's content is mounted. Shared via `nav` because ResourcePanel's
-  // cost/recipe links have to switch tabs to reach a resource on another one.
+  /**
+   * Which tab region the player is currently scrolled into. An OUTPUT of the
+   * scroll-spy below, not a switch — every tab's content is mounted all the
+   * time. Kept in `nav` rather than local state so it survives independently of
+   * this component.
+   *
+   * No "tab vanished under the player" fallback is needed any more: a prestige
+   * drops the settlement to level 0 and closes every structure region at once,
+   * but since nothing was being hidden by selection, the spy simply lands on
+   * whatever content is still there.
+   */
   const activeTab = $derived(nav.tab);
 
-  /**
-   * A tab can vanish under the player: prestige drops the settlement to level 0,
-   * closing every structure tab at once. Fall back to Settlement, which is
-   * always present, rather than leaving them on a blank page.
-   */
-  $effect(() => {
-    if (!tabs.some((t) => t.id === nav.tab)) nav.select('settlement');
-  });
-
-  // Left-rail jump targets: one per visible section on the active tab, each with
-  // a worker count and an opportunity/danger indicator.
-  const navSections = $derived(getNavSections(gs).filter((s) => s.tab === activeTab));
+  // Left-rail jump targets: one per visible section ACROSS THE WHOLE PAGE, each
+  // with a worker count and an opportunity/danger indicator. The rail is the
+  // fine-grained table of contents; the tab bar is the coarse one.
+  const navSections = $derived(getNavSections(gs));
   // Which section is currently scrolled into view (highlighted in the rail).
   let activeSection = $state<string | null>(null);
 
-  // Immediate hover/focus label for the icon rails. Positioned with `fixed` so
-  // it escapes the left rail's scroll clipping and never triggers layout shift.
-  let tip = $state<{ text: string; x: number; y: number; side: 'left' | 'right' } | null>(null);
-  function showTip(e: Event, text: string, side: 'left' | 'right') {
+  /**
+   * The rail's buttons, clustered into one run per tab, so a hairline can be
+   * drawn between the runs. That turns a flat column of a dozen icons back into
+   * the same chapters the tab bar shows — the rail's grouping and the tab bar's
+   * are then literally the same partition of the page.
+   *
+   * Relies on getNavSections being tab-contiguous (the invariant the section
+   * order test pins down): a tab whose sections were interleaved with another's
+   * would produce two runs here, and draw a divider mid-chapter.
+   */
+  const railGroups = $derived.by(() => {
+    const groups: { tab: TabId; sections: NavSection[] }[] = [];
+    for (const s of navSections) {
+      const last = groups.at(-1);
+      if (last?.tab === s.tab) last.sections.push(s);
+      else groups.push({ tab: s.tab, sections: [s] });
+    }
+    return groups;
+  });
+
+  // Immediate hover/focus label for the icon rail, carrying the section's alert
+  // when it has one — a rail button is a bare glyph, so the flyout is the only
+  // place its dot can say what it means. Fixed-positioned (see AlertFlyout) so
+  // it escapes the rail's scroll clipping and never triggers layout shift.
+  let tip = $state<{
+    text: string;
+    alerts: TabAlert[];
+    x: number;
+    y: number;
+    side: 'left' | 'right';
+  } | null>(null);
+  function showTip(e: Event, s: NavSection, side: 'left' | 'right') {
     const el = e.currentTarget as HTMLElement;
     const r = el.getBoundingClientRect();
     tip = {
-      text,
+      text: s.label,
+      // One button is one section, so there is never more than one.
+      alerts: s.alert ? [{ id: s.id, label: s.label, ...s.alert }] : [],
       x: side === 'right' ? r.right + 8 : r.left - 8,
       y: r.top + r.height / 2,
       side,
@@ -92,24 +135,56 @@
   }
 
   /**
-   * Switch tabs. The new tab's content starts at the top, so the page scroll
-   * goes with it — otherwise a tall tab leaves you halfway down a short one.
+   * Tab click → scroll to that tab's region. Nothing is switched: the tab bar
+   * is a set of jump targets over one long page, and `nav.tab` catches up on
+   * its own once the scroll lands and the spy runs.
+   *
+   * The first tab scrolls to the very top rather than to an anchor, so it gives
+   * you the page header back instead of parking it just under the sticky
+   * chrome. It's also the one region with no header of its own to aim at.
    */
   function selectTab(tab: TabId) {
-    if (tab === nav.tab) return;
-    nav.select(tab);
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+    if (tabs[0]?.id === tab) {
+      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+      nav.select(tab);
+      return;
+    }
+    // The section header, so you land on the name of where you are — falling
+    // back to the first section for the early game, where the headers are
+    // hidden.
+    const head = document.querySelector<HTMLElement>(`[data-region="${tab}"]`);
+    if (head) {
+      scrollToEl(head);
+      return;
+    }
+    const first = firstSectionForTab(gs, tab);
+    if (first) jumpTo(first.id);
   }
 
   function jumpTo(id: string) {
     const el = document.querySelector<HTMLElement>(`[data-nav="${id}"]`);
-    if (!el) return;
+    if (el) scrollToEl(el);
+  }
+
+  /** Scroll an anchor under the sticky chrome and light its ring. */
+  function scrollToEl(el: HTMLElement) {
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
     el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-
     flash(el);
+  }
+
+  /**
+   * Header gauge → the resource's own producer row, wherever it sits in the
+   * page. The row's card gets the same accent ring a rail jump lights, since
+   * the ring is styled on the [data-nav] section, not on the row itself.
+   */
+  function jumpToStore(id: ResourceId) {
+    jumpToResource(id, () => {});
+    const card = document
+      .querySelector<HTMLElement>(`[data-res="${id}"]`)
+      ?.closest<HTMLElement>('[data-nav]');
+    if (card) flash(card);
   }
 
   // Ring state: the class holds it lit; dropping the class fades it out via the
@@ -202,24 +277,54 @@
     return () => game.stop();
   });
 
-  // Scroll-spy: light up the rail button for whichever section sits just below
-  // the sticky header. Reads the DOM fresh each pass so it adapts as sections
-  // unlock, and throttles to one recompute per animation frame.
+  // Scroll-spy: light up the rail button — AND the tab — for whichever section
+  // sits just below the sticky header. Reads the DOM fresh each pass so it
+  // adapts as sections unlock, and throttles to one recompute per animation
+  // frame.
+  //
+  // One pass drives both bars deliberately: the rail button and the tab are two
+  // zoom levels on the same answer, so deriving them from a single measurement
+  // is what stops them ever disagreeing about where you are.
+  /**
+   * Ask the spy for a fresh measurement. Assigned by the onMount below; the
+   * no-op stands in until then, which the mount's own first pass covers.
+   */
+  let requestSpy: () => void = () => {};
+
   onMount(() => {
     let raf = 0;
     const recompute = () => {
       raf = 0;
       const line = headerH + tabsH + SCROLL_PEEK + 4;
-      const els = Array.from(document.querySelectorAll<HTMLElement>('[data-nav]'));
-      let current = els[0]?.dataset.nav ?? null;
-      for (const el of els) {
-        if (el.getBoundingClientRect().top - line <= 1) current = el.dataset.nav ?? current;
+      // Section headers are measured alongside sections. They have to be: a
+      // header sits ABOVE its region's first section, so scrolling one to the
+      // line leaves that section still below it — and a sections-only pass
+      // would report the *previous* region right after a tab click landed you
+      // here.
+      const els = Array.from(document.querySelectorAll<HTMLElement>('[data-nav],[data-region]'));
+      let i = 0;
+      for (let n = 0; n < els.length; n++) {
+        if (els[n].getBoundingClientRect().top - line <= 1) i = n;
       }
+
+      // A header stands in for the first section beneath it, so crossing one
+      // moves the rail and the tab bar together rather than one at a time.
+      let el: HTMLElement | undefined = els[i];
+      let tab: TabId | null = null;
+      if (el?.dataset.region) {
+        tab = el.dataset.region as TabId;
+        el = els.slice(i + 1).find((e) => e.dataset.nav);
+      }
+      const current = el?.dataset.nav ?? null;
+
       activeSection = current;
+      tab ??= current ? tabForSection(gs, current) : null;
+      if (tab) nav.select(tab);
     };
     const onScroll = () => {
       if (!raf) raf = requestAnimationFrame(recompute);
     };
+    requestSpy = onScroll;
     recompute();
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll);
@@ -228,6 +333,19 @@
       window.removeEventListener('resize', onScroll);
       cancelAnimationFrame(raf);
     };
+  });
+
+  /**
+   * Re-measure whenever the set of sections changes. Sections appear and vanish
+   * without the player scrolling a pixel — a structure unlocks, or a prestige
+   * drops the settlement to level 0 and closes most of the page at once — and
+   * either way whatever sits under the header line has just changed. Without
+   * this the rail and the tab bar would keep pointing at a section that is no
+   * longer there until the next scroll event.
+   */
+  $effect(() => {
+    void navSections.length;
+    requestSpy();
   });
 
   // Briefly flourish the level badge whenever the settlement levels up.
@@ -242,18 +360,30 @@
   });
 </script>
 
-<!-- The active tab's panels. Kept in a snippet so the tabpanel wrapper can be
-     rendered with or without its ARIA plumbing without duplicating the list. -->
-{#snippet tabContent()}
-  {#if activeTab === 'settlement'}
-    <SettlementPanel />
-    <CombatPanel />
-  {:else if activeTab === 'market'}
-    <MarketPanel />
-  {:else if activeTab === 'prestige'}
-    <PrestigePanel />
-  {:else}
-    <ResourcePanel tab={activeTab} />
+<!-- Big header introducing one tab's region of the page. Rendered only for tabs
+     that actually have content (getTabs already drops the empty ones), and only
+     once there's more than one region — a lone banner over the whole early game
+     is just noise.
+
+     The FIRST region never gets one: it opens the page directly under the tab
+     bar, which already names it, so a header there would only push the game
+     down a line. Which region that is changes as the game opens up — Settlement
+     until threats unlock, Threats after — so it's derived from tabs[0] rather
+     than hardcoded, and Settlement gains a header the moment it stops being
+     first.
+
+     This is what a tab click scrolls to, not the region's first section, so the
+     header lands under the sticky chrome and names where you've arrived. The
+     scroll-spy knows about [data-region] for the same reason (see recompute). -->
+{#snippet regionHead(tab: TabId)}
+  {@const def = tabs.find((t) => t.id === tab)}
+  {#if tabs.length > 1 && def && tabs[0]?.id !== tab}
+    {@const Icon = def.icon}
+    <h2 class="region" data-region={tab}>
+      <Icon size={22} aria-hidden="true" />
+      <span class="region-name">{def.label}</span>
+      <span class="region-rule" aria-hidden="true"></span>
+    </h2>
   {/if}
 {/snippet}
 
@@ -266,18 +396,27 @@
         <span class="stat level-badge" class:leveled title="Settlement level">Lv {gs.level}</span>
       </h1>
 
+      <!-- Core storage gauges. Icon and amount together are a link to the
+           resource's full producer row, wherever it currently lives. -->
       {#if gs.workers.trained >= 1 && stores.length > 0}
         <div class="stores">
           {#each stores as s (s.id)}
             {@const Icon = s.icon}
-            <div
-              class="store"
-              title="{RESOURCES[s.id].name}: {formatNumber(s.amount)} / {formatNumber(s.cap)}"
-            >
-              <Icon size={14} color="var(--gold)" aria-hidden="true" />
-              <span class="store-num"
-                >{formatNumber(s.amount)}<span class="store-cap">/{formatNumber(s.cap)}</span></span
+            <div class="store">
+              <button
+                type="button"
+                class="store-jump"
+                onclick={() => jumpToStore(s.id)}
+                title="{RESOURCES[s.id].name}: {formatNumber(s.amount)} / {formatNumber(s.cap)}"
+                aria-label="Go to {RESOURCES[s.id].name}"
               >
+                <Icon size={14} color="var(--gold)" aria-hidden="true" />
+                <span class="store-num"
+                  >{formatNumber(s.amount)}<span class="store-cap">/{formatNumber(s.cap)}</span
+                  ></span
+                >
+              </button>
+
               <span class="store-bar"><span class="store-fill" style:width="{s.pct}%"></span></span>
             </div>
           {/each}
@@ -335,44 +474,62 @@
   class="layout"
   style="--header-h: {headerH}px; --scroll-offset: {headerH + tabsH + SCROLL_PEEK}px"
 >
-  <!-- Left jump rail: one button per visible section ON THE ACTIVE TAB (the
-       tab bar moves between tabs; the rail is the table of contents inside
-       one). Clicking scrolls to it; a dot flags an affordable upgrade (gold) or
-       an under-supplied threat track (amber), and a badge shows the workers
-       assigned there. On mobile it floats at the left edge.
+  <!-- Left jump rail: one button per visible section ACROSS THE WHOLE PAGE —
+       the full table of contents, where the tab bar is the chapter list over
+       the same scroll. Clicking scrolls to it; a dot flags an affordable
+       upgrade (gold) or an under-supplied threat track (amber), and a badge
+       shows the workers assigned there.
 
-       A tab with a single section (Market, Prestige, Quests) has nothing to
-       navigate between, so the buttons are dropped — but the rail's column is
-       still rendered, holding its width so the content doesn't jump sideways
-       every time you switch to such a tab. -->
+       The buttons are clustered by tab with a hairline between clusters, so the
+       rail's groups line up one-for-one with the tabs above: each run of icons
+       is exactly what sits behind one tab. The divider carries the tab's name
+       for screen readers via the group's aria-label — sighted users get the
+       same information from the run's position under the highlighted tab.
+
+       Dropped entirely on mobile (see the 900px rule) — the tab bar is enough
+       navigation on a phone, and the 44px gutter is worth more than fine jumps.
+
+       With one section in the whole game there's nothing to navigate between,
+       so the buttons are dropped — but the rail's column is still rendered,
+       holding its width so the content doesn't shift sideways the moment a
+       second section unlocks. -->
   {#if gs.workers.trained >= 1}
     <nav class="jump-rail" aria-label="Jump to section">
-      {#each navSections.length > 1 ? navSections : [] as s (s.id)}
-        {@const Icon = s.icon}
-        <button
-          class="jump-btn"
-          class:active={activeSection === s.id}
-          onclick={() => jumpTo(s.id)}
-          aria-label={s.label}
-          aria-current={activeSection === s.id ? 'true' : undefined}
-          onmouseenter={(e) => showTip(e, s.label, 'right')}
-          onmouseleave={hideTip}
-          onfocus={(e) => showTip(e, s.label, 'right')}
-          onblur={hideTip}
-        >
-          <Icon size={20} aria-hidden="true" />
-          {#if s.alert}
-            <span
-              class="dot"
-              class:warn={s.alert === 'warn'}
-              class:bad={s.alert === 'bad'}
-              aria-hidden="true"
-            ></span>
-          {/if}
-          {#if s.count > 0}
-            <span class="count-badge" aria-hidden="true">{s.count}</span>
-          {/if}
-        </button>
+      {#each navSections.length > 1 ? railGroups : [] as g, i (g.tab)}
+        <!-- Hairline between chapters, never before the first one. -->
+        {#if i > 0}
+          <span class="rail-div" class:lit={activeTab === g.tab} aria-hidden="true"></span>
+        {/if}
+        <div class="rail-group" role="group" aria-label={tabLabel(g.tab)}>
+          {#each g.sections as s (s.id)}
+            {@const Icon = s.icon}
+            <button
+              class="jump-btn"
+              class:active={activeSection === s.id}
+              onclick={() => jumpTo(s.id)}
+              aria-label={s.label}
+              aria-current={activeSection === s.id ? 'true' : undefined}
+              onmouseenter={(e) => showTip(e, s, 'right')}
+              onmouseleave={hideTip}
+              onfocus={(e) => showTip(e, s, 'right')}
+              onblur={hideTip}
+            >
+              <Icon size={20} aria-hidden="true" />
+              {#if s.alert}
+                <span
+                  class="dot"
+                  class:warn={s.alert.severity === 'warn'}
+                  class:bad={s.alert.severity === 'bad'}
+                  role="img"
+                  aria-label={s.alert.reason}
+                ></span>
+              {/if}
+              {#if s.count > 0}
+                <span class="count-badge" aria-hidden="true">{s.count}</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
       {/each}
     </nav>
   {/if}
@@ -381,26 +538,55 @@
     <main>
       <WelcomeBack />
 
-      <!-- Tab bar. Sticky, and it switches: only the selected tab's panels are
-           mounted below. Hidden until there's more than one tab to move
-           between. -->
+      <!-- Tab bar. Sticky, and it JUMPS rather than switches — everything below
+           is mounted at once, and clicking a tab scrolls to its region. Hidden
+           until there's more than one region to move between. -->
       {#if tabs.length > 1}
         <div class="tabbar" bind:clientHeight={tabsH}>
           <MainTabs {tabs} active={activeTab} onselect={selectTab} />
         </div>
       {/if}
 
-      <!-- Only the active tab's content. Structure tabs are all the same panel
-           over a different slice of the group list, so they share one branch.
-           Before the bar exists there's no tab to label the panel with, so it's
-           a plain div rather than a tabpanel pointing at nothing. -->
-      {#if tabs.length > 1}
-        <div class="tabpanel" role="tabpanel" aria-labelledby="maintab-{activeTab}">
-          {@render tabContent()}
-        </div>
-      {:else}
-        <div class="tabpanel">{@render tabContent()}</div>
-      {/if}
+      <!-- The whole game, in one scroll. The order here IS the tab order (see
+           TAB_DEFS): settlement → resources → crafting → mysticism → quests →
+           market → prestige, so each tab's sections form one unbroken run and a
+           tab can be a jump to the first of them.
+
+           The four structure regions are the same panel over a different slice
+           of the group list; a slice with nothing unlocked renders nothing at
+           all, so early game this collapses to just the settlement.
+
+           Market and Prestige used to be mounted only because their tab was
+           selected — with nothing gating on selection any more, they need their
+           real unlock checks here. -->
+      <div class="page">
+        <!-- Settlement opens the page, so it gets no header of its own (see
+             regionHead) — the tab bar is directly above it and already names
+             it. -->
+        {@render regionHead('settlement')}
+        <SettlementPanel />
+        {@render regionHead('threats')}
+        <!-- One panel per track, siblings rather than the hex nested inside the
+             assault's frame. Each self-gates on its own unlock. -->
+        <ThreatPanel track="assault" />
+        <ThreatPanel track="hex" />
+        {@render regionHead('resources')}
+        <ResourcePanel tab="resources" />
+        {@render regionHead('crafting')}
+        <ResourcePanel tab="crafting" />
+        {@render regionHead('mysticism')}
+        <ResourcePanel tab="mysticism" />
+        {@render regionHead('quests')}
+        <ResourcePanel tab="quests" />
+        {#if isMarketUnlocked(gs)}
+          {@render regionHead('market')}
+          <MarketPanel />
+        {/if}
+        {#if isPrestigeUnlocked(gs)}
+          {@render regionHead('prestige')}
+          <PrestigePanel />
+        {/if}
+      </div>
 
       <!-- Breathing room so the last (possibly short) section can scroll up to
            the header line, triggering its active state in the rail and bar. -->
@@ -418,9 +604,7 @@
   {/if}
 
   {#if tip}
-    <span class="rail-flyout {tip.side}" role="tooltip" style="left: {tip.x}px; top: {tip.y}px"
-      >{tip.text}</span
-    >
+    <AlertFlyout label={tip.text} alerts={tip.alerts} x={tip.x} y={tip.y} side={tip.side} />
   {/if}
 </div>
 
@@ -467,6 +651,29 @@
   .jump-rail::-webkit-scrollbar {
     display: none;
   }
+  /* One tab's worth of buttons. Keeps the within-chapter rhythm identical to
+     the rail's own gap, so the only thing setting a cluster apart is the
+     hairline and the extra air around it. */
+  .rail-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  /* Chapter break, matching a boundary in the tab bar above. Deliberately
+     narrower than a button so it reads as a separator rather than a control,
+     and it lights up for the chapter you're currently in — the same accent the
+     active tab and the active rail button use. */
+  .rail-div {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 1px;
+    margin: 1px auto;
+    background: var(--border);
+    transition: background var(--transition);
+  }
+  .rail-div.lit {
+    background: color-mix(in srgb, var(--accent) 55%, transparent);
+  }
   .jump-btn {
     position: relative;
     display: inline-flex;
@@ -499,34 +706,14 @@
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
-  /* Instant hover/focus label for both icon rails. Fixed-positioned (see
-     showTip) so it clears the left rail's scroll clipping; JS supplies the
-     left/top of the anchoring edge and the side class picks which way it grows
-     and vertically centers it against the button. */
-  .rail-flyout {
-    position: fixed;
-    z-index: 50;
-    width: max-content;
-    padding: 5px 9px;
-    background: var(--bg-panel, #fff);
-    color: var(--text, inherit);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-    font-size: 12px;
-    font-weight: 600;
-    line-height: 1;
-    white-space: nowrap;
-    pointer-events: none;
-  }
-  .rail-flyout.right {
-    transform: translateY(-50%);
-  }
-  .rail-flyout.left {
-    transform: translate(-100%, -50%);
-  }
   /* Opportunity/danger dot, tucked into the tile's top-right corner (inside the
-     bounds so the scroll container never clips it). */
+     bounds so the scroll container never clips it).
+
+     Green for opportunity rather than gold: --warn is a 55/45 blend of --gold
+     and --bad, so a gold "good" put all three tiers in one narrow warm band
+     (ΔE ~24 between good and warn). --good roughly triples that gap. It also
+     gives gold its single job back — value, as in the level badge and the
+     storage gauges — instead of doubling as an alert tier. */
   .dot {
     position: absolute;
     top: 3px;
@@ -534,14 +721,37 @@
     width: 8px;
     height: 8px;
     border-radius: 999px;
-    background: var(--gold);
+    background: var(--good);
     box-shadow: 0 0 0 2px var(--bg-panel);
   }
   .dot.warn {
     background: var(--warn);
   }
+  /* Red also pulses. Hue alone can't separate these tiers for red-green colour
+     blindness in every palette (and not at all in the single-hue amber one), so
+     the most severe tier carries a non-chromatic signal too. Safe to animate
+     because red is scoped to the rare "feeding cannot fix this" case. */
   .dot.bad {
     background: var(--bad);
+    animation: alertPulse 1.8s ease-in-out infinite;
+  }
+  @keyframes alertPulse {
+    0%,
+    100% {
+      box-shadow:
+        0 0 0 2px var(--bg-panel),
+        0 0 0 2px color-mix(in srgb, var(--bad) 70%, transparent);
+    }
+    55% {
+      box-shadow:
+        0 0 0 2px var(--bg-panel),
+        0 0 0 6px transparent;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dot.bad {
+      animation: none;
+    }
   }
   /* Worker count: just the number, tucked in the icon's bottom-left corner. */
   .count-badge {
@@ -559,11 +769,44 @@
     color: var(--accent);
   }
 
-  /* Sections land clear of the sticky header AND the sticky tab bar when
-     jumped to, plus a little peek at whatever sits above them. */
-  :global([data-nav]) {
+  /* Sections and section headers land clear of the sticky header AND the sticky
+     tab bar when jumped to, plus a little peek at whatever sits above them. */
+  :global([data-nav]),
+  .region {
     scroll-margin-top: var(--scroll-offset, 96px);
   }
+
+  /* --- Section header: names one tab's region of the page --- */
+  .region {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    /* Introduces what follows, so it sits nearer its own region than the one
+       above. .page's gap supplies the space below. */
+    margin-top: var(--space-5);
+    font-family: var(--font-display);
+    font-size: 30px;
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: 0.04em;
+    color: var(--text);
+  }
+  .region :global(svg) {
+    flex: 0 0 auto;
+    color: var(--accent);
+  }
+  .region-name {
+    flex: 0 0 auto;
+  }
+  /* Rule running out to the right margin, fading so it reads as a flourish
+     rather than a second border competing with the panels below it. */
+  .region-rule {
+    flex: 1 1 auto;
+    height: 1px;
+    min-width: var(--space-4);
+    background: linear-gradient(to right, var(--border), transparent);
+  }
+
   /* Subtle accent ring shown when a section is jumped to. Uses outline (not
      box-shadow) so it never disturbs the panels' own drop shadow.
      
@@ -585,9 +828,21 @@
     /* Fade IN — quicker than the fade out, as before. */
     transition-duration: 0.72s;
   }
+  /* A jumped-to section header lights its own type instead of taking the ring:
+     an outline around a single line of text reads as a box the layout doesn't
+     otherwise have. Same two durations, so it feels like the same gesture. */
+  .region {
+    transition: color 1.32s ease-in-out;
+  }
+  .region:global(.nav-flash) {
+    color: var(--accent);
+    transition-duration: 0.72s;
+  }
   @media (prefers-reduced-motion: reduce) {
     :global([data-nav]),
-    :global([data-nav].nav-flash) {
+    :global([data-nav].nav-flash),
+    .region,
+    .region:global(.nav-flash) {
       transition: none;
     }
   }
@@ -622,15 +877,45 @@
   .stores {
     display: flex;
     align-items: center;
-    gap: var(--space-4);
+    gap: var(--space-3);
     flex-wrap: wrap;
   }
+  /* Icon + amount on top, the fill bar wrapped onto its own line beneath them —
+     narrower than carrying the bar inline, which matters in a header that also
+     holds the wordmark and the worker readout. */
   .store {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 5px;
+    row-gap: 4px;
+    /* Holds the gauge steady as digits come and go (and keeps the bar from
+       collapsing to the width of a one-digit amount). */
+    min-width: 56px;
     color: var(--text-on-header);
     font-variant-numeric: tabular-nums;
+  }
+  /* Icon + amount together are the link to the full producer row. */
+  .store-jump {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0;
+    background: none;
+    border: 0;
+    border-radius: var(--radius);
+    color: inherit;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: color var(--transition);
+  }
+  .store-jump:hover {
+    color: var(--gold);
+  }
+  .store-jump:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
   }
   .store-num {
     font-size: 14px;
@@ -640,7 +925,7 @@
   }
   .store-bar {
     display: block;
-    width: 52px;
+    flex-basis: 100%;
     height: 6px;
     background: rgba(255, 255, 255, 0.15);
     border-radius: 999px;
@@ -834,9 +1119,10 @@
     background: var(--bg);
   }
 
-  /* The active tab's content. Stacks its panels with the same rhythm `main`
-     uses, so a tab reads as one continuous column. */
-  .tabpanel {
+  /* The whole page's panels, stacked with the same rhythm `main` uses so the
+     regions read as one continuous column rather than as stitched-together
+     pages. */
+  .page {
     display: flex;
     flex-direction: column;
     gap: var(--panel-gap);
@@ -917,24 +1203,11 @@
     }
   }
 
-  /* Below 768px: each gauge stacks its bar beneath the icon + amount. The gauge
-     is pinned to the original bar width (52px) so the content and bar share that
-     width and the whole thing stays narrow. The /cap text is dropped here (it
-     wouldn't fit the narrow column — the bar shows fullness). */
+  /* Below 768px the /cap text is dropped — it wouldn't fit the narrow column,
+     and the bar shows fullness on its own. */
   @media (max-width: 767.98px) {
-    .store {
-      flex-wrap: wrap;
-      justify-content: center;
-      text-align: center;
-      row-gap: 4px;
-      min-width: 52px;
-    }
     .store-cap {
       display: none;
-    }
-    .store-bar {
-      flex-basis: 100%;
-      width: auto;
     }
   }
 
