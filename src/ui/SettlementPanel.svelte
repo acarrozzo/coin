@@ -12,6 +12,7 @@
     splitCost,
   } from '../engine/selectors';
   import { formatNumber } from '../engine/numbers';
+  import { jumpToResource, hasResourceRow } from './nav.svelte';
   import User from '@lucide/svelte/icons/user';
 
   const gs = $derived(game.state);
@@ -25,6 +26,31 @@
     return Object.entries(cost) as [ResourceId, number][];
   }
 </script>
+
+<!-- One cost/requirement chip: green when you hold it, red when you're short.
+     It's also a link to where that resource comes from — but only when there is
+     a producer row to land on, so a chip naming an unproduced or still-locked
+     resource stays plain text rather than a button that does nothing. -->
+{#snippet chipText(rid: ResourceId, amt: number)}{formatNumber(amt)} {RESOURCES[rid].name}{/snippet}
+
+{#snippet costChip(rid: ResourceId, amt: number, reqOnly: boolean = false)}
+  {@const met = gs.resources[rid].amount.gte(amt)}
+  {#if hasResourceRow(gs, rid)}
+    <button
+      type="button"
+      class="cost-item jump"
+      class:req-only={reqOnly}
+      class:short={!met}
+      class:met
+      title="Go to {RESOURCES[rid].name}"
+      onclick={() => jumpToResource(rid)}>{@render chipText(rid, amt)}</button
+    >
+  {:else}
+    <span class="cost-item" class:req-only={reqOnly} class:short={!met} class:met
+      >{@render chipText(rid, amt)}</span
+    >
+  {/if}
+{/snippet}
 
 <section class="panel" data-nav="settlement">
   <div class="tier">
@@ -40,21 +66,13 @@
       <div class="action">
         <span class="cost">
           {#each parts.consumed as [rid, amt] (rid)}
-            {@const met = gs.resources[rid].amount.gte(amt)}
-            <span class="cost-item" class:short={!met} class:met>
-              {formatNumber(amt)}
-              {RESOURCES[rid].name}
-            </span>
+            {@render costChip(rid, amt)}
           {/each}
 
           {#if hasReqs}
             {#if parts.consumed.length}<span class="cost-sep" aria-hidden="true">•</span>{/if}
             {#each parts.required as [rid, amt] (rid)}
-              {@const met = gs.resources[rid].amount.gte(amt)}
-              <span class="cost-item req-only" class:short={!met} class:met>
-                {formatNumber(amt)}
-                {RESOURCES[rid].name}
-              </span>
+              {@render costChip(rid, amt, true)}
             {/each}
             {#if next.workersRequired}
               {@const met = gs.workers.trained >= next.workersRequired}
@@ -65,11 +83,7 @@
             {/if}
             {#if next.requires}
               {#each costEntries(next.requires) as [rid, amt] (rid)}
-                {@const met = gs.resources[rid].amount.gte(amt)}
-                <span class="cost-item req-only" class:short={!met} class:met>
-                  {formatNumber(amt)}
-                  {RESOURCES[rid].name}
-                </span>
+                {@render costChip(rid, amt, true)}
               {/each}
             {/if}
           {/if}
@@ -93,9 +107,15 @@
     <div class="action">
       {#if workerCost.gt(0)}
         <span class="cost">
-          <span class="cost-item" class:short={!canTrainWorker(gs)}>
-            {formatNumber(workerCost)} Food
-          </span>
+          <!-- Not costChip: the gate here is canTrainWorker (food AND an idle
+               worker cap), not simply holding the food. -->
+          <button
+            type="button"
+            class="cost-item jump"
+            class:short={!canTrainWorker(gs)}
+            title="Go to {RESOURCES.food.name}"
+            onclick={() => jumpToResource('food')}>{formatNumber(workerCost)} Food</button
+          >
         </span>
       {/if}
       <button onclick={() => game.train()} disabled={!canTrainWorker(gs)}>+1 worker</button>
@@ -185,6 +205,31 @@
   }
   .cost-item.met {
     color: var(--good);
+  }
+  /* A chip that links to its resource's row. Undoes the action-button styling
+     the bare `button` rule below applies, so it still reads as a chip, and
+     carries a hover underline as the only hint that it's clickable — a border
+     or fill here would compete with the Upgrade button beside it.
+
+     Selectors are deliberately scoped through .cost: that outranks both
+     `button` and `button:hover:not(:disabled)` no matter which block the
+     bundler emits first, which a bare `button.cost-item` would not. */
+  .cost button.cost-item {
+    padding: 0;
+    border: 0;
+    background: none;
+    border-radius: 0;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+  .cost button.cost-item:hover,
+  .cost button.cost-item:focus-visible {
+    background: none;
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    outline: none;
   }
   /* Bullet separating the spent cost from the held-requirement resources.
      Requirements share the same met (green) / short (red) coloring as the cost. */

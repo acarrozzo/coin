@@ -41,6 +41,8 @@ export type ResourceId =
   | 'mage'
   | 'centurion'
   | 'wargeneral'
+  // defense stat — sits above the quest items it shares the Quest Hall with
+  | 'defense'
   // quest items
   | 'magicorb'
   | 'soulgem'
@@ -50,7 +52,6 @@ export type ResourceId =
   // currency
   | 'coin'
   // stats
-  | 'defense'
   | 'honor'
   | 'wisdom';
 
@@ -103,6 +104,11 @@ export const RESOURCES: Record<ResourceId, ResourceDef> = {
   centurion: { name: 'Centurion', category: 'unit', blurb: 'Commands the legion.' },
   wargeneral: { name: 'War General', category: 'unit', blurb: 'Leads the whole host.' },
 
+  // Record order is the Quest Hall card's row order, so Defense leads the quest
+  // items it's produced alongside (it moves to the Assault panel once combat
+  // unlocks).
+  defense: { name: 'Defense', category: 'stat', blurb: 'Archers manning the walls. Repels assaults.' },
+
   magicorb: { name: 'Magic Orb', category: 'quest', blurb: 'Won by sending soldiers questing.' },
   soulgem: { name: 'Soul Gem', category: 'quest', blurb: 'A gem humming with captured souls.' },
   starmetal: { name: 'Star Metal', category: 'quest', blurb: 'Fallen from the heavens.' },
@@ -111,7 +117,6 @@ export const RESOURCES: Record<ResourceId, ResourceDef> = {
 
   coin: { name: 'Coin', category: 'currency', blurb: 'Earned by selling weapons at the Market.' },
 
-  defense: { name: 'Defense', category: 'stat', blurb: 'Archers manning the walls. Repels assaults.' },
   honor: { name: 'Honor', category: 'stat', blurb: 'Won by repelling assaults.' },
   wisdom: { name: 'Wisdom', category: 'stat', blurb: 'Won by breaking hexes.' },
 };

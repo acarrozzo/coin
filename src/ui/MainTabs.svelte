@@ -123,10 +123,7 @@
       onblur={hideTip}
     >
       <Icon size={16} aria-hidden="true" />
-      <span class="label">
-        {t.label}
-        {#if t.shortLabel}<span class="short">{t.shortLabel}</span>{/if}
-      </span>
+      <span class="label">{t.label}</span>
       <!-- Colour from the worst thing waiting, count from how many there are.
            A dot reading "1" would be noise, so the number appears from two up. -->
       {#if t.alerts && t.alerts.length > 0}
@@ -199,12 +196,6 @@
     outline-offset: 2px;
   }
 
-  /* Long structure names swap to a short form on narrow screens, so more of the
-     bar fits before it has to be scrolled. */
-  .short {
-    display: none;
-  }
-
   /* Affordable-upgrade dot, same language as the left rail's — green for
      opportunity, amber to top up, red for structural. Grows into a small
      numbered badge when a tab has more than one thing waiting. */
@@ -257,20 +248,38 @@
     }
   }
 
+  /* Phones: icons only. Every tab's name is dropped so the whole bar fits
+     without being scrolled — nine names never did, and a bar you have to scroll
+     to see hides the very tabs it's advertising.
+
+     The label is hidden VISUALLY, not removed: it's the button's accessible
+     name, and an icon-only button with no name is an unlabelled control. Taken
+     out of flow by `position: absolute`, so it stops being a flex item and the
+     button's gap collapses to nothing on its own. */
   @media (max-width: 560px) {
     .main-tabs {
-      gap: var(--space-2);
+      gap: var(--space-1);
     }
     .main-tabs button {
-      font-size: 16px;
+      position: relative;
+      padding: 8px 10px 9px;
     }
-    /* Swap the long label for the short one where one was supplied. */
-    .label:has(.short) {
-      font-size: 0;
+    .label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
     }
-    .short {
-      display: inline;
-      font-size: 16px;
+    /* With the name gone the dot has nothing to sit beside, so it rides the
+       icon's top-right corner instead of trailing it. */
+    .dot {
+      position: absolute;
+      top: 3px;
+      right: 3px;
     }
   }
 </style>

@@ -75,8 +75,8 @@ export type TabId =
   | 'threats'
   | 'resources'
   | 'crafting'
-  | 'mysticism'
   | 'quests'
+  | 'mysticism'
   | 'market'
   | 'prestige';
 
@@ -140,6 +140,15 @@ export const GROUP_DEFS: GroupDef[] = [
     structures: ['barracks'],
   },
   {
+    key: 'castle',
+    // The building id is `castle`; the place is the Quest Hall.
+    label: 'Quest Hall',
+    icon: Castle,
+    tab: 'quests',
+    building: 'castle',
+    structures: ['castle'],
+  },
+  {
     key: 'wizardtower',
     label: 'Wizard Tower',
     icon: TowerControl,
@@ -154,15 +163,6 @@ export const GROUP_DEFS: GroupDef[] = [
     tab: 'mysticism',
     building: 'cloudshaman',
     structures: ['cloudshaman'],
-  },
-  {
-    key: 'castle',
-    // The building id is `castle`; the place is the Quest Hall.
-    label: 'Quest Hall',
-    icon: Castle,
-    tab: 'quests',
-    building: 'castle',
-    structures: ['castle'],
   },
 ];
 
@@ -420,8 +420,6 @@ export function tabForSection(gs: GameState, id: string): TabId | null {
 export interface TabDef {
   id: TabId;
   label: string;
-  /** Used below 560px, where the full label is too long. */
-  shortLabel?: string;
   icon: Component;
   /**
    * Everything waiting on this tab, most severe first — so the dot can colour
@@ -439,8 +437,8 @@ export const TAB_DEFS: readonly TabDef[] = [
   { id: 'threats', label: 'Threats', icon: Shield },
   { id: 'resources', label: 'Resources', icon: Boxes },
   { id: 'crafting', label: 'Crafting', icon: Anvil },
-  { id: 'mysticism', label: 'Mysticism', shortLabel: 'Mystic', icon: Sparkles },
   { id: 'quests', label: 'Quests', icon: ScrollText },
+  { id: 'mysticism', label: 'Mysticism', icon: Sparkles },
   { id: 'market', label: 'Market', icon: BuildingStore },
   { id: 'prestige', label: 'Prestige', icon: Crown },
 ];

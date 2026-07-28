@@ -20,6 +20,7 @@
   import { getNextPrestigeTier, canPrestige, getTotalWorkers } from '../engine/selectors';
   import { formatNumber } from '../engine/numbers';
   import { RESOURCE_ICON } from './resourceIcons';
+  import { jumpToResource, hasResourceRow } from './nav.svelte';
   import Crown from '@lucide/svelte/icons/crown';
   import User from '@lucide/svelte/icons/user';
   import Check from '@lucide/svelte/icons/check';
@@ -83,7 +84,34 @@
     'Assault and hex progress',
     'Market offers (they return, unbought)',
   ];
+  const jumpTo = jumpToResource;
 </script>
+
+<!-- One threshold chip: green when you hold it, red when you don't. Clickable
+     only when the resource has a producer row to land on — honor, the tier-1
+     threshold, is won in combat and has none, so that chip stays plain text. -->
+{#snippet chipText(rid: ResourceId, amt: number)}
+  {@const Icon = RESOURCE_ICON[rid]}
+  <Icon size={13} aria-hidden="true" />
+  {formatNumber(amt)}
+  {RESOURCES[rid].name}
+{/snippet}
+
+{#snippet thresholdChip(rid: ResourceId, amt: number)}
+  {@const met = gs.resources[rid].amount.gte(amt)}
+  {#if hasResourceRow(gs, rid)}
+    <button
+      type="button"
+      class="cost-item jump"
+      class:short={!met}
+      class:met
+      title="Go to {RESOURCES[rid].name}"
+      onclick={() => jumpTo(rid)}>{@render chipText(rid, amt)}</button
+    >
+  {:else}
+    <span class="cost-item" class:short={!met} class:met>{@render chipText(rid, amt)}</span>
+  {/if}
+{/snippet}
 
 <section class="panel prestige" data-nav="prestige" aria-label="Prestige">
   <header class="head">
@@ -137,13 +165,7 @@
           <div class="action">
             <span class="cost">
               {#each costEntries(next.requires) as [rid, amt] (rid)}
-                {@const Icon = RESOURCE_ICON[rid]}
-                {@const met = gs.resources[rid].amount.gte(amt)}
-                <span class="cost-item" class:short={!met} class:met>
-                  <Icon size={13} aria-hidden="true" />
-                  {formatNumber(amt)}
-                  {RESOURCES[rid].name}
-                </span>
+                {@render thresholdChip(rid, amt)}
               {/each}
               {#if gs.level < PRESTIGE_UNLOCK_LEVEL}
                 <span class="cost-item short">Settlement Level {PRESTIGE_UNLOCK_LEVEL}</span>
@@ -384,6 +406,32 @@
   }
   .cost-item.met {
     color: var(--good);
+  }
+  /* A threshold chip that links to its resource's row. Undoes the zone's
+     action-button styling (the button:not([role='tab']) rule below) so it still
+     reads as a chip, not a second button beside Prestige.
+
+     Scoped through .cost to outrank that rule and its :hover — a bare
+     `button.cost-item` ties with `button:not([role='tab'])` on specificity and
+     would lose on source order. */
+  .cost button.cost-item {
+    padding: 0;
+    border: 0;
+    background: none;
+    border-radius: 0;
+    gap: 4px;
+    font: inherit;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+  .cost button.cost-item:hover,
+  .cost button.cost-item:focus-visible {
+    background: none;
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    outline: none;
   }
 
   button:not([role='tab']) {

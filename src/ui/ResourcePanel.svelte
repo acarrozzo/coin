@@ -23,7 +23,7 @@
   import { formatNumber, formatCycleRate, formatSignedRate } from '../engine/numbers';
   import { RESOURCE_ICON } from './resourceIcons';
   import { getGroupsForTab, type TabId } from './sections';
-  import { jumpToResource } from './nav.svelte';
+  import { nav, jumpToResource } from './nav.svelte';
 
   interface Props {
     /** Which tab is rendering this panel — decides which groups appear. */
@@ -60,17 +60,10 @@
   }
 
   // Clicking a resource name inside a recipe/build cost scrolls to that
-  // resource's producer row, wherever it sits in the page.
-  let highlighted = $state<ResourceId | null>(null);
-  let highlightTimer: ReturnType<typeof setTimeout> | undefined;
-
-  function jumpTo(rid: ResourceId) {
-    jumpToResource(rid, (r) => {
-      highlighted = r;
-      clearTimeout(highlightTimer);
-      highlightTimer = setTimeout(() => (highlighted = null), 1600);
-    });
-  }
+  // resource's producer row, wherever it sits in the page. The call-out on the
+  // row it lands on is shared state (nav.jumped) — the link is usually in a
+  // different card, and often a different component, from its target.
+  const jumpTo = jumpToResource;
 </script>
 
 <!-- Cost line: consumed resources (spent on build) first, then — after a
@@ -193,7 +186,7 @@
                   <span class="amount"
                     >{formatNumber(gs.resources[id].amount, resourceDecimals(id))}</span
                   >
-                  <span class="name" class:jumped={highlighted === id}>{RESOURCES[id].name}</span>
+                  <span class="name" class:jumped={nav.jumped === id}>{RESOURCES[id].name}</span>
                   {#if isStorageFull(gs, id)}
                     <span
                       class="at-cap"
@@ -225,7 +218,9 @@
                 <div class="trail">
                   <span class="rate" class:idle={assigned === 0}>
                     {#if starved}
-                      <span class="warn">needs {RESOURCES[starved].name}</span>
+                      <button type="button" class="warn jump" onclick={() => jumpTo(starved)}
+                        >needs {RESOURCES[starved].name}</button
+                      >
                     {:else}
                       +{formatCycleRate(
                         assigned * outputPerCycle,
@@ -574,8 +569,19 @@
   .rate.idle {
     color: var(--text-muted);
   }
-  .warn {
+  /* The starvation warning is a link to the ingredient it's short of, so it
+     carries the same underline affordance as a cost pill. Scoped through .rate
+     to outrank button.jump, which resets `border` and would otherwise strip the
+     underline off it. */
+  .rate button.warn {
     color: var(--bad);
+    border-bottom: 1px solid var(--bad);
+    padding-bottom: 1px;
+  }
+  .rate button.warn:hover,
+  .rate button.warn:focus-visible {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
   }
   /* Cost pills: pinned to the right of the trail cell, wrapping among
      themselves when there are several long inputs. */

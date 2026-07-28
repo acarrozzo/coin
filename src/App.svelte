@@ -180,7 +180,7 @@
    * the ring is styled on the [data-nav] section, not on the row itself.
    */
   function jumpToStore(id: ResourceId) {
-    jumpToResource(id, () => {});
+    jumpToResource(id);
     const card = document
       .querySelector<HTMLElement>(`[data-res="${id}"]`)
       ?.closest<HTMLElement>('[data-nav]');
@@ -574,10 +574,10 @@
         <ResourcePanel tab="resources" />
         {@render regionHead('crafting')}
         <ResourcePanel tab="crafting" />
-        {@render regionHead('mysticism')}
-        <ResourcePanel tab="mysticism" />
         {@render regionHead('quests')}
         <ResourcePanel tab="quests" />
+        {@render regionHead('mysticism')}
+        <ResourcePanel tab="mysticism" />
         {#if isMarketUnlocked(gs)}
           {@render regionHead('market')}
           <MarketPanel />

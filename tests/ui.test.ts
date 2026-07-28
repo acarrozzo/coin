@@ -346,8 +346,8 @@ describe('content tabs (runtime)', () => {
       'Threats',
       'Resources',
       'Crafting',
-      'Mysticism Mystic',
       'Quests',
+      'Mysticism',
       'Market',
       'Prestige',
     ]);
@@ -368,9 +368,9 @@ describe('content tabs (runtime)', () => {
       'group:hunterscabin',
       'group:blacksmith',
       'group:barracks',
+      'group:castle',
       'group:wizardtower',
       'group:cloudshaman',
-      'group:castle',
       'market',
       'prestige',
     ]) {
@@ -394,9 +394,9 @@ describe('content tabs (runtime)', () => {
       'group:hunterscabin',
       'group:blacksmith',
       'group:barracks',
+      'group:castle',
       'group:wizardtower',
       'group:cloudshaman',
-      'group:castle',
       'market',
       'prestige',
     ]);
@@ -437,9 +437,9 @@ describe('content tabs (runtime)', () => {
       "Hunter's Cabin",
       'Blacksmith',
       'Barracks',
+      'Quest Hall',
       'Wizard Tower',
       'Cloud Shaman',
-      'Quest Hall',
       'Market',
       'Prestige',
     ]);
@@ -456,8 +456,8 @@ describe('content tabs (runtime)', () => {
       'threats',
       'resources',
       'crafting',
-      'mysticism',
       'quests',
+      'mysticism',
       'market',
       'prestige',
     ]);
@@ -541,8 +541,8 @@ describe('content tabs (runtime)', () => {
     expect(labelsIn(groups[1])).toEqual(['Assault', 'Hex']);
     expect(labelsIn(groups[2])).toEqual(['Core Resources', 'Deep Mine']);
     expect(labelsIn(groups[3])).toEqual(["Hunter's Cabin", 'Blacksmith', 'Barracks']);
-    expect(labelsIn(groups[4])).toEqual(['Wizard Tower', 'Cloud Shaman']);
-    expect(labelsIn(groups[5])).toEqual(['Quest Hall']);
+    expect(labelsIn(groups[4])).toEqual(['Quest Hall']);
+    expect(labelsIn(groups[5])).toEqual(['Wizard Tower', 'Cloud Shaman']);
 
     // Dividers sit BETWEEN clusters — never a leading or trailing one.
     expect(rail.querySelectorAll('.rail-div').length).toBe(groups.length - 1);
@@ -777,6 +777,68 @@ describe('content tabs (runtime)', () => {
     // ...and having scrolled up there, we're reading the Resources region.
     await settle();
     expect(nav.tab).toBe('resources');
+  });
+
+  // Every green/red chip that names a resource is a link to where that resource
+  // comes from — the cost chips on Settlement and Prestige, and the red
+  // starvation warning on a producer row, not just ResourcePanel's own recipes.
+  it('follows a settlement cost chip to the resource it names', async () => {
+    full();
+    render(App);
+    await settle();
+
+    const cost = document.querySelector('[data-nav="settlement"] .cost') as HTMLElement;
+    const wood = document.querySelector('[data-res="wood"]');
+    expect(cost).toBeTruthy();
+    expect(wood).toBeTruthy();
+
+    await fireEvent.click(within(cost).getByRole('button', { name: /Wood/ }));
+    await tick();
+
+    const calls = (Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock
+      .contexts as Element[];
+    expect(calls.at(-1)).toBe(wood);
+  });
+
+  it('follows a starvation warning to the ingredient the line lacks', async () => {
+    full();
+    // Arrows are forged from wood and stone, so the line needs a Blacksmith to
+    // exist at all; staffed with neither ingredient it is starved, and says so
+    // in red. Nothing is assigned to wood or stone, so the loop can't refill it
+    // out from under the assertion.
+    game.state.buildings.blacksmith.level = 1;
+    for (const id of ['wood', 'stone'] as const) {
+      game.state.workers.assigned[id] = 0;
+      game.state.resources[id].amount = D(0);
+    }
+    game.state.workers.assigned.arrow = 1;
+    render(App);
+    await settle();
+
+    const wood = document.querySelector('[data-res="wood"]');
+    await fireEvent.click(screen.getByRole('button', { name: /needs Wood/ }));
+    await tick();
+
+    const calls = (Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock
+      .contexts as Element[];
+    expect(calls.at(-1)).toBe(wood);
+
+    game.state.workers.assigned.arrow = 0;
+    game.state.buildings.blacksmith.level = 0;
+  });
+
+  it('leaves a chip with no producer row as plain text', async () => {
+    full();
+    render(App);
+    await settle();
+
+    // Honor is won by repelling assaults, never produced, so it has no row to
+    // jump to — the tier-1 prestige threshold naming it must not be a button.
+    const cost = document.querySelector('[data-nav="prestige"] .cost') as HTMLElement;
+    expect(cost).toBeTruthy();
+    expect(cost.textContent).toMatch(/Honor/);
+    expect(document.querySelector('[data-res="honor"]')).toBeNull();
+    expect(within(cost).queryByRole('button', { name: /Honor/ })).toBeNull();
   });
 });
 

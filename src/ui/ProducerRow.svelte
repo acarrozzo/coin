@@ -10,7 +10,7 @@
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate } from '../engine/numbers';
   import { RESOURCE_ICON } from './resourceIcons';
-  import { jumpToResource } from './nav.svelte';
+  import { nav, jumpToResource } from './nav.svelte';
 
   interface Props {
     id: ResourceId;
@@ -46,15 +46,7 @@
     return Object.entries(PRODUCERS[id]?.inputs ?? {}) as [ResourceId, number][];
   }
 
-  let highlighted = $state<ResourceId | null>(null);
-  let highlightTimer: ReturnType<typeof setTimeout> | undefined;
-  function jump(rid: ResourceId) {
-    jumpToResource(rid, (r) => {
-      highlighted = r;
-      clearTimeout(highlightTimer);
-      highlightTimer = setTimeout(() => (highlighted = null), 1600);
-    });
-  }
+  const jump = jumpToResource;
 </script>
 
 <div class="row" data-res={id}>
@@ -76,7 +68,7 @@
   <span class="label">
     <span class="amount">{formatNumber(gs.resources[id].amount)}</span>
     {#if cap && cap.gt(0)}<span class="cap">/ {formatNumber(cap)}</span>{/if}
-    <span class="name" class:jumped={highlighted === id}>{RESOURCES[id].name}</span>
+    <span class="name" class:jumped={nav.jumped === id}>{RESOURCES[id].name}</span>
     {#each game.pops.filter((p) => p.id === id) as p (p.seq)}
       <span class="pop">+{formatNumber(p.amount)}</span>
     {/each}
@@ -101,7 +93,9 @@
   <div class="trail">
     <span class="rate" class:idle={assigned === 0}>
       {#if starved}
-        <span class="warn">needs {RESOURCES[starved].name}</span>
+        <button type="button" class="warn jump" onclick={() => jump(starved)}
+          >needs {RESOURCES[starved].name}</button
+        >
       {:else}
         +{formatCycleRate(
           assigned * outputPerCycle,
@@ -305,8 +299,19 @@
   .rate.idle {
     color: var(--text-muted);
   }
-  .warn {
+  /* The starvation warning is a link to the ingredient it's short of, so it
+     carries the same underline affordance as a cost pill. Scoped through .rate
+     to outrank button.jump, which sets `color: inherit` and resets `border` —
+     a bare button.warn ties with it and loses on source order. */
+  .rate button.warn {
     color: var(--bad);
+    border-bottom: 1px solid var(--bad);
+    padding-bottom: 1px;
+  }
+  .rate button.warn:hover,
+  .rate button.warn:focus-visible {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
   }
   /* Cost pills: pinned to the right of the trail cell, wrapping among
      themselves when there are several long inputs. */
