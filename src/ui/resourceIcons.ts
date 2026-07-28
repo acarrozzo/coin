@@ -105,11 +105,5 @@ export const RESOURCE_ICON: Record<ResourceId, Component> = {
   wisdom: Book,
 };
 
-/** Scroll to a resource's producer row and briefly call it out (see [data-res]). */
-export function jumpToResource(rid: ResourceId, onHighlight: (rid: ResourceId) => void): void {
-  const el = document.querySelector<HTMLElement>(`[data-res="${rid}"]`);
-  if (!el) return;
-  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
-  onHighlight(rid);
-}
+// jumpToResource moved to ./nav.svelte.ts — following a recipe link now has to
+// switch tabs before it can scroll, which makes it navigation, not iconography.

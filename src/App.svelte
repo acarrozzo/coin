@@ -3,12 +3,7 @@
   import { onMount } from 'svelte';
   import { game } from './ui/gameStore.svelte';
   import { sound } from './ui/sound.svelte';
-  import {
-    getAvailableWorkers,
-    getTotalWorkers,
-    getCapacity,
-    hasMarketOpportunity,
-  } from './engine/selectors';
+  import { getAvailableWorkers, getTotalWorkers, getCapacity } from './engine/selectors';
   import { RESOURCES, type ResourceId } from './content/resources';
   import { formatNumber } from './engine/numbers';
   import SettlementPanel from './ui/SettlementPanel.svelte';
@@ -18,22 +13,11 @@
   import MarketPanel from './ui/MarketPanel.svelte';
   import PrestigePanel from './ui/PrestigePanel.svelte';
   import WelcomeBack from './ui/WelcomeBack.svelte';
-  import MainTabs, { type MainTab, type TabDef } from './ui/MainTabs.svelte';
+  import MainTabs from './ui/MainTabs.svelte';
   import Toasts from './ui/Toasts.svelte';
-  import {
-    getNavSections,
-    isMarketUnlocked,
-    isQuestsUnlocked,
-    hasQuestsOpportunity,
-    isPrestigeUnlocked,
-    canPrestige,
-  } from './ui/sections';
-  import { getTier } from './content/settlement';
+  import { getNavSections, getTabs, type TabId } from './ui/sections';
+  import { nav } from './ui/nav.svelte';
   import Castle from '@lucide/svelte/icons/castle';
-  import House from '@lucide/svelte/icons/house';
-  import ScrollText from '@lucide/svelte/icons/scroll-text';
-  import BuildingStore from './ui/icons/BuildingStore.svelte';
-  import Crown from '@lucide/svelte/icons/crown';
   import Settings from '@lucide/svelte/icons/settings';
   import User from '@lucide/svelte/icons/user';
   import Check from '@lucide/svelte/icons/check';
@@ -55,9 +39,9 @@
   // Measured so the settings drawer and rails can park just below the header,
   // whose height shifts with the chosen font/layout.
   let headerH = $state(0);
-  // The zone bar is sticky under the header, so everything that scrolls to the
-  // top has to clear both. Measured rather than assumed — it wraps to two rows
-  // on narrow screens, and the settlement tab's label grows with the tier.
+  // The tab bar is sticky under the header, so everything that scrolls to the
+  // top has to clear both. Measured rather than assumed — its height moves with
+  // the chosen font.
   let tabsH = $state(0);
   /**
    * Extra breathing room above a jumped-to section, so it doesn't butt right up
@@ -66,68 +50,27 @@
   const SCROLL_PEEK = 22;
 
   const gs = $derived(game.state);
-  // The Market (coin economy) unlocks at settlement level 1. Until then there's
-  // only one tab, so the whole bar stays hidden rather than showing a lone tab.
-  const showMarket = $derived(isMarketUnlocked(gs));
 
-  const showQuests = $derived(isQuestsUnlocked(gs));
-  const questsAlert = $derived(hasQuestsOpportunity(gs));
+  // Each tab appears only once its content exists, so the bar grows as the game
+  // opens up. A single tab is no tab bar at all.
+  const tabs = $derived(getTabs(gs));
 
-  // Prestige opens at level 6 and, once taken, stays open forever — a prestige
-  // drops you to level 0, so a pure level gate would hide the tab you just used.
-  const showPrestige = $derived(isPrestigeUnlocked(gs));
+  // Which tab's content is mounted. Shared via `nav` because ResourcePanel's
+  // cost/recipe links have to switch tabs to reach a resource on another one.
+  const activeTab = $derived(nav.tab);
 
-  // The first tab wears the settlement's own title, e.g. "Lvl 6 Small Town".
-  const settlementTitle = $derived(getTier(gs.level)?.name ?? 'Settlement');
-
-  // Each tab appears only once its content exists, so the bar grows 1 → 2 → 3
-  // as the game opens up. A single tab is no tab bar at all.
-  const tabs = $derived.by(() => {
-    const list: TabDef[] = [
-      {
-        id: 'settlement',
-        label: `Lvl ${gs.level} ${settlementTitle}`,
-        shortLabel: settlementTitle,
-        icon: House,
-      },
-    ];
-    if (showQuests) {
-      list.push({
-        id: 'quests',
-        label: 'Quests',
-        icon: ScrollText,
-        alert: questsAlert,
-      });
-    }
-    if (showMarket) {
-      list.push({
-        id: 'market',
-        label: 'Market',
-        icon: BuildingStore,
-        alert: hasMarketOpportunity(gs),
-      });
-    }
-    if (showPrestige) {
-      list.push({
-        id: 'prestige',
-        // Wears its level once earned, like the settlement tab — but stays a
-        // bare "Prestige" before the first one, when there's no level to show.
-        label: gs.prestige.level > 0 ? `Prestige Lvl ${gs.prestige.level}` : 'Prestige',
-        shortLabel: 'Prestige',
-        icon: Crown,
-        alert: canPrestige(gs),
-      });
-    }
-    return list;
+  /**
+   * A tab can vanish under the player: prestige drops the settlement to level 0,
+   * closing every structure tab at once. Fall back to Settlement, which is
+   * always present, rather than leaving them on a blank page.
+   */
+  $effect(() => {
+    if (!tabs.some((t) => t.id === nav.tab)) nav.select('settlement');
   });
 
-  // Which zone is currently under the header line. The whole page is one scroll,
-  // so the zone bar reflects where you are rather than choosing what renders.
-  let activeZone = $state<MainTab>('settlement');
-
-  // Left-rail jump targets: one per visible main-content section, each with a
-  // worker count and an opportunity/danger indicator.
-  const navSections = $derived(getNavSections(gs));
+  // Left-rail jump targets: one per visible section on the active tab, each with
+  // a worker count and an opportunity/danger indicator.
+  const navSections = $derived(getNavSections(gs).filter((s) => s.tab === activeTab));
   // Which section is currently scrolled into view (highlighted in the rail).
   let activeSection = $state<string | null>(null);
 
@@ -148,12 +91,15 @@
     tip = null;
   }
 
-  /** Scroll a zone to just under the sticky header, like the rail's jumps. */
-  function jumpToZone(zone: MainTab) {
-    const el = document.querySelector<HTMLElement>(`[data-zone="${zone}"]`);
-    if (!el) return;
+  /**
+   * Switch tabs. The new tab's content starts at the top, so the page scroll
+   * goes with it — otherwise a tall tab leaves you halfway down a short one.
+   */
+  function selectTab(tab: TabId) {
+    if (tab === nav.tab) return;
+    nav.select(tab);
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
   }
 
   function jumpTo(id: string) {
@@ -270,16 +216,6 @@
         if (el.getBoundingClientRect().top - line <= 1) current = el.dataset.nav ?? current;
       }
       activeSection = current;
-
-      // Same pass, coarser grain: which of the three zones is under the line.
-      const zones = Array.from(document.querySelectorAll<HTMLElement>('[data-zone]'));
-      let zone = (zones[0]?.dataset.zone as MainTab | undefined) ?? 'settlement';
-      for (const el of zones) {
-        if (el.getBoundingClientRect().top - line <= 1) {
-          zone = (el.dataset.zone as MainTab | undefined) ?? zone;
-        }
-      }
-      activeZone = zone;
     };
     const onScroll = () => {
       if (!raf) raf = requestAnimationFrame(recompute);
@@ -305,6 +241,23 @@
     prevLevel = level;
   });
 </script>
+
+<!-- The active tab's panels. Kept in a snippet so the tabpanel wrapper can be
+     rendered with or without its ARIA plumbing without duplicating the list. -->
+{#snippet tabContent()}
+  {#if activeTab === 'settlement'}
+    <!-- The settlement, its threats, then what the land itself yields. -->
+    <SettlementPanel />
+    <CombatPanel />
+    <ResourcePanel tab="settlement" />
+  {:else if activeTab === 'market'}
+    <MarketPanel />
+  {:else if activeTab === 'prestige'}
+    <PrestigePanel />
+  {:else}
+    <ResourcePanel tab={activeTab} />
+  {/if}
+{/snippet}
 
 <div class="topstack" bind:clientHeight={headerH}>
   <header>
@@ -384,18 +337,20 @@
   class="layout"
   style="--header-h: {headerH}px; --scroll-offset: {headerH + tabsH + SCROLL_PEEK}px"
 >
-  <!-- Left jump rail: one button per visible section. Clicking scrolls to it;
-       a dot flags an affordable upgrade (gold) or an under-supplied threat
-       track (amber), and a
-       badge shows the workers assigned there. On mobile it floats at the left
-       edge, mirroring the panel rail on the right. -->
+  <!-- Left jump rail: one button per visible section ON THE ACTIVE TAB (the
+       tab bar moves between tabs; the rail is the table of contents inside
+       one). Clicking scrolls to it; a dot flags an affordable upgrade (gold) or
+       an under-supplied threat track (amber), and a badge shows the workers
+       assigned there. On mobile it floats at the left edge.
+
+       A tab with a single section (Market, Prestige, Quests) has nothing to
+       navigate between, so the buttons are dropped — but the rail's column is
+       still rendered, holding its width so the content doesn't jump sideways
+       every time you switch to such a tab. -->
   {#if gs.workers.trained >= 1}
     <nav class="jump-rail" aria-label="Jump to section">
-      {#each navSections as s, i (s.id)}
+      {#each navSections.length > 1 ? navSections : [] as s (s.id)}
         {@const Icon = s.icon}
-        {#if i > 0 && navSections[i - 1].zone !== s.zone}
-          <span class="rail-divider" aria-hidden="true"></span>
-        {/if}
         <button
           class="jump-btn"
           class:active={activeSection === s.id}
@@ -428,37 +383,25 @@
     <main>
       <WelcomeBack />
 
-      <!-- Zone bar. Sticky, and it jumps rather than switches: everything below
-           stays on the page and remains reachable by scrolling. Hidden until
-           there's more than one zone to move between. -->
+      <!-- Tab bar. Sticky, and it switches: only the selected tab's panels are
+           mounted below. Hidden until there's more than one tab to move
+           between. -->
       {#if tabs.length > 1}
         <div class="tabbar" bind:clientHeight={tabsH}>
-          <MainTabs {tabs} active={activeZone} onselect={jumpToZone} />
+          <MainTabs {tabs} active={activeTab} onselect={selectTab} />
         </div>
       {/if}
 
-      <div class="zone" data-zone="settlement">
-        <SettlementPanel />
-        <CombatPanel />
-        <ResourcePanel />
-      </div>
-
-      {#if showQuests}
-        <div class="zone" data-zone="quests">
-          <ResourcePanel scope="quests" />
+      <!-- Only the active tab's content. Structure tabs are all the same panel
+           over a different slice of the group list, so they share one branch.
+           Before the bar exists there's no tab to label the panel with, so it's
+           a plain div rather than a tabpanel pointing at nothing. -->
+      {#if tabs.length > 1}
+        <div class="tabpanel" role="tabpanel" aria-labelledby="maintab-{activeTab}">
+          {@render tabContent()}
         </div>
-      {/if}
-
-      {#if showMarket}
-        <div class="zone" data-zone="market">
-          <MarketPanel />
-        </div>
-      {/if}
-
-      {#if showPrestige}
-        <div class="zone" data-zone="prestige">
-          <PrestigePanel />
-        </div>
+      {:else}
+        <div class="tabpanel">{@render tabContent()}</div>
       {/if}
 
       <!-- Breathing room so the last (possibly short) section can scroll up to
@@ -513,6 +456,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    /* One button wide even when empty — see the markup note above. */
+    width: 44px;
     position: sticky;
     top: calc(var(--header-h, 56px) + var(--space-4));
     margin-top: var(--space-4);
@@ -616,7 +561,7 @@
     color: var(--accent);
   }
 
-  /* Sections land clear of the sticky header AND the sticky zone bar when
+  /* Sections land clear of the sticky header AND the sticky tab bar when
      jumped to, plus a little peek at whatever sits above them. */
   :global([data-nav]) {
     scroll-margin-top: var(--scroll-offset, 96px);
@@ -882,7 +827,7 @@
     flex-direction: column;
     gap: var(--panel-gap);
   }
-  /* Pins the zone bar directly under the sticky header. Owned here rather than
+  /* Pins the tab bar directly under the sticky header. Owned here rather than
      inside MainTabs so its height can be measured for --scroll-offset. */
   .tabbar {
     position: sticky;
@@ -891,22 +836,12 @@
     background: var(--bg);
   }
 
-  /* A page zone (settlement / quests / market). Stacks its panels with the same
-     rhythm `main` uses, so zones read as one continuous column. */
-  .zone {
+  /* The active tab's content. Stacks its panels with the same rhythm `main`
+     uses, so a tab reads as one continuous column. */
+  .tabpanel {
     display: flex;
     flex-direction: column;
     gap: var(--panel-gap);
-    scroll-margin-block-start: var(--scroll-offset, 96px);
-  }
-  /* Separates one zone's rail buttons from the next. */
-  .rail-divider {
-    flex: 0 0 auto;
-    align-self: center;
-    width: 24px;
-    height: 1px;
-    margin: var(--space-1) 0;
-    background: var(--border);
   }
 
   /* Roughly one viewport of slack, so even a single-row final section can be

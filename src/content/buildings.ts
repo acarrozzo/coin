@@ -132,7 +132,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     ],
   },
   castle: {
-    name: 'Quest Lands',
+    // The id stays `castle` — saves and content tables are keyed by it.
+    name: 'Quest Hall',
     blurb: 'Walls and a defensive garrison. Sets your defense cap.',
     availableAtLevel: 4,
     levels: [

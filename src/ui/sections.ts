@@ -1,8 +1,11 @@
 /**
- * Single source of truth for the main-content sections, shared by ResourcePanel
- * (which renders them) and App's left "jump" rail (which navigates to them).
- * Keeping the group list and visibility rules here means the rail can never
- * drift out of sync with what's actually on screen.
+ * Single source of truth for the main-content tabs and the sections inside
+ * them, shared by App (which renders the tab bar and the left rail) and
+ * ResourcePanel (which renders a tab's structure cards).
+ *
+ * Content is split across real tabs: only the selected tab's panels are
+ * mounted. Every group knows which tab it belongs to, so the bar, the rail and
+ * the rendered content can never drift apart.
  */
 import type { Component } from 'svelte';
 import type { GameState } from '../engine/state';
@@ -41,6 +44,10 @@ import Swords from '@lucide/svelte/icons/swords';
 import Skull from '@lucide/svelte/icons/skull';
 import BuildingStore from './icons/BuildingStore.svelte';
 import Crown from '@lucide/svelte/icons/crown';
+// Tab-bar icon for Mysticism, which holds two structures and so has no glyph
+// of its own (Crafting borrows the Blacksmith's anvil).
+import Sparkles from '@lucide/svelte/icons/sparkles';
+import ScrollText from '@lucide/svelte/icons/scroll-text';
 
 // The Market's level gates are content (content/market.ts); re-exported here
 // because the nav rail and the Market panel both reach for them via sections.
@@ -50,6 +57,9 @@ export function isMarketUnlocked(gs: GameState): boolean {
   return gs.level >= MARKET_UNLOCK_LEVEL;
 }
 
+/** The top-level content tabs, in bar order. */
+export type TabId = 'settlement' | 'crafting' | 'mysticism' | 'quests' | 'market' | 'prestige';
+
 // Each group is a structure card: a header (name + level + upgrade), the
 // resources it produces as single rows, and — for Core Resources — the Farm
 // upgrade as a footer (it blends settlement gathering + the Farm).
@@ -57,6 +67,8 @@ export interface GroupDef {
   key: string;
   label: string;
   icon: Component;
+  /** Which tab renders this card. */
+  tab: TabId;
   /** Building whose upgrade this group owns (null = no upgrade, e.g. pure gathering). */
   building: BuildingId | null;
   /** Structures whose producers appear in this group, in row order. */
@@ -70,14 +82,24 @@ export const GROUP_DEFS: GroupDef[] = [
     key: 'core',
     label: 'Core Resources',
     icon: Trees,
+    tab: 'settlement',
     building: 'farm',
     structures: ['settlement', 'farm'],
     upgradeInFooter: true,
   },
   {
+    key: 'deepmine',
+    label: 'Deep Mine',
+    icon: Pickaxe,
+    tab: 'settlement',
+    building: 'deepmine',
+    structures: ['deepmine'],
+  },
+  {
     key: 'hunterscabin',
     label: "Hunter's Cabin",
     icon: Deer,
+    tab: 'crafting',
     building: 'hunterscabin',
     structures: ['hunterscabin'],
   },
@@ -85,6 +107,7 @@ export const GROUP_DEFS: GroupDef[] = [
     key: 'blacksmith',
     label: 'Blacksmith',
     icon: Anvil,
+    tab: 'crafting',
     building: 'blacksmith',
     structures: ['blacksmith'],
   },
@@ -92,20 +115,15 @@ export const GROUP_DEFS: GroupDef[] = [
     key: 'barracks',
     label: 'Barracks',
     icon: UsersGroup,
+    tab: 'crafting',
     building: 'barracks',
     structures: ['barracks'],
-  },
-  {
-    key: 'castle',
-    label: 'Castle',
-    icon: Castle,
-    building: 'castle',
-    structures: ['castle'],
   },
   {
     key: 'wizardtower',
     label: 'Wizard Tower',
     icon: TowerControl,
+    tab: 'mysticism',
     building: 'wizardtower',
     structures: ['wizardtower'],
   },
@@ -113,15 +131,18 @@ export const GROUP_DEFS: GroupDef[] = [
     key: 'cloudshaman',
     label: 'Cloud Shaman',
     icon: Cloud,
+    tab: 'mysticism',
     building: 'cloudshaman',
     structures: ['cloudshaman'],
   },
   {
-    key: 'deepmine',
-    label: 'Deep Mine',
-    icon: Pickaxe,
-    building: 'deepmine',
-    structures: ['deepmine'],
+    key: 'castle',
+    // The building id is `castle`; the place is the Quest Hall.
+    label: 'Quest Hall',
+    icon: Castle,
+    tab: 'quests',
+    building: 'castle',
+    structures: ['castle'],
   },
 ];
 
@@ -131,16 +152,8 @@ export interface ResourceGroup extends GroupDef {
 }
 
 /**
- * Group keys belonging to the Quests zone rather than the Settlement zone. The
- * Castle is named "Quest Lands" and produces most of the quest-item chain
- * (magic orbs, soul gems, star metal, holy water); the Cloud Shaman weaves the
- * last one, dream leaf, so both sit here.
- */
-export const QUEST_GROUP_KEYS: readonly string[] = ['castle', 'cloudshaman'];
-
-/**
- * Every visible resource group, across all tabs. Prefer getSettlementGroups /
- * getQuestGroups — those say which tab they belong to.
+ * Every visible resource group, across all tabs. Prefer getGroupsForTab — it
+ * says which tab the cards belong to.
  */
 export function getResourceGroups(gs: GameState): ResourceGroup[] {
   const unlocked = unlockedResources(gs);
@@ -167,28 +180,27 @@ export function getResourceGroups(gs: GameState): ResourceGroup[] {
   );
 }
 
-/** The groups in the Settlement zone — everything not claimed by Quests. */
-export function getSettlementGroups(gs: GameState): ResourceGroup[] {
-  return getResourceGroups(gs).filter((g) => !QUEST_GROUP_KEYS.includes(g.key));
+/** The visible groups belonging to one tab, in card order. */
+export function getGroupsForTab(gs: GameState, tab: TabId): ResourceGroup[] {
+  return getResourceGroups(gs).filter((g) => g.tab === tab);
 }
 
-/** The groups in the Quests zone. */
-export function getQuestGroups(gs: GameState): ResourceGroup[] {
-  return getResourceGroups(gs).filter((g) => QUEST_GROUP_KEYS.includes(g.key));
+/**
+ * Which tab shows a resource's producer row — used to follow a recipe/cost link
+ * across the tab split. Defense and Ward move to the Combat panel (Settlement
+ * tab) once their track is live, exactly as getResourceGroups drops them.
+ */
+export function tabForResource(gs: GameState, id: ResourceId): TabId | null {
+  if (id === 'defense' && isCombatUnlocked(gs)) return 'settlement';
+  if (id === 'ward' && isHexUnlocked(gs)) return 'settlement';
+  const structure = PRODUCERS[id]?.structure;
+  if (!structure) return null;
+  return GROUP_DEFS.find((g) => g.structures.includes(structure))?.tab ?? null;
 }
 
-/** The Quests zone appears only once it has something in it. */
-export function isQuestsUnlocked(gs: GameState): boolean {
-  return getQuestGroups(gs).length > 0;
-}
-
-/** Whether an affordable build/upgrade is waiting in the Quests zone. */
-export function hasQuestsOpportunity(gs: GameState): boolean {
-  return getQuestGroups(gs).some((g) => g.building !== null && canBuild(gs, g.building));
-}
-
-/** The top-level zones of the single scrolling page, in page order. */
-export type Zone = 'settlement' | 'quests' | 'market' | 'prestige';
+/** An opportunity/danger signal. 'bad' outranks 'warn', which outranks 'good'. */
+export type Alert = 'good' | 'warn' | 'bad';
+const ALERT_RANK: Record<Alert, number> = { good: 0, warn: 1, bad: 2 };
 
 /** A navigable section in the main content, rendered as a left-rail button. */
 export interface NavSection {
@@ -202,19 +214,17 @@ export interface NavSection {
    * 'good' = an affordable build/upgrade waits here; 'warn' = a threat track is
    * under-supplied (stat below cap, or line unstaffed); 'bad' = danger.
    */
-  alert: 'good' | 'warn' | 'bad' | null;
-  /** Which page zone this section falls in — the rail rules a line between zones. */
-  zone: Zone;
+  alert: Alert | null;
+  /** Which tab this section lives on — the rail only shows the active tab's. */
+  tab: TabId;
 }
 
 /**
- * The ordered list of jump-rail sections for the current state, in page order:
- * the Settlement zone (settlement, combat, its resource groups), then the
- * Quests zone, then the Market, then Prestige — each carrying a worker count
- * and an opportunity/danger indicator.
+ * Every visible section for the current state, in page order, each carrying a
+ * worker count and an opportunity/danger indicator.
  *
- * Everything on the page is listed. The tabs jump between the coarse zones; the
- * rail is the fine-grained table of contents inside them.
+ * This is the whole map of the game's content: App filters it by the active tab
+ * for the rail, and derives the tab bar itself from which tabs appear in it.
  */
 export function getNavSections(gs: GameState): NavSection[] {
   const sections: NavSection[] = [];
@@ -227,7 +237,7 @@ export function getNavSections(gs: GameState): NavSection[] {
     // Flag either affordable action in this section: a settlement upgrade or
     // training the next worker (both live in SettlementPanel).
     alert: canUpgradeSettlement(gs) || canTrainWorker(gs) ? 'good' : null,
-    zone: 'settlement',
+    tab: 'settlement',
   });
 
   // The two threat tracks share one panel but get their own rail buttons — each
@@ -239,7 +249,7 @@ export function getNavSections(gs: GameState): NavSection[] {
       icon: Swords,
       count: gs.workers.assigned.defense ?? 0,
       alert: needsThreatSupply(gs, 'defense') ? 'warn' : null,
-      zone: 'settlement',
+      tab: 'settlement',
     });
   }
 
@@ -250,21 +260,20 @@ export function getNavSections(gs: GameState): NavSection[] {
       icon: Skull,
       count: gs.workers.assigned.ward ?? 0,
       alert: needsThreatSupply(gs, 'ward') ? 'warn' : null,
-      zone: 'settlement',
+      tab: 'settlement',
     });
   }
 
-  const groupSection = (g: ResourceGroup, zone: Zone): NavSection => ({
-    id: `group:${g.key}`,
-    label: g.label,
-    icon: g.icon,
-    count: g.ids.reduce((n, id) => n + (gs.workers.assigned[id] ?? 0), 0),
-    alert: g.building && canBuild(gs, g.building) ? 'good' : null,
-    zone,
-  });
-
-  for (const g of getSettlementGroups(gs)) sections.push(groupSection(g, 'settlement'));
-  for (const g of getQuestGroups(gs)) sections.push(groupSection(g, 'quests'));
+  for (const g of getResourceGroups(gs)) {
+    sections.push({
+      id: `group:${g.key}`,
+      label: g.label,
+      icon: g.icon,
+      count: g.ids.reduce((n, id) => n + (gs.workers.assigned[id] ?? 0), 0),
+      alert: g.building && canBuild(gs, g.building) ? 'good' : null,
+      tab: g.tab,
+    });
+  }
 
   if (isMarketUnlocked(gs)) {
     sections.push({
@@ -273,7 +282,7 @@ export function getNavSections(gs: GameState): NavSection[] {
       icon: BuildingStore,
       count: 0,
       alert: hasMarketOpportunity(gs) ? 'good' : null,
-      zone: 'market',
+      tab: 'market',
     });
   }
 
@@ -284,9 +293,62 @@ export function getNavSections(gs: GameState): NavSection[] {
       icon: Crown,
       count: 0,
       alert: canPrestige(gs) ? 'good' : null,
-      zone: 'prestige',
+      tab: 'prestige',
     });
   }
 
   return sections;
+}
+
+export interface TabDef {
+  id: TabId;
+  label: string;
+  /** Used below 560px, where the full label is too long. */
+  shortLabel?: string;
+  icon: Component;
+  /** The most severe alert among the sections on this tab. */
+  alert?: Alert | null;
+}
+
+/**
+ * The tab bar, in bar order. Every tab is listed; getTabs() drops the ones with
+ * nothing in them yet.
+ */
+export const TAB_DEFS: readonly TabDef[] = [
+  { id: 'settlement', label: 'Settlement', icon: House },
+  { id: 'crafting', label: 'Crafting', icon: Anvil },
+  { id: 'mysticism', label: 'Mysticism', shortLabel: 'Mystic', icon: Sparkles },
+  { id: 'quests', label: 'Quests', icon: ScrollText },
+  { id: 'market', label: 'Market', icon: BuildingStore },
+  { id: 'prestige', label: 'Prestige', icon: Crown },
+];
+
+/**
+ * The tabs that currently have content, each with the most severe alert among
+ * its sections. Derived from getNavSections rather than from its own gate list,
+ * so a tab can never appear empty or hide something the rail would have shown.
+ *
+ * Because only one tab's content is mounted at a time, the dot is the player's
+ * only signal that something is waiting on a tab they aren't looking at.
+ */
+export function getTabs(gs: GameState): TabDef[] {
+  const sections = getNavSections(gs);
+
+  return TAB_DEFS.filter((t) => sections.some((s) => s.tab === t.id)).map((t) => {
+    let alert: Alert | null = null;
+    for (const s of sections) {
+      if (s.tab !== t.id || s.alert === null) continue;
+      if (alert === null || ALERT_RANK[s.alert] > ALERT_RANK[alert]) alert = s.alert;
+    }
+    return {
+      ...t,
+      // Wears its level once earned — but stays a bare "Prestige" before the
+      // first one, when there's no level to show.
+      label:
+        t.id === 'prestige' && gs.prestige.level > 0
+          ? `Prestige Lvl ${gs.prestige.level}`
+          : t.label,
+      alert,
+    };
+  });
 }

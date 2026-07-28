@@ -9,7 +9,8 @@
     getCapacity,
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate } from '../engine/numbers';
-  import { RESOURCE_ICON, jumpToResource } from './resourceIcons';
+  import { RESOURCE_ICON } from './resourceIcons';
+  import { jumpToResource } from './nav.svelte';
 
   interface Props {
     id: ResourceId;
@@ -48,7 +49,7 @@
   let highlighted = $state<ResourceId | null>(null);
   let highlightTimer: ReturnType<typeof setTimeout> | undefined;
   function jump(rid: ResourceId) {
-    jumpToResource(rid, (r) => {
+    jumpToResource(gs, rid, (r) => {
       highlighted = r;
       clearTimeout(highlightTimer);
       highlightTimer = setTimeout(() => (highlighted = null), 1600);

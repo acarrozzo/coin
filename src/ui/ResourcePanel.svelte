@@ -22,19 +22,19 @@
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate, formatSignedRate } from '../engine/numbers';
   import { RESOURCE_ICON } from './resourceIcons';
-  import { getSettlementGroups, getQuestGroups } from './sections';
-  import ScrollText from '@lucide/svelte/icons/scroll-text';
+  import { getGroupsForTab, type TabId } from './sections';
+  import { jumpToResource } from './nav.svelte';
 
   interface Props {
     /** Which tab is rendering this panel — decides which groups appear. */
-    scope?: 'settlement' | 'quests';
+    tab: TabId;
   }
-  const { scope = 'settlement' }: Props = $props();
+  const { tab }: Props = $props();
 
   const gs = $derived(game.state);
   const available = $derived(getAvailableWorkers(gs));
 
-  const groups = $derived(scope === 'quests' ? getQuestGroups(gs) : getSettlementGroups(gs));
+  const groups = $derived(getGroupsForTab(gs, tab));
 
   function inputEntries(id: ResourceId) {
     return Object.entries(PRODUCERS[id]?.inputs ?? {}) as [ResourceId, number][];
@@ -59,19 +59,17 @@
     return null;
   }
 
-  // Clicking a resource name inside a recipe/build cost scrolls to that
-  // resource's producer row and briefly calls it out.
+  // Clicking a resource name inside a recipe/build cost jumps to that
+  // resource's producer row — switching tabs first when it lives on another one.
   let highlighted = $state<ResourceId | null>(null);
   let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 
   function jumpTo(rid: ResourceId) {
-    const el = document.querySelector<HTMLElement>(`[data-res="${rid}"]`);
-    if (!el) return;
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
-    highlighted = rid;
-    clearTimeout(highlightTimer);
-    highlightTimer = setTimeout(() => (highlighted = null), 1600);
+    jumpToResource(gs, rid, (r) => {
+      highlighted = r;
+      clearTimeout(highlightTimer);
+      highlightTimer = setTimeout(() => (highlighted = null), 1600);
+    });
   }
 </script>
 
@@ -114,15 +112,9 @@
   </p>
 {/snippet}
 
+<!-- No heading of its own: the tab bar already names what this is, and every
+     card carries its own structure header. -->
 <section class="panel">
-  <!-- The Settlement and Market zones are headed by their own panels; the
-       Quests zone is just group cards, so it gets a matching heading here. -->
-  {#if scope === 'quests'}
-    <header class="zone-head">
-      <ScrollText size={22} color="var(--accent)" aria-hidden="true" />
-      <h2>Quests</h2>
-    </header>
-  {/if}
   <div class="stack">
     {#each groups as group (group.key)}
       {@const GroupIcon = group.icon}
@@ -309,18 +301,6 @@
 </section>
 
 <style>
-  .zone-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-bottom: var(--space-3);
-  }
-  .zone-head h2 {
-    font-family: var(--font-display);
-    font-size: 24px;
-    color: var(--text);
-  }
-
   .panel {
     animation: fadeIn var(--fade-in);
   }

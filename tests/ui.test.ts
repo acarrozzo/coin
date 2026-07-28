@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import ResourcePanel from '../src/ui/ResourcePanel.svelte';
 import SettlementPanel from '../src/ui/SettlementPanel.svelte';
 import MarketPanel from '../src/ui/MarketPanel.svelte';
@@ -12,8 +13,8 @@ import { D } from '../src/engine/numbers';
 import { createInitialState } from '../src/engine/state';
 import { needsThreatSupply } from '../src/engine/selectors';
 import { getNavSections, FULL_MARKET_LEVEL } from '../src/ui/sections';
+import { nav } from '../src/ui/nav.svelte';
 import { ASSAULT, HEX } from '../src/content/combat';
-import { getTier } from '../src/content/settlement';
 import { SELLABLE_RESOURCES } from '../src/content/market';
 import { PRESTIGE_TIERS, PRESTIGE_UNLOCK_LEVEL, MAX_PRESTIGE } from '../src/content/prestige';
 
@@ -22,7 +23,7 @@ import { PRESTIGE_TIERS, PRESTIGE_UNLOCK_LEVEL, MAX_PRESTIGE } from '../src/cont
 describe('ResourcePanel (runtime)', () => {
   it('renders the unlocked resource and assigns a worker on click', async () => {
     game.state.workers.trained = 1; // Core Resources hidden until first worker trained
-    render(ResourcePanel);
+    render(ResourcePanel, { props: { tab: 'settlement' } });
 
     // Wood + stone gather from the start; food needs a Farm, so it's hidden.
     expect(screen.getByText('Wood')).toBeTruthy();
@@ -196,12 +197,17 @@ describe('MarketPanel (runtime)', () => {
   });
 });
 
-// The zone bar looks like tabs but navigates: the page is one continuous scroll
-// holding all three zones, and pressing one scrolls to it.
-describe('page zones (runtime)', () => {
+// The tab bar switches content: only the selected tab's panels are mounted, and
+// the left rail is the table of contents inside the tab you're on.
+describe('content tabs (runtime)', () => {
   // Rendering the real App needs two things jsdom/vitest don't provide:
   // `__APP_VERSION__` (a Vite build-time `define`) and ResizeObserver (used by
   // the header's `bind:clientHeight`). scrollIntoView is unimplemented in jsdom.
+  //
+  // So is the Web Animations API, and that one bites: switching tabs unmounts
+  // ResourcePanel's cards, whose `transition:fly` outro calls element.animate().
+  // The resulting throw aborts the whole flush — including the $effect that
+  // guards the active tab — so it has to be stubbed, not merely tolerated.
   beforeAll(() => {
     vi.stubGlobal('__APP_VERSION__', '0.0.0-test');
     vi.stubGlobal(
@@ -213,14 +219,28 @@ describe('page zones (runtime)', () => {
       },
     );
     Element.prototype.scrollIntoView = vi.fn();
+    // Switching tabs returns the page to the top; jsdom has no scrollTo.
+    vi.stubGlobal('scrollTo', vi.fn());
+    Element.prototype.animate = vi.fn(() => ({
+      cancel() {},
+      finished: Promise.resolve(),
+      currentTime: 0,
+      playState: 'finished',
+      startTime: 0,
+      effect: null,
+      addEventListener() {},
+      removeEventListener() {},
+    })) as never;
   });
 
-  /** A state deep enough that all three zones exist. */
+  /** A state deep enough that every tab exists. */
   function full(level = 8) {
     cleanup();
+    nav.select('settlement'); // the tab store is a module singleton — reset it
     const gs = game.state;
     gs.level = level;
     gs.workers.trained = 4;
+    gs.prestige.level = 0; // keeps the Prestige tab's label off the level suffix
     gs.market.sold = { wood: false, stone: false, arrow: false, spear: false };
     gs.market.rateUnlocks = { wood: false, stone: false, food: false };
     gs.market.contracts = { i: false, ii: false, iii: false };
@@ -229,114 +249,169 @@ describe('page zones (runtime)', () => {
     for (const id of SELLABLE_RESOURCES) gs.resources[id].amount = D(0);
   }
 
-  /** Scoped to the zone bar — the rail has same-named buttons. */
-  const zoneBtn = (name: RegExp) =>
-    within(screen.getByRole('navigation', { name: 'Page sections' })).getByRole('button', {
-      name,
-    }) as HTMLButtonElement;
+  const tabBar = () => screen.getByRole('tablist', { name: 'Page sections' });
+  /** Scoped to the tab bar — the rail has same-named buttons. */
+  const tabBtn = (name: RegExp) => within(tabBar()).getByRole('tab', { name }) as HTMLButtonElement;
 
-  it('renders every zone at once, so the whole page is scrollable', () => {
+  it('lists the tabs in progression order, each named for what it holds', () => {
     full();
     render(App);
 
-    // All three zones are in the DOM simultaneously — nothing is switched out.
-    expect(document.querySelector('[data-zone="settlement"]')).toBeTruthy();
-    expect(document.querySelector('[data-zone="quests"]')).toBeTruthy();
-    expect(document.querySelector('[data-zone="market"]')).toBeTruthy();
+    const labels = within(tabBar())
+      .getAllByRole('tab')
+      .map((t) => t.textContent?.replace(/\s+/g, ' ').trim());
 
-    // ...including each zone's actual content.
+    expect(labels).toEqual([
+      'Settlement',
+      'Crafting',
+      'Mysticism Mystic',
+      'Quests',
+      'Market',
+      'Prestige',
+    ]);
+  });
+
+  it('mounts only the selected tab, and swaps content when another is picked', async () => {
+    full();
+    render(App);
+
+    // Settlement opens: the settlement, its threats, and what the land yields.
     expect(document.querySelector('[data-nav="settlement"]')).toBeTruthy();
-    expect(document.querySelector('[data-nav="group:castle"]')).toBeTruthy();
-    expect(document.querySelector('[data-nav="market"]')).toBeTruthy();
+    expect(document.querySelector('[data-nav="combat:assault"]')).toBeTruthy();
+    expect(document.querySelector('[data-nav="group:core"]')).toBeTruthy();
+    expect(document.querySelector('[data-nav="group:deepmine"]')).toBeTruthy();
+    // ...and nothing from any other tab.
+    expect(document.querySelector('[data-nav="group:blacksmith"]')).toBeNull();
+    expect(document.querySelector('[data-nav="market"]')).toBeNull();
+
+    await fireEvent.click(tabBtn(/^Crafting/));
+
+    // Now the Crafting cards are mounted and the Settlement panels are gone.
+    expect(document.querySelector('[data-nav="group:blacksmith"]')).toBeTruthy();
+    expect(document.querySelector('[data-nav="settlement"]')).toBeNull();
+    expect(document.querySelector('[data-nav="combat:assault"]')).toBeNull();
+    expect(document.querySelector('[data-nav="group:core"]')).toBeNull();
   });
 
-  it('scrolls to a zone rather than switching to it', async () => {
+  it('groups the workshops under Crafting and leaves the Quest Hall alone on Quests', async () => {
     full();
     render(App);
 
-    const market = document.querySelector('[data-zone="market"]')!;
-    const spy = vi.spyOn(market, 'scrollIntoView');
+    // All three workshops share one tab.
+    await fireEvent.click(tabBtn(/^Crafting/));
+    for (const key of ['group:hunterscabin', 'group:blacksmith', 'group:barracks']) {
+      expect(document.querySelector(`[data-nav="${key}"]`), `${key} not on Crafting`).toBeTruthy();
+    }
 
-    await fireEvent.click(zoneBtn(/^Market/));
+    // Quests holds the Quest Hall and nothing else — the Cloud Shaman moved to
+    // Mysticism, alongside the Wizard Tower.
+    await fireEvent.click(tabBtn(/^Quests/));
+    expect(document.querySelector('[data-nav="group:castle"]')).toBeTruthy();
+    expect(document.querySelector('[data-nav="group:cloudshaman"]')).toBeNull();
+    expect(screen.getByText('Quest Hall')).toBeTruthy();
 
-    expect(spy).toHaveBeenCalled();
-    // The settlement zone is still mounted — nothing was swapped away.
-    expect(document.querySelector('[data-zone="settlement"]')).toBeTruthy();
+    await fireEvent.click(tabBtn(/^Mystic/));
+    expect(document.querySelector('[data-nav="group:wizardtower"]')).toBeTruthy();
+    expect(document.querySelector('[data-nav="group:cloudshaman"]')).toBeTruthy();
   });
 
-  it('names the first zone after the settlement itself', () => {
-    full(6);
+  it('shows only the active tab’s sections in the jump rail', async () => {
+    full();
     render(App);
 
-    const first = screen.getByRole('navigation', { name: 'Page sections' })
-      .firstElementChild as HTMLElement;
-    expect(first.textContent).toContain('Lvl 6');
-    expect(first.textContent).toContain(getTier(6)?.name);
+    const railLabels = () =>
+      within(screen.getByRole('navigation', { name: 'Jump to section' }))
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label'));
+
+    // Settlement tab, in page order: the settlement, both threat tracks, then
+    // the two gathering cards.
+    expect(railLabels()).toEqual(['Settlement', 'Assault', 'Hex', 'Core Resources', 'Deep Mine']);
+
+    await fireEvent.click(tabBtn(/^Crafting/));
+    expect(railLabels()).toEqual(["Hunter's Cabin", 'Blacksmith', 'Barracks']);
   });
 
-  it('flags the Market zone with a dot, never a number', () => {
+  it('flags a tab with a dot, never a number', async () => {
     full();
     game.state.resources.wood.amount = D(50); // one sellable
     game.state.resources.coin.amount = D(1); // one affordable (the food supply)
+    game.state.workers.assigned.magicorb = 3; // a worker tally that must not show
     render(App);
 
-    const market = zoneBtn(/^Market/);
+    const market = tabBtn(/^Market/);
     // A bare count beside "Market" reads as a coin balance, so there is none.
     expect(market.textContent).not.toMatch(/\d/);
     expect(within(market).getByLabelText('Something is waiting here')).toBeTruthy();
+    expect(tabBtn(/^Quests/).textContent).not.toMatch(/\d/);
 
     // The counts still live inside, on the Sell/Buy sub-tabs, where they mean
     // something specific.
+    await fireEvent.click(market);
     expect(screen.getByRole('tab', { name: /^Sell/ }).textContent).toContain('1');
     expect(screen.getByRole('tab', { name: /^Buy/ }).textContent).toContain('1');
   });
 
-  it('shows no worker tally on the Quests zone', () => {
-    full();
-    game.state.workers.assigned.magicorb = 3;
+  it('hides a tab until its content unlocks', () => {
+    full(1); // Market unlocked; the Quest Hall (level 4) not yet
     render(App);
 
-    expect(zoneBtn(/^Quests/).textContent).not.toMatch(/\d/);
+    const names = within(tabBar())
+      .getAllByRole('tab')
+      .map((t) => t.textContent);
+    expect(names.some((n) => /Quests/.test(n ?? ''))).toBe(false);
+    expect(names.some((n) => /Crafting/.test(n ?? ''))).toBe(false);
+    expect(names.some((n) => /Market/.test(n ?? ''))).toBe(true);
   });
 
-  it('keeps the jump rail on screen and lists every zone in it', () => {
+  it('falls back to Settlement when the active tab stops existing', async () => {
     full();
     render(App);
 
-    expect(screen.getByRole('navigation', { name: 'Jump to section' })).toBeTruthy();
+    await fireEvent.click(tabBtn(/^Crafting/));
+    expect(document.querySelector('[data-nav="group:blacksmith"]')).toBeTruthy();
 
+    // A prestige drops the settlement to level 0, closing every structure tab.
+    game.state.level = 0;
+    await tick();
+
+    expect(nav.tab).toBe('settlement');
+    expect(document.querySelector('[data-nav="settlement"]')).toBeTruthy();
+  });
+
+  it('tags every section with the tab that shows it', () => {
     const s = createInitialState(0);
     s.level = 8;
     s.workers.trained = 1;
-    const ids = getNavSections(s).map((sec) => sec.id);
-    expect(ids).toContain('group:core'); // settlement zone
-    expect(ids).toContain('group:castle'); // quests zone
-    expect(ids).toContain('group:cloudshaman'); // quests zone — Cloud Shaman moved here
-    expect(ids).toContain('market'); // market zone
+    const tabOf = (id: string) => getNavSections(s).find((sec) => sec.id === id)?.tab;
+    expect(tabOf('group:core')).toBe('settlement');
+    expect(tabOf('group:deepmine')).toBe('settlement');
+    expect(tabOf('group:hunterscabin')).toBe('crafting');
+    expect(tabOf('group:blacksmith')).toBe('crafting');
+    expect(tabOf('group:barracks')).toBe('crafting');
+    expect(tabOf('group:castle')).toBe('quests');
+    expect(tabOf('group:cloudshaman')).toBe('mysticism');
+    expect(tabOf('group:wizardtower')).toBe('mysticism');
+    expect(tabOf('settlement')).toBe('settlement');
+    expect(tabOf('market')).toBe('market');
   });
 
-  it('puts the Castle and Cloud Shaman in the Quests zone, not the Settlement one', () => {
-    const s = createInitialState(0);
-    s.level = 8;
-    s.workers.trained = 1;
-    const zoneOf = (id: string) => getNavSections(s).find((sec) => sec.id === id)?.zone;
-    expect(zoneOf('group:castle')).toBe('quests');
-    expect(zoneOf('group:cloudshaman')).toBe('quests');
-    expect(zoneOf('group:core')).toBe('settlement');
-    expect(zoneOf('market')).toBe('market');
-  });
-
-  it('hides a zone, and its bar entry, until it has content', () => {
-    full(1); // Market unlocked; Quest Lands (level 4) not yet
+  it('follows a recipe link onto the tab that produces the ingredient', async () => {
+    full();
     render(App);
 
-    expect(document.querySelector('[data-zone="quests"]')).toBeNull();
-    expect(
-      within(screen.getByRole('navigation', { name: 'Page sections' })).queryByRole('button', {
-        name: /^Quests/,
-      }),
-    ).toBeNull();
-    expect(document.querySelector('[data-zone="market"]')).toBeTruthy();
+    // The Blacksmith is built from wood and stone, both gathered back on the
+    // Settlement tab — so its cost links point off the Crafting tab.
+    await fireEvent.click(tabBtn(/^Crafting/));
+    const card = document.querySelector('[data-nav="group:blacksmith"]') as HTMLElement;
+    expect(card).toBeTruthy();
+    expect(document.querySelector('[data-res="stone"]')).toBeNull();
+
+    await fireEvent.click(within(card).getByRole('button', { name: /stone/ }));
+    await tick();
+
+    expect(nav.tab).toBe('settlement');
+    expect(document.querySelector('[data-res="stone"]')).toBeTruthy();
   });
 });
 

@@ -1,52 +1,74 @@
 <script lang="ts">
   /**
-   * The app's top-level zone bar: the settlement itself, Quests, the Market, and
-   * Prestige.
+   * The app's content tab bar: the settlement, each major structure, the
+   * Market and Prestige.
    *
-   * These look like tabs but navigate rather than switch — the page is one
-   * continuous scroll holding all three zones, and pressing one scrolls to it.
-   * The active one follows the scroll position. That's why the markup is a
-   * `nav` with `aria-current` rather than a `tablist`: nothing swaps panels, and
-   * claiming `role="tab"` would promise screen readers a panel switch that
-   * never happens.
+   * These really are tabs — only the selected one's panels are mounted — so the
+   * markup is a proper `tablist` with `aria-selected`, and the arrow keys walk
+   * it. Each tab can show an alert dot when something is waiting behind it,
+   * carrying the left rail's severity language (gold = an affordable upgrade,
+   * amber = an under-supplied threat track). With the content hidden that dot
+   * is the only signal a tab has something to do.
    *
-   * Purely presentational — App owns which zones exist and what they carry, so a
-   * zone appears here only once its content does. Each can show an alert dot
-   * when something is waiting there, matching the left rail's existing language.
-   * Deliberately no numbers: a count beside "Market" reads as a coin balance,
-   * and beside "Quests" as something other than the worker tally it was.
+   * Purely presentational — App owns which tabs exist and what they carry, so a
+   * tab appears here only once its content does. Deliberately no numbers: a
+   * count beside "Market" reads as a coin balance.
    */
-  import type { Component } from 'svelte';
-
-  export type MainTab = 'settlement' | 'quests' | 'market' | 'prestige';
-
-  export interface TabDef {
-    id: MainTab;
-    label: string;
-    /** Used below 560px, where the full settlement title is too long. */
-    shortLabel?: string;
-    icon: Component;
-    /** Gold dot — something is waiting in this zone. */
-    alert?: boolean;
-  }
+  import type { TabDef, TabId } from './sections';
 
   interface Props {
     tabs: TabDef[];
-    /** The zone currently under the header line, from the page's scroll-spy. */
-    active: MainTab;
-    onselect: (tab: MainTab) => void;
+    active: TabId;
+    onselect: (tab: TabId) => void;
   }
 
   const { tabs, active, onselect }: Props = $props();
+
+  let bar = $state<HTMLElement | null>(null);
+
+  // The bar scrolls sideways on narrow screens, so the selected tab has to be
+  // pulled into view — it can otherwise sit off the edge after a tab unlocks or
+  // after arrow-key navigation.
+  $effect(() => {
+    const el = bar?.querySelector<HTMLElement>(`#maintab-${active}`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  });
+
+  /** Left/right (and Home/End) move between tabs, as a tablist should. */
+  function onkeydown(e: KeyboardEvent) {
+    const delta = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    let next = -1;
+    if (delta !== 0) {
+      const i = tabs.findIndex((t) => t.id === active);
+      next = (i + delta + tabs.length) % tabs.length;
+    } else if (e.key === 'Home') {
+      next = 0;
+    } else if (e.key === 'End') {
+      next = tabs.length - 1;
+    }
+    if (next < 0) return;
+    e.preventDefault();
+    onselect(tabs[next].id);
+    bar?.querySelector<HTMLElement>(`#maintab-${tabs[next].id}`)?.focus();
+  }
 </script>
 
-<nav class="main-tabs" aria-label="Page sections">
+<div
+  class="main-tabs"
+  role="tablist"
+  aria-label="Page sections"
+  bind:this={bar}
+  {onkeydown}
+  tabindex="-1"
+>
   {#each tabs as t (t.id)}
     {@const Icon = t.icon}
     <button
       type="button"
+      role="tab"
       id="maintab-{t.id}"
-      aria-current={active === t.id ? 'true' : undefined}
+      aria-selected={active === t.id}
+      tabindex={active === t.id ? 0 : -1}
       class:active={active === t.id}
       onclick={() => onselect(t.id)}
     >
@@ -56,26 +78,46 @@
         {#if t.shortLabel}<span class="short">{t.shortLabel}</span>{/if}
       </span>
       {#if t.alert}
-        <span class="dot" aria-label="Something is waiting here"></span>
+        <span
+          class="dot"
+          class:warn={t.alert === 'warn'}
+          class:bad={t.alert === 'bad'}
+          aria-label="Something is waiting here"
+        ></span>
       {/if}
     </button>
   {/each}
-</nav>
+</div>
 
 <style>
   /* Stickiness lives on App's .tabbar wrapper, which owns the measurement that
-     feeds --scroll-offset. This is just the bar itself. */
+     feeds --scroll-offset. This is just the bar itself.
+
+     One row, always: with nine tabs, wrapping would eat several lines of the
+     viewport on a phone, so the bar scrolls sideways instead. */
   .main-tabs {
     display: flex;
     gap: var(--space-3);
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
     padding: var(--space-2) var(--space-1) 0;
     border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  }
+  .main-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .main-tabs:focus {
+    outline: none;
   }
   .main-tabs button {
     display: inline-flex;
     align-items: center;
     gap: 7px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    scroll-margin-inline: var(--space-4);
     padding: 7px 2px 8px;
     margin-bottom: -1px;
     background: none;
@@ -101,19 +143,25 @@
     outline-offset: 2px;
   }
 
-  /* The settlement tab's title grows with the tier ("Lvl 6 Small Town"), so the
-     short form takes over on narrow screens to keep all three tabs on one line. */
+  /* Long structure names swap to a short form on narrow screens, so more of the
+     bar fits before it has to be scrolled. */
   .short {
     display: none;
   }
 
-  /* Affordable-upgrade dot, same gold as the left rail's. */
+  /* Affordable-upgrade dot, same language as the left rail's. */
   .dot {
     width: 7px;
     height: 7px;
     border-radius: 999px;
     background: var(--gold);
     flex-shrink: 0;
+  }
+  .dot.warn {
+    background: var(--warn);
+  }
+  .dot.bad {
+    background: var(--bad);
   }
 
   @media (max-width: 560px) {
