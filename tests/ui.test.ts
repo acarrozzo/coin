@@ -4,6 +4,7 @@ import { render, screen, fireEvent, cleanup, within } from '@testing-library/sve
 import ResourcePanel from '../src/ui/ResourcePanel.svelte';
 import SettlementPanel from '../src/ui/SettlementPanel.svelte';
 import MarketPanel from '../src/ui/MarketPanel.svelte';
+import PrestigePanel from '../src/ui/PrestigePanel.svelte';
 import App from '../src/App.svelte';
 import { game } from '../src/ui/gameStore.svelte';
 import { notify } from '../src/ui/notify.svelte';
@@ -14,6 +15,7 @@ import { getNavSections, FULL_MARKET_LEVEL } from '../src/ui/sections';
 import { ASSAULT, HEX } from '../src/content/combat';
 import { getTier } from '../src/content/settlement';
 import { SELLABLE_RESOURCES } from '../src/content/market';
+import { PRESTIGE_TIERS, PRESTIGE_UNLOCK_LEVEL, MAX_PRESTIGE } from '../src/content/prestige';
 
 // Runtime check: proves Svelte 5 runes reactivity + the store wiring + event
 // handlers all work together in a real DOM — not just that the engine is correct.
@@ -399,5 +401,140 @@ describe('threat supply alerts', () => {
     const ids = getNavSections(s).map((sec) => sec.id);
     expect(ids).toContain('combat:assault');
     expect(ids).not.toContain('combat:hex');
+  });
+});
+
+// Prestige is the only screen that destroys progress, so the runtime checks
+// here are about the guardrails: the confirm step, and the fact that pressing
+// through it really does reset the live store the whole UI is projected from.
+describe('PrestigePanel (runtime)', () => {
+  /** Level 6 with the first tier's threshold held, on a store cleaned of leftovers. */
+  function armed(): void {
+    cleanup();
+    const gs = game.state;
+    gs.prestige.level = 0;
+    gs.level = PRESTIGE_UNLOCK_LEVEL;
+    gs.workers.trained = 4;
+    gs.workers.bonus = 0;
+    gs.buildings.farm.level = 3;
+    gs.resources.wood.amount = D(500);
+    gs.resources.honor.amount = D(1);
+    gs.resources.starmetal.amount = D(0);
+  }
+
+  it('shows the tier, its held-not-spent threshold, and the keep/lose ledger', () => {
+    armed();
+    render(PrestigePanel);
+
+    expect(screen.getByText(PRESTIGE_TIERS[0].name)).toBeTruthy();
+    expect(screen.getByText('You keep')).toBeTruthy();
+    expect(screen.getByText('You lose')).toBeTruthy();
+    expect(screen.getByText(/Held, not spent/)).toBeTruthy();
+  });
+
+  it('stays disabled without the threshold', () => {
+    armed();
+    game.state.resources.honor.amount = D(0);
+    render(PrestigePanel);
+
+    expect(screen.getByRole('button', { name: 'Prestige' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('arms a confirm step before it will reset anything', async () => {
+    armed();
+    render(PrestigePanel);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Prestige' }));
+
+    // First press only arms it — nothing has been given up yet.
+    expect(game.state.prestige.level).toBe(0);
+    expect(game.state.level).toBe(PRESTIGE_UNLOCK_LEVEL);
+    expect(await screen.findByRole('button', { name: /Confirm/ })).toBeTruthy();
+  });
+
+  it('resets the live store on confirm, keeping honor and the new workers', async () => {
+    armed();
+    render(PrestigePanel);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Prestige' }));
+    await fireEvent.click(await screen.findByRole('button', { name: /Confirm/ }));
+
+    const gs = game.state;
+    expect(gs.prestige.level).toBe(1);
+    expect(gs.level).toBe(0);
+    expect(gs.buildings.farm.level).toBe(0);
+    expect(gs.resources.wood.amount.toNumber()).toBe(0);
+    expect(gs.workers.bonus).toBe(PRESTIGE_TIERS[0].workers);
+    expect(gs.resources.honor.amount.toNumber()).toBe(1);
+
+    // The zone must survive its own reset — level is 0 now, but it stays open.
+    expect(getNavSections(gs).map((s) => s.id)).toContain('prestige');
+  });
+});
+
+// The Prestige card's two sub-tabs, and the prestige level the UI wears once
+// one has been claimed.
+describe('PrestigePanel — sub-tabs and prestige level', () => {
+  function armed(count = 0): void {
+    cleanup();
+    const gs = game.state;
+    gs.prestige.level = count;
+    gs.level = PRESTIGE_UNLOCK_LEVEL;
+    gs.workers.trained = 4;
+    gs.workers.bonus = 0;
+    gs.resources.honor.amount = D(1);
+    gs.resources.starmetal.amount = D(0);
+  }
+
+  const openTab = (name: 'Next' | 'Taken') =>
+    fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${name}`) }));
+
+  it('opens on Next, and Taken is empty before the first prestige', async () => {
+    armed();
+    render(PrestigePanel);
+
+    expect(screen.getByRole('tab', { name: /^Next/ }).getAttribute('aria-selected')).toBe('true');
+    await openTab('Taken');
+    expect(screen.getByText(/No legacies yet/)).toBeTruthy();
+  });
+
+  it('shows no level in the heading until one is earned', () => {
+    armed();
+    render(PrestigePanel);
+    expect(screen.queryByTitle('Prestige level')).toBeNull();
+  });
+
+  it('lands on Taken after prestiging and lists the claimed legacy', async () => {
+    armed();
+    render(PrestigePanel);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Prestige' }));
+    await fireEvent.click(await screen.findByRole('button', { name: /Confirm/ }));
+
+    // The tab switches itself to the ledger of what was just claimed.
+    expect(screen.getByRole('tab', { name: /^Taken/ }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText(PRESTIGE_TIERS[0].name)).toBeTruthy();
+    expect(screen.getByText(`${PRESTIGE_TIERS[0].workers} to start`)).toBeTruthy();
+    // ...and the heading now wears the prestige level.
+    expect(screen.getByTitle('Prestige level').textContent).toContain('Lvl 1');
+  });
+
+  it('falls back to Taken once every legacy is claimed', () => {
+    armed(MAX_PRESTIGE);
+    render(PrestigePanel);
+
+    // Nothing left on Next, so the card opens on the ledger instead.
+    expect(screen.getByRole('tab', { name: /^Taken/ }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getAllByText(/to start$/).length).toBe(MAX_PRESTIGE);
+  });
+
+  it('puts the prestige level on the zone label once earned', () => {
+    armed(0);
+    const before = getNavSections(game.state).find((s) => s.id === 'prestige');
+    expect(before?.label).toBe('Prestige');
+
+    game.state.prestige.level = 2;
+    const after = getNavSections(game.state).find((s) => s.id === 'prestige');
+    expect(after?.label).toBe('Prestige Lvl 2');
   });
 });

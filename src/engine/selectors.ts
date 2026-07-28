@@ -19,6 +19,7 @@ import {
   type RateUnlockResource,
   type WorkerContractId,
 } from '../content/market';
+import { PRESTIGE_UNLOCK_LEVEL, getPrestigeTier, type PrestigeTier } from '../content/prestige';
 
 /** Stat resources whose cap comes from a building level, not a settlement tier. */
 const BUILDING_CAP_SOURCES: Partial<
@@ -432,4 +433,31 @@ export function countMarketOpportunities(state: GameState): number {
  */
 export function hasMarketOpportunity(state: GameState): boolean {
   return countMarketOpportunities(state) > 0;
+}
+
+// ---------- Prestige ----------
+
+/**
+ * The Prestige zone is visible from the unlock level onward — and stays visible
+ * for anyone who has ever prestiged, since a prestige drops them back to level 0
+ * and the tab must not vanish out from under them.
+ */
+export function isPrestigeUnlocked(state: GameState): boolean {
+  return state.level >= PRESTIGE_UNLOCK_LEVEL || state.prestige.level > 0;
+}
+
+/** The tier a prestige would grant next, or null once they're all taken. */
+export function getNextPrestigeTier(state: GameState): PrestigeTier | null {
+  return getPrestigeTier(state.prestige.level + 1) ?? null;
+}
+
+/**
+ * Whether the player can prestige right now: a tier is left, they're at the
+ * unlock level, and they *hold* its thresholds. Nothing is deducted — the
+ * requirement is standing, like a settlement tier's `requires`.
+ */
+export function canPrestige(state: GameState): boolean {
+  if (state.level < PRESTIGE_UNLOCK_LEVEL) return false;
+  const next = getNextPrestigeTier(state);
+  return next !== null && meetsRequirements(state, next.requires);
 }

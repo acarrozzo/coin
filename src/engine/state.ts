@@ -6,7 +6,7 @@ import { ASSAULT, HEX } from '../content/combat';
 export type { ResourceId, BuildingId };
 
 /** Bumped whenever the save shape changes; drives migrations (see save.ts). */
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 /** Trained workers the player starts with. */
 export const STARTING_WORKERS = 0;
@@ -52,6 +52,22 @@ export interface GameState {
   };
   /** Market progress — the coin economy (see content/market.ts). */
   market: MarketState;
+  /** Prestige progress (see content/prestige.ts). */
+  prestige: PrestigeState;
+}
+
+/**
+ * Prestige progress. A single number is enough: it indexes PRESTIGE_TIERS, and
+ * everything a prestige grants (the starting bonus workers) is already written
+ * into `workers.bonus` by the reset itself.
+ */
+export interface PrestigeState {
+  /**
+   * The player's prestige level — equivalently, how many prestiges they have
+   * taken. 0 = never prestiged. Shown as "Prestige Lvl 2", the same way the
+   * settlement's `level` fronts a tier name.
+   */
+  level: number;
 }
 
 /**
@@ -115,5 +131,6 @@ export function createInitialState(now: number): GameState {
       contracts: { i: false, ii: false, iii: false },
       foodBought: false,
     },
+    prestige: { level: 0 },
   };
 }

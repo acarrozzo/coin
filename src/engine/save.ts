@@ -4,6 +4,7 @@ import { RESOURCE_IDS, type ResourceId } from '../content/resources';
 import { BUILDING_IDS } from '../content/buildings';
 import { isFractionalResource } from '../content/producers';
 import { SELLABLE_RESOURCES, WORKER_CONTRACT_IDS, MAX_COIN_EARNED } from '../content/market';
+import { MAX_PRESTIGE } from '../content/prestige';
 
 export const STORAGE_KEY = 'cc:save';
 
@@ -133,6 +134,10 @@ const migrations: Record<number, (data: RawSave) => RawSave> = {
 
     return { ...data, version: 9, market: next };
   },
+  // v9 → v10 (Prestige): a `prestige` block was added. Nothing to transform —
+  // an existing player has simply never prestiged, and the missing field falls
+  // back to `{ level: 0 }` in deserialize.
+  9: (data) => ({ ...data, version: 10 }),
 };
 
 function migrate(data: RawSave): RawSave {
@@ -172,6 +177,7 @@ export function serialize(state: GameState): string {
       contracts: state.market.contracts,
       foodBought: state.market.foodBought,
     },
+    prestige: state.prestige,
   });
 }
 
@@ -262,6 +268,13 @@ export function deserialize(raw: string, now: number): GameState {
         state.market.contracts[id] = market.contracts[id];
     }
     if (typeof market.foodBought === 'boolean') state.market.foodBought = market.foodBought;
+  }
+
+  // Clamped to the authored ladder: a save from a build with more tiers than
+  // this one must not leave the level pointing past the end of PRESTIGE_TIERS.
+  const prestige = data.prestige as { level?: unknown } | undefined;
+  if (typeof prestige?.level === 'number') {
+    state.prestige.level = Math.max(0, Math.min(Math.floor(prestige.level), MAX_PRESTIGE));
   }
 
   return state;

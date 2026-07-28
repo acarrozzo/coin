@@ -20,7 +20,11 @@ import {
   getTotalWorkers,
   needsThreatSupply,
   hasMarketOpportunity,
+  isPrestigeUnlocked,
+  canPrestige,
 } from '../engine/selectors';
+
+export { isPrestigeUnlocked, canPrestige } from '../engine/selectors';
 
 // Structure header icons (also used as the rail's section icons).
 import Trees from '@lucide/svelte/icons/trees';
@@ -36,6 +40,7 @@ import UsersGroup from './icons/UsersGroup.svelte';
 import Swords from '@lucide/svelte/icons/swords';
 import Skull from '@lucide/svelte/icons/skull';
 import BuildingStore from './icons/BuildingStore.svelte';
+import Crown from '@lucide/svelte/icons/crown';
 
 // The Market's level gates are content (content/market.ts); re-exported here
 // because the nav rail and the Market panel both reach for them via sections.
@@ -182,8 +187,8 @@ export function hasQuestsOpportunity(gs: GameState): boolean {
   return getQuestGroups(gs).some((g) => g.building !== null && canBuild(gs, g.building));
 }
 
-/** The three top-level zones of the single scrolling page. */
-export type Zone = 'settlement' | 'quests' | 'market';
+/** The top-level zones of the single scrolling page, in page order. */
+export type Zone = 'settlement' | 'quests' | 'market' | 'prestige';
 
 /** A navigable section in the main content, rendered as a left-rail button. */
 export interface NavSection {
@@ -205,11 +210,11 @@ export interface NavSection {
 /**
  * The ordered list of jump-rail sections for the current state, in page order:
  * the Settlement zone (settlement, combat, its resource groups), then the
- * Quests zone, then the Market — each carrying a worker count and an
- * opportunity/danger indicator.
+ * Quests zone, then the Market, then Prestige — each carrying a worker count
+ * and an opportunity/danger indicator.
  *
- * Everything on the page is listed. The tabs jump between the three coarse
- * zones; the rail is the fine-grained table of contents inside them.
+ * Everything on the page is listed. The tabs jump between the coarse zones; the
+ * rail is the fine-grained table of contents inside them.
  */
 export function getNavSections(gs: GameState): NavSection[] {
   const sections: NavSection[] = [];
@@ -269,6 +274,17 @@ export function getNavSections(gs: GameState): NavSection[] {
       count: 0,
       alert: hasMarketOpportunity(gs) ? 'good' : null,
       zone: 'market',
+    });
+  }
+
+  if (isPrestigeUnlocked(gs)) {
+    sections.push({
+      id: 'prestige',
+      label: gs.prestige.level > 0 ? `Prestige Lvl ${gs.prestige.level}` : 'Prestige',
+      icon: Crown,
+      count: 0,
+      alert: canPrestige(gs) ? 'good' : null,
+      zone: 'prestige',
     });
   }
 

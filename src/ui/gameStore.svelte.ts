@@ -30,8 +30,11 @@ import {
 import { SELL_OFFERS } from '../content/market';
 import type { SellableResource, RateUnlockResource, WorkerContractId } from '../content/market';
 import { RESOURCES } from '../content/resources';
+import { getPrestigeTier } from '../content/prestige';
+import { getTotalWorkers } from '../engine/selectors';
 import { buildBuilding } from '../systems/buildings';
 import { upgradeSettlement } from '../systems/settlement';
+import { doPrestige } from '../systems/prestige';
 import type { CombatEvent } from '../systems/combat';
 import { BUILDINGS } from '../content/buildings';
 import { getTier } from '../content/settlement';
@@ -273,6 +276,22 @@ function createGameStore() {
     upgradeSettlement(): void {
       if (upgradeSettlement(state)) {
         notify.push(`Reached ${getTier(state.level)?.name ?? `Level ${state.level}`}!`, 'level');
+        sound.play.level();
+        persist();
+      }
+    },
+    /**
+     * Take a prestige. Unlike `reset()` this needs no reload — it's an ordinary
+     * in-place mutation — but it *is* persisted immediately, so a crash right
+     * after can't hand the player back the settlement they just gave up.
+     */
+    prestige(): void {
+      if (doPrestige(state)) {
+        pops = [];
+        notify.push(
+          `Prestige Lvl ${state.prestige.level} — ${getPrestigeTier(state.prestige.level)?.name ?? 'a new legacy'}. You begin again with ${getTotalWorkers(state)} workers.`,
+          'level',
+        );
         sound.play.level();
         persist();
       }

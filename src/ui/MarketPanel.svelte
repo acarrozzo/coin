@@ -369,9 +369,20 @@
 </section>
 
 <style>
+  /* Framed like the structure cards in ResourcePanel and the Combat panel, so
+     every zone on the page reads as the same kind of object. */
   .market {
+    background: var(--bg-panel);
+    border: var(--panel-border);
+    border-top: 3px solid var(--accent);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
     padding: var(--panel-pad);
     animation: fadeIn var(--fade-in);
+  }
+  /* Settings can drop the colored accent strip; fall back to the plain frame. */
+  :global(:root[data-accent-border='off']) .market {
+    border-top: var(--panel-border);
   }
   .head {
     display: flex;

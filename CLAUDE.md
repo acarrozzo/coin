@@ -65,12 +65,14 @@ src/
 │   ├── buildings.ts     9 buildings, per-level cost/effects (Farm is generated)
 │   ├── settlement.ts    10 tiers (Small Shack → Kingdom): costs, caps, gates
 │   ├── producers.ts     every production line (gathering + crafting unified)
-│   └── combat.ts        the two threat tracks (assault, hex)
+│   ├── combat.ts        the two threat tracks (assault, hex)
+│   └── prestige.ts      the prestige ladder (2 tiers): thresholds + start workers
 ├── systems/     # generic interpreters over content + state
 │   ├── production.ts    runs all producer lines each tick
 │   ├── combat.ts        resolves assaults/hexes
 │   ├── buildings.ts     build/upgrade a building
-│   └── settlement.ts    upgrade to the next tier
+│   ├── settlement.ts    upgrade to the next tier
+│   └── prestige.ts      reset the run, keeping honor/wisdom + starting workers
 ├── ui/          # Svelte 5 components + reactive glue
 │   ├── gameStore.svelte.ts   the runtime: rAF loop, autosave, offline, pops
 │   ├── *.svelte              panels (Resource, Settlement, Camp, Combat, Shop…)
@@ -134,6 +136,17 @@ Tests live in [tests/](tests/): `engine`, `combat`, `ui`, `integration`, `smoke`
   escalates. Fall short → lose `lossAmount` of the stat (core resources looted if
   it hits 0) and the attacker **resets to wave 0**. Defense/ward are capped by
   building level, so waves eventually outgrow your walls until you upgrade.
+- **Prestige is a full run reset.** Available from settlement level 6, and from
+  then on to anyone who has ever prestiged — the zone must not vanish when it
+  drops them back to level 0. Each tier in
+  [prestige.ts](src/content/prestige.ts) names a **standing threshold** you must
+  hold but never spend (`honor: 1`, then `starmetal: 1`) and the **absolute**
+  `workers.bonus` a fresh run begins with (21, then 42) — absolute because the
+  Market's Worker Contracts reset too, and an additive bonus would let them
+  compound every run. Only `honor`, `wisdom`, `prestige.level`, and the lifetime
+  clocks survive. [`doPrestige`](src/systems/prestige.ts) builds a
+  `createInitialState` and copies those survivors back, so **any state added
+  later resets by default** and carrying something through is an explicit opt-in.
 
 ## Saves & migrations
 

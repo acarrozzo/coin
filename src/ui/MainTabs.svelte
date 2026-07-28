@@ -1,6 +1,7 @@
 <script lang="ts">
   /**
-   * The app's top-level zone bar: the settlement itself, Quests, and the Market.
+   * The app's top-level zone bar: the settlement itself, Quests, the Market, and
+   * Prestige.
    *
    * These look like tabs but navigate rather than switch — the page is one
    * continuous scroll holding all three zones, and pressing one scrolls to it.
@@ -17,7 +18,7 @@
    */
   import type { Component } from 'svelte';
 
-  export type MainTab = 'settlement' | 'quests' | 'market';
+  export type MainTab = 'settlement' | 'quests' | 'market' | 'prestige';
 
   export interface TabDef {
     id: MainTab;

@@ -16,6 +16,7 @@
   import ResourcePanel from './ui/ResourcePanel.svelte';
   import SettingsPanel from './ui/SettingsPanel.svelte';
   import MarketPanel from './ui/MarketPanel.svelte';
+  import PrestigePanel from './ui/PrestigePanel.svelte';
   import WelcomeBack from './ui/WelcomeBack.svelte';
   import MainTabs, { type MainTab, type TabDef } from './ui/MainTabs.svelte';
   import Toasts from './ui/Toasts.svelte';
@@ -24,12 +25,15 @@
     isMarketUnlocked,
     isQuestsUnlocked,
     hasQuestsOpportunity,
+    isPrestigeUnlocked,
+    canPrestige,
   } from './ui/sections';
   import { getTier } from './content/settlement';
   import Castle from '@lucide/svelte/icons/castle';
   import House from '@lucide/svelte/icons/house';
   import ScrollText from '@lucide/svelte/icons/scroll-text';
   import BuildingStore from './ui/icons/BuildingStore.svelte';
+  import Crown from '@lucide/svelte/icons/crown';
   import Settings from '@lucide/svelte/icons/settings';
   import User from '@lucide/svelte/icons/user';
   import Check from '@lucide/svelte/icons/check';
@@ -69,6 +73,10 @@
   const showQuests = $derived(isQuestsUnlocked(gs));
   const questsAlert = $derived(hasQuestsOpportunity(gs));
 
+  // Prestige opens at level 6 and, once taken, stays open forever — a prestige
+  // drops you to level 0, so a pure level gate would hide the tab you just used.
+  const showPrestige = $derived(isPrestigeUnlocked(gs));
+
   // The first tab wears the settlement's own title, e.g. "Lvl 6 Small Town".
   const settlementTitle = $derived(getTier(gs.level)?.name ?? 'Settlement');
 
@@ -97,6 +105,17 @@
         label: 'Market',
         icon: BuildingStore,
         alert: hasMarketOpportunity(gs),
+      });
+    }
+    if (showPrestige) {
+      list.push({
+        id: 'prestige',
+        // Wears its level once earned, like the settlement tab — but stays a
+        // bare "Prestige" before the first one, when there's no level to show.
+        label: gs.prestige.level > 0 ? `Prestige Lvl ${gs.prestige.level}` : 'Prestige',
+        shortLabel: 'Prestige',
+        icon: Crown,
+        alert: canPrestige(gs),
       });
     }
     return list;
@@ -433,6 +452,12 @@
       {#if showMarket}
         <div class="zone" data-zone="market">
           <MarketPanel />
+        </div>
+      {/if}
+
+      {#if showPrestige}
+        <div class="zone" data-zone="prestige">
+          <PrestigePanel />
         </div>
       {/if}
 

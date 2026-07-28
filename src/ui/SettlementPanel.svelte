@@ -29,7 +29,9 @@
 <section class="panel" data-nav="settlement">
   <div class="tier">
     <div class="info">
-      <span class="name"><span class="lvl">Lvl {gs.level}</span> {tier?.name ?? `Level ${gs.level}`}</span>
+      <span class="name"
+        ><span class="lvl">Lvl {gs.level}</span> {tier?.name ?? `Level ${gs.level}`}</span
+      >
       <span class="blurb">{tier?.blurb ?? ''}</span>
     </div>
     {#if next}
@@ -40,7 +42,8 @@
           {#each parts.consumed as [rid, amt] (rid)}
             {@const met = gs.resources[rid].amount.gte(amt)}
             <span class="cost-item" class:short={!met} class:met>
-              {formatNumber(amt)} {RESOURCES[rid].name}
+              {formatNumber(amt)}
+              {RESOURCES[rid].name}
             </span>
           {/each}
 
@@ -49,24 +52,23 @@
             {#each parts.required as [rid, amt] (rid)}
               {@const met = gs.resources[rid].amount.gte(amt)}
               <span class="cost-item req-only" class:short={!met} class:met>
-                {formatNumber(amt)} {RESOURCES[rid].name}
+                {formatNumber(amt)}
+                {RESOURCES[rid].name}
               </span>
             {/each}
             {#if next.workersRequired}
               {@const met = gs.workers.trained >= next.workersRequired}
               <span class="cost-item req-only" class:short={!met} class:met>
-                {next.workersRequired} <User
-                  size={13}
-                  color="var(--gold)"
-                  aria-hidden="true"
-                /> trained
+                {next.workersRequired}
+                <User size={13} color="var(--gold)" aria-hidden="true" /> trained
               </span>
             {/if}
             {#if next.requires}
               {#each costEntries(next.requires) as [rid, amt] (rid)}
                 {@const met = gs.resources[rid].amount.gte(amt)}
                 <span class="cost-item req-only" class:short={!met} class:met>
-                  {formatNumber(amt)} {RESOURCES[rid].name}
+                  {formatNumber(amt)}
+                  {RESOURCES[rid].name}
                 </span>
               {/each}
             {/if}
@@ -102,12 +104,23 @@
 </section>
 
 <style>
+  /* Framed like the structure cards in ResourcePanel and the Combat panel, so
+     every zone on the page reads as the same kind of object. */
   .panel {
+    background: var(--bg-panel);
+    border: var(--panel-border);
+    border-top: 3px solid var(--accent);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
     padding: var(--panel-pad);
     animation: fadeIn var(--fade-in);
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+  }
+  /* Settings can drop the colored accent strip; fall back to the plain frame. */
+  :global(:root[data-accent-border='off']) .panel {
+    border-top: var(--panel-border);
   }
   .tier,
   .workers {
