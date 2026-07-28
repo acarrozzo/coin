@@ -44,8 +44,9 @@ import Swords from '@lucide/svelte/icons/swords';
 import Skull from '@lucide/svelte/icons/skull';
 import BuildingStore from './icons/BuildingStore.svelte';
 import Crown from '@lucide/svelte/icons/crown';
-// Tab-bar icon for Mysticism, which holds two structures and so has no glyph
-// of its own (Crafting borrows the Blacksmith's anvil).
+// Tab-bar icons for the tabs holding more than one structure, which therefore
+// have no glyph of their own (Crafting borrows the Blacksmith's anvil).
+import Boxes from '@lucide/svelte/icons/boxes';
 import Sparkles from '@lucide/svelte/icons/sparkles';
 import ScrollText from '@lucide/svelte/icons/scroll-text';
 
@@ -58,7 +59,14 @@ export function isMarketUnlocked(gs: GameState): boolean {
 }
 
 /** The top-level content tabs, in bar order. */
-export type TabId = 'settlement' | 'crafting' | 'mysticism' | 'quests' | 'market' | 'prestige';
+export type TabId =
+  | 'settlement'
+  | 'resources'
+  | 'crafting'
+  | 'mysticism'
+  | 'quests'
+  | 'market'
+  | 'prestige';
 
 // Each group is a structure card: a header (name + level + upgrade), the
 // resources it produces as single rows, and — for Core Resources — the Farm
@@ -82,7 +90,7 @@ export const GROUP_DEFS: GroupDef[] = [
     key: 'core',
     label: 'Core Resources',
     icon: Trees,
-    tab: 'settlement',
+    tab: 'resources',
     building: 'farm',
     structures: ['settlement', 'farm'],
     upgradeInFooter: true,
@@ -91,7 +99,7 @@ export const GROUP_DEFS: GroupDef[] = [
     key: 'deepmine',
     label: 'Deep Mine',
     icon: Pickaxe,
-    tab: 'settlement',
+    tab: 'resources',
     building: 'deepmine',
     structures: ['deepmine'],
   },
@@ -191,6 +199,8 @@ export function getGroupsForTab(gs: GameState, tab: TabId): ResourceGroup[] {
  * tab) once their track is live, exactly as getResourceGroups drops them.
  */
 export function tabForResource(gs: GameState, id: ResourceId): TabId | null {
+  // Defense and Ward leave their structure card for the Combat panel, which
+  // lives on the Settlement tab.
   if (id === 'defense' && isCombatUnlocked(gs)) return 'settlement';
   if (id === 'ward' && isHexUnlocked(gs)) return 'settlement';
   const structure = PRODUCERS[id]?.structure;
@@ -316,6 +326,7 @@ export interface TabDef {
  */
 export const TAB_DEFS: readonly TabDef[] = [
   { id: 'settlement', label: 'Settlement', icon: House },
+  { id: 'resources', label: 'Resources', icon: Boxes },
   { id: 'crafting', label: 'Crafting', icon: Anvil },
   { id: 'mysticism', label: 'Mysticism', shortLabel: 'Mystic', icon: Sparkles },
   { id: 'quests', label: 'Quests', icon: ScrollText },

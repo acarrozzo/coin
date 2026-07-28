@@ -246,10 +246,8 @@
      rendered with or without its ARIA plumbing without duplicating the list. -->
 {#snippet tabContent()}
   {#if activeTab === 'settlement'}
-    <!-- The settlement, its threats, then what the land itself yields. -->
     <SettlementPanel />
     <CombatPanel />
-    <ResourcePanel tab="settlement" />
   {:else if activeTab === 'market'}
     <MarketPanel />
   {:else if activeTab === 'prestige'}
@@ -895,6 +893,16 @@
      the castle icon + level badge, freeing width for the gauges, worker readout
      and gear. Desktop (above 900px) is untouched. */
   @media (max-width: 900px) {
+    /* Mobile drops the jump rail entirely. The tab bar is the navigation here,
+       each tab is short enough to scroll, and reclaiming the 44px gutter (plus
+       the overlay the rule above puts over the left edge) is worth more than
+       section jumps on a phone. Reset the gutter that rule reserved. */
+    .jump-rail {
+      display: none;
+    }
+    .layout {
+      padding-left: var(--space-4);
+    }
     .header-inner {
       flex-wrap: nowrap;
       padding: var(--space-2) var(--space-3);

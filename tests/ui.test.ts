@@ -23,7 +23,7 @@ import { PRESTIGE_TIERS, PRESTIGE_UNLOCK_LEVEL, MAX_PRESTIGE } from '../src/cont
 describe('ResourcePanel (runtime)', () => {
   it('renders the unlocked resource and assigns a worker on click', async () => {
     game.state.workers.trained = 1; // Core Resources hidden until first worker trained
-    render(ResourcePanel, { props: { tab: 'settlement' } });
+    render(ResourcePanel, { props: { tab: 'resources' } });
 
     // Wood + stone gather from the start; food needs a Farm, so it's hidden.
     expect(screen.getByText('Wood')).toBeTruthy();
@@ -263,6 +263,7 @@ describe('content tabs (runtime)', () => {
 
     expect(labels).toEqual([
       'Settlement',
+      'Resources',
       'Crafting',
       'Mysticism Mystic',
       'Quests',
@@ -275,22 +276,21 @@ describe('content tabs (runtime)', () => {
     full();
     render(App);
 
-    // Settlement opens: the settlement, its threats, and what the land yields.
+    // Settlement opens: the settlement itself and its two threat tracks.
     expect(document.querySelector('[data-nav="settlement"]')).toBeTruthy();
     expect(document.querySelector('[data-nav="combat:assault"]')).toBeTruthy();
-    expect(document.querySelector('[data-nav="group:core"]')).toBeTruthy();
-    expect(document.querySelector('[data-nav="group:deepmine"]')).toBeTruthy();
     // ...and nothing from any other tab.
+    expect(document.querySelector('[data-nav="group:core"]')).toBeNull();
     expect(document.querySelector('[data-nav="group:blacksmith"]')).toBeNull();
     expect(document.querySelector('[data-nav="market"]')).toBeNull();
 
-    await fireEvent.click(tabBtn(/^Crafting/));
+    await fireEvent.click(tabBtn(/^Resources/));
 
-    // Now the Crafting cards are mounted and the Settlement panels are gone.
-    expect(document.querySelector('[data-nav="group:blacksmith"]')).toBeTruthy();
+    // Now the gathering cards are mounted and the Settlement panels are gone.
+    expect(document.querySelector('[data-nav="group:core"]')).toBeTruthy();
+    expect(document.querySelector('[data-nav="group:deepmine"]')).toBeTruthy();
     expect(document.querySelector('[data-nav="settlement"]')).toBeNull();
     expect(document.querySelector('[data-nav="combat:assault"]')).toBeNull();
-    expect(document.querySelector('[data-nav="group:core"]')).toBeNull();
   });
 
   it('groups the workshops under Crafting and leaves the Quest Hall alone on Quests', async () => {
@@ -324,9 +324,11 @@ describe('content tabs (runtime)', () => {
         .getAllByRole('button')
         .map((b) => b.getAttribute('aria-label'));
 
-    // Settlement tab, in page order: the settlement, both threat tracks, then
-    // the two gathering cards.
-    expect(railLabels()).toEqual(['Settlement', 'Assault', 'Hex', 'Core Resources', 'Deep Mine']);
+    // Settlement tab: the settlement itself plus both threat tracks.
+    expect(railLabels()).toEqual(['Settlement', 'Assault', 'Hex']);
+
+    await fireEvent.click(tabBtn(/^Resources/));
+    expect(railLabels()).toEqual(['Core Resources', 'Deep Mine']);
 
     await fireEvent.click(tabBtn(/^Crafting/));
     expect(railLabels()).toEqual(["Hunter's Cabin", 'Blacksmith', 'Barracks']);
@@ -384,8 +386,8 @@ describe('content tabs (runtime)', () => {
     s.level = 8;
     s.workers.trained = 1;
     const tabOf = (id: string) => getNavSections(s).find((sec) => sec.id === id)?.tab;
-    expect(tabOf('group:core')).toBe('settlement');
-    expect(tabOf('group:deepmine')).toBe('settlement');
+    expect(tabOf('group:core')).toBe('resources');
+    expect(tabOf('group:deepmine')).toBe('resources');
     expect(tabOf('group:hunterscabin')).toBe('crafting');
     expect(tabOf('group:blacksmith')).toBe('crafting');
     expect(tabOf('group:barracks')).toBe('crafting');
@@ -400,8 +402,8 @@ describe('content tabs (runtime)', () => {
     full();
     render(App);
 
-    // The Blacksmith is built from wood and stone, both gathered back on the
-    // Settlement tab — so its cost links point off the Crafting tab.
+    // The Blacksmith is built from wood and stone, both gathered over on
+    // Resources — so its cost links point off the Crafting tab.
     await fireEvent.click(tabBtn(/^Crafting/));
     const card = document.querySelector('[data-nav="group:blacksmith"]') as HTMLElement;
     expect(card).toBeTruthy();
@@ -410,7 +412,7 @@ describe('content tabs (runtime)', () => {
     await fireEvent.click(within(card).getByRole('button', { name: /stone/ }));
     await tick();
 
-    expect(nav.tab).toBe('settlement');
+    expect(nav.tab).toBe('resources');
     expect(document.querySelector('[data-res="stone"]')).toBeTruthy();
   });
 });
