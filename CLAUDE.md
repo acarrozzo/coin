@@ -129,12 +129,16 @@ Tests live in [tests/](tests/): `engine`, `combat`, `ui`, `integration`, `smoke`
 - **Caps.** wood/stone/food caps come from the current settlement tier;
   defense/ward/coin caps come from the Castle / Wizard Tower / Bank level
   (`getCapacity`). Uncapped resources return `null`.
-- **Cost vs requirement.** A cost entry is *spent* only if its resource is a
-  consumable category (currently just `base`: wood/stone/food + the few
-  consumable quest items). Everything else in a cost (metals, units, etc.) is a
-  **standing requirement** — you must hold it, but it isn't deducted. See
-  `splitCost` / `isConsumableResource`. Settlement tiers also have a separate
-  `requires` block (e.g. `defense ≥ 5`) that is checked but never consumed.
+- **Cost vs requirement.** A cost entry is *spent* only if its resource is in a
+  consumable category — and `CONSUMABLE_CATEGORIES` is currently **just `base`**
+  (wood/stone/food). Everything else in a cost (metals, weapons, units, quest
+  items) is a **standing requirement** — you must hold it, but it isn't deducted.
+  So tuning a non-base cost moves a *threshold*, not a price. See `splitCost` /
+  `isConsumableResource`. Settlement tiers also have a separate `requires` block
+  (e.g. `defense ≥ 5`) that is checked but never consumed.
+  Producer **`inputs` are a different thing and are always consumed**, whatever
+  the category — that's how the unit-eating lines (`defense` eats archers,
+  `ward` eats mages + troll skulls) work.
 - **Progression spine** is the settlement `level` (1–10). It gates which
   buildings are available, which building levels can be built (`requiresLevel`),
   which producers unlock (`minLevel`), and when combat begins.

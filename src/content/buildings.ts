@@ -93,7 +93,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
       { cost: { wood: 100, stone: 50 }, summary: 'Unlocks spear crafting.' },
       { cost: { wood: 200, arrow: 50 }, summary: 'Unlocks leather.', requiresLevel: 4 },
       { cost: { wood: 400, spear: 100 }, summary: 'Unlocks fur.', requiresLevel: 5 },
-      { cost: { wood: 800, sword: 10 }, summary: 'Unlocks troll skulls.', requiresLevel: 6 },
+      { cost: { wood: 800, sword: 1 }, summary: 'Unlocks troll skulls.', requiresLevel: 6 },
       { cost: { wood: 800, ether: 10 }, summary: 'Unlocks dragon bones.', requiresLevel: 7 },
       { cost: { wood: 3200, soulgem: 10 }, summary: 'More hunters (+1 worker per line).', requiresLevel: 8 },
     ],
@@ -127,8 +127,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     blurb: 'Weaves protective wards and draws ether.',
     availableAtLevel: 6,
     levels: [
-      { cost: { wood: 1000, mage: 1 }, summary: 'Unlocks wards. Ward cap 5.', sets: { wardMax: 5 } },
-      { cost: { wood: 1000, magicorb: 10 }, summary: 'Unlocks ether. Ward cap 10.', requiresLevel: 6, sets: { wardMax: 10 } },
+      { cost: { wood: 1000, trollskull: 10 }, summary: 'Unlocks wards. Ward cap 5.', sets: { wardMax: 5 } },
+      { cost: { wood: 1000, magicorb: 1 }, summary: 'Unlocks ether. Ward cap 10.', requiresLevel: 6, sets: { wardMax: 10 } },
     ],
   },
   castle: {
