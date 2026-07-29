@@ -42,6 +42,8 @@ import {
   countBuyOpportunities,
   isNextBuildingLevelHidden,
   isNextBuildingLevelBeyondStorage,
+  isBuildingNew,
+  isResourceNew,
 } from '../src/engine/selectors';
 import {
   MAX_COIN_EARNED,
@@ -209,6 +211,65 @@ describe('workers', () => {
     // Worker 4: floor(9/2) = 4 food
     expect(getWorkerCost(s).toNumber()).toBe(4);
     expect(canTrainWorker(s)).toBe(false);
+  });
+});
+
+describe('NEW badges', () => {
+  it('marks an available building until it is built', () => {
+    const s = createInitialState(0);
+    // Not available at level 0, so nothing to flag yet.
+    expect(isBuildingNew(s, 'deepmine')).toBe(false);
+
+    s.level = 5; // Deep Mine becomes available
+    expect(isBuildingNew(s, 'deepmine')).toBe(true);
+
+    s.resources.wood.amount = D(1000);
+    s.resources.stone.amount = D(1000);
+    expect(buildBuilding(s, 'deepmine')).toBe(true);
+    expect(isBuildingNew(s, 'deepmine')).toBe(false);
+  });
+
+  it('marks an unlocked line until it is first staffed, and never again', () => {
+    const s = createInitialState(0);
+    s.workers.trained = 2;
+    expect(isResourceNew(s, 'wood')).toBe(true);
+
+    assignWorker(s, 'wood', 1);
+    expect(isResourceNew(s, 'wood')).toBe(false);
+
+    // Pulling the worker back off does NOT make the line new again — the badge
+    // means "never used", not "unstaffed".
+    assignWorker(s, 'wood', -1);
+    expect(s.workers.assigned.wood).toBe(0);
+    expect(isResourceNew(s, 'wood')).toBe(false);
+  });
+
+  it('does not mark a line that has not unlocked', () => {
+    const s = createInitialState(0);
+    // Iron needs a Deep Mine, which doesn't exist yet.
+    expect(isResourceUnlocked(s, 'iron')).toBe(false);
+    expect(isResourceNew(s, 'iron')).toBe(false);
+  });
+
+  it('clears a toggle line when auto-replenish is first switched on', () => {
+    const s = createInitialState(0);
+    s.buildings.castle.level = 1; // unlocks the defense converter
+    expect(isResourceNew(s, 'defense')).toBe(true);
+
+    expect(setAutomation(s, 'defense', true)).toBe(true);
+    expect(isResourceNew(s, 'defense')).toBe(false);
+
+    // Switching it back off leaves the badge retired.
+    expect(setAutomation(s, 'defense', false)).toBe(true);
+    expect(isResourceNew(s, 'defense')).toBe(false);
+  });
+
+  it('a failed assignment leaves the line marked new', () => {
+    const s = createInitialState(0);
+    s.workers.trained = 0; // nothing in the pool
+    assignWorker(s, 'wood', 1);
+    expect(s.workers.assigned.wood).toBe(0);
+    expect(isResourceNew(s, 'wood')).toBe(true);
   });
 });
 
@@ -467,6 +528,24 @@ describe('save', () => {
     expect(restored.workers.assigned.wood).toBe(2);
     expect(restored.buildings.deepmine.level).toBe(2);
     expect(restored.createdAt).toBe(1000);
+    // "Has ever been staffed" has to survive a reload, or every line would go
+    // back to reading as new on the next load.
+    expect(restored.everStaffed.wood).toBe(true);
+    expect(restored.everStaffed.stone).toBeUndefined();
+  });
+
+  it('treats a save with no everStaffed as nothing-ever-staffed', () => {
+    const s = createInitialState(1000);
+    s.workers.trained = 2;
+    assignWorker(s, 'wood', 1);
+
+    // A save written before the field existed simply lacks the key.
+    const raw = JSON.parse(serialize(s));
+    delete raw.everStaffed;
+
+    const restored = deserialize(JSON.stringify(raw), 9999);
+    expect(restored.everStaffed).toEqual({});
+    expect(isResourceNew(restored, 'wood')).toBe(true);
   });
 
   it('migrates a v1 save, keeping raw materials and resetting progression', () => {

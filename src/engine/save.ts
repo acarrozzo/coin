@@ -148,6 +148,10 @@ const migrations: Record<number, (data: RawSave) => RawSave> = {
     }
     return { ...data, version: 11 };
   },
+  // v11 → v12 (NEW badges): an `everStaffed` set was added. Nothing to
+  // transform — the missing field falls back to empty in deserialize, so an
+  // existing player's unlocked-but-never-staffed lines simply start out badged.
+  11: (data) => ({ ...data, version: 12 }),
 };
 
 function migrate(data: RawSave): RawSave {
@@ -179,6 +183,7 @@ export function serialize(state: GameState): string {
     resources,
     workers: state.workers,
     automation: state.automation,
+    everStaffed: state.everStaffed,
     buildings: state.buildings,
     combat: state.combat,
     market: {
@@ -246,6 +251,15 @@ export function deserialize(raw: string, now: number): GameState {
     for (const id of TOGGLE_PRODUCER_IDS) {
       const on = automation[id];
       if (typeof on === 'boolean') state.automation[id] = on;
+    }
+  }
+
+  // Only `true` is carried: an absent or falsy entry means never staffed, which
+  // is exactly the fresh default.
+  const everStaffed = data.everStaffed as Record<string, unknown> | undefined;
+  if (everStaffed) {
+    for (const id of RESOURCE_IDS) {
+      if (everStaffed[id] === true) state.everStaffed[id] = true;
     }
   }
 

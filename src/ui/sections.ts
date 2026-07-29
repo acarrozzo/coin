@@ -22,6 +22,8 @@ import { BUILDINGS, type BuildingId } from '../content/buildings';
 import {
   unlockedResources,
   isBuildingAvailable,
+  isBuildingNew,
+  isResourceNew,
   isCombatUnlocked,
   isHexUnlocked,
   canBuild,
@@ -389,6 +391,16 @@ export interface NavSection {
    * sections that hold no lines at all (Settlement, Market, Prestige).
    */
   dots: StatusDot[];
+  /**
+   * Something here has never been used: a building the settlement opened up
+   * that you haven't built, or a line you haven't staffed.
+   *
+   * A third axis, deliberately NOT folded into `alert`. A section shows one
+   * alert — the worst — so a NEW building on a card that is also short of
+   * archers would be swallowed by the red. "You have never touched this" isn't
+   * a severity, it's a fact that has to keep standing until you act on it.
+   */
+  hasNew: boolean;
   /** Which tab this section lives on — the rail only shows the active tab's. */
   tab: TabId;
 }
@@ -414,6 +426,9 @@ export function getNavSections(gs: GameState): NavSection[] {
     // No lines of its own — the settlement's gathering rows live on the Core
     // Resources card, over on the Resources tab.
     dots: [],
+    // Nothing here is ever "new": the settlement is the one thing you have had
+    // since the first tick, and its buildings badge on their own cards.
+    hasNew: false,
     tab: 'settlement',
   });
 
@@ -442,6 +457,10 @@ export function getNavSections(gs: GameState): NavSection[] {
       // Defense and ward left their structure cards for these panels when the
       // tracks unlocked (see getResourceGroups), so their dots follow them here.
       dots: statusDots(gs, tracks),
+      // A track whose stat line has never been switched on — the auto-replenish
+      // switch is the only thing you do here, so "never staffed" is exactly
+      // "never set up".
+      hasNew: tracks.some((stat) => isResourceNew(gs, stat)),
       tab: 'threats',
     });
   }
@@ -455,6 +474,9 @@ export function getNavSections(gs: GameState): NavSection[] {
       // A shortage holding up a threat track outranks an affordable upgrade.
       alert: worstAlert(threatDemandAlert(gs, g.ids), buildAlert(gs, g.building)),
       dots: statusDots(gs, g.ids),
+      hasNew:
+        (g.building !== null && isBuildingNew(gs, g.building)) ||
+        g.ids.some((id) => isResourceNew(gs, id)),
       tab: g.tab,
     });
   }
@@ -474,6 +496,9 @@ export function getNavSections(gs: GameState): NavSection[] {
           }
         : null,
       dots: [],
+      // The Market sells one-off offers, not lines to staff or buildings to
+      // raise, so it has nothing the NEW badge describes.
+      hasNew: false,
       tab: 'market',
     });
   }
@@ -486,6 +511,7 @@ export function getNavSections(gs: GameState): NavSection[] {
       count: 0,
       alert: canPrestige(gs) ? { severity: 'good', reason: 'Prestige available' } : null,
       dots: [],
+      hasNew: false,
       tab: 'prestige',
     });
   }
@@ -518,6 +544,8 @@ export interface TabDef {
    * itself from the worst one, count them, and name them all on hover.
    */
   alerts?: TabAlert[];
+  /** Any section in this tab's region holds something never built/staffed. */
+  hasNew?: boolean;
 }
 
 /**
@@ -562,5 +590,6 @@ export function getTabs(gs: GameState): TabDef[] {
       // page order — the order you'd meet them scrolling the region.
       .map((s) => ({ id: s.id, label: s.label, ...s.alert! }))
       .sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity]),
+    hasNew: sections.some((s) => s.tab === t.id && s.hasNew),
   }));
 }

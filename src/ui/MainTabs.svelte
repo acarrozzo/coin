@@ -137,6 +137,13 @@
           aria-label={alertSummary(t.alerts)}>{t.alerts.length > 1 ? t.alerts.length : ''}</span
         >
       {/if}
+      <!-- Something in this region has never been built or staffed. Beside the
+           alert dot rather than folded into it: an alert ranks by severity and
+           shows only the worst, and "you've never touched this" would lose that
+           contest to any red while still being true. -->
+      {#if t.hasNew}
+        <span class="isnew" role="img" aria-label="{t.label}: something new">NEW</span>
+      {/if}
     </button>
   {/each}
 </nav>
@@ -194,6 +201,23 @@
   .main-tabs button:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+
+  /* "New in here" pill, the same one the cards and rows wear (ResourcePanel), so
+     the tab and the thing it points at are visibly the same notice. Accent, not
+     a severity colour — it isn't one. */
+  .isnew {
+    flex-shrink: 0;
+    padding: 0 4px;
+    border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+    font-family: var(--font-body);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    line-height: 1.5;
   }
 
   /* Affordable-upgrade dot, same language as the left rail's — green for
@@ -280,6 +304,24 @@
       position: absolute;
       top: 3px;
       right: 3px;
+    }
+    /* Nine "NEW" pills would blow the icons-only bar apart, so the word drops to
+       the same square pip the left rail uses — accent, and square against the
+       round severity dot. The aria-label still reads "something new". */
+    .isnew {
+      position: absolute;
+      bottom: 3px;
+      right: 3px;
+      width: 7px;
+      height: 7px;
+      padding: 0;
+      border-radius: 2px;
+      background: var(--accent);
+      border-color: var(--accent);
+      /* Hides the word without removing it from the accessible name. */
+      font-size: 0;
+      line-height: 0;
+      overflow: hidden;
     }
   }
 </style>

@@ -30,14 +30,14 @@ import {
 } from '../engine/actions';
 import { SELL_OFFERS } from '../content/market';
 import type { SellableResource, RateUnlockResource, WorkerContractId } from '../content/market';
-import { RESOURCES } from '../content/resources';
+import { RESOURCES, RESOURCE_IDS } from '../content/resources';
 import { getPrestigeTier } from '../content/prestige';
-import { getTotalWorkers } from '../engine/selectors';
+import { getTotalWorkers, isBuildingNew, isResourceNew } from '../engine/selectors';
 import { buildBuilding } from '../systems/buildings';
 import { upgradeSettlement } from '../systems/settlement';
 import { doPrestige } from '../systems/prestige';
 import type { CombatEvent } from '../systems/combat';
-import { BUILDINGS } from '../content/buildings';
+import { BUILDINGS, BUILDING_IDS } from '../content/buildings';
 import { getTier } from '../content/settlement';
 import { notify } from './notify.svelte';
 import { sound } from './sound.svelte';
@@ -99,6 +99,53 @@ function createGameStore() {
         notify.push(`A hex struck — wards consumed`, 'info');
       }
     }
+  }
+
+  /**
+   * What is currently badged NEW — the buildings the settlement has opened up
+   * but you've never built, and the lines that have unlocked but you've never
+   * staffed.
+   *
+   * Snapshotted before a build/upgrade and diffed after, so the toast announces
+   * only what that action actually opened up. Diffed rather than predicted
+   * because the two unlock paths interleave: a settlement upgrade can open a
+   * building AND the lines of a structure gated on settlement level, and a
+   * build opens its own building's next lines. Comparing before to after gets
+   * every case without either site knowing the rules.
+   */
+  function newlyBadged(): { buildings: BuildingId[]; resources: ResourceId[] } {
+    return {
+      buildings: BUILDING_IDS.filter((id) => isBuildingNew(state, id)),
+      resources: RESOURCE_IDS.filter((id) => isResourceNew(state, id)),
+    };
+  }
+
+  /**
+   * Run a mutation, then hand back a toast for each thing it made newly
+   * available. The badges are the durable signal (they stand until you act);
+   * these are the moment's notice that they appeared, for the ones now sitting
+   * off-screen.
+   *
+   * Returns null when the mutation didn't happen, so a caller can gate its own
+   * "built"/"Reached level" toast on the same call and push it FIRST — what you
+   * just did, then what it opened up.
+   */
+  function announceUnlocks(mutate: () => boolean): (() => void) | null {
+    const before = newlyBadged();
+    if (!mutate()) return null;
+    const after = newlyBadged();
+
+    const messages = [
+      ...after.buildings
+        .filter((id) => !before.buildings.includes(id))
+        .map((id) => `New building available: ${BUILDINGS[id].name}`),
+      ...after.resources
+        .filter((id) => !before.resources.includes(id))
+        .map((id) => `New resource unlocked: ${RESOURCES[id].name}`),
+    ];
+    return () => {
+      for (const m of messages) notify.push(m, 'good');
+    };
   }
 
   /** Queue a floating "+X" marker for a resource; it self-removes after POP_MS. */
@@ -273,15 +320,19 @@ function createGameStore() {
     },
     build(id: BuildingId): void {
       const wasBuilt = state.buildings[id].level > 0;
-      if (buildBuilding(state, id)) {
+      const unlocks = announceUnlocks(() => buildBuilding(state, id));
+      if (unlocks) {
         notify.push(`${BUILDINGS[id].name} ${wasBuilt ? 'upgraded' : 'built'}`, 'good');
+        unlocks();
         sound.play.build();
         persist();
       }
     },
     upgradeSettlement(): void {
-      if (upgradeSettlement(state)) {
+      const unlocks = announceUnlocks(() => upgradeSettlement(state));
+      if (unlocks) {
         notify.push(`Reached ${getTier(state.level)?.name ?? `Level ${state.level}`}!`, 'level');
+        unlocks();
         sound.play.level();
         persist();
       }

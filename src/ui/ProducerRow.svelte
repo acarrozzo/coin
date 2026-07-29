@@ -8,6 +8,7 @@
     getMaxWorkers,
     getCapacity,
     getLineWorkers,
+    isResourceNew,
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate } from '../engine/numbers';
   import { RESOURCE_ICON } from './resourceIcons';
@@ -75,6 +76,12 @@
     <span class="amount">{formatNumber(gs.resources[id].amount)}</span>
     {#if cap && cap.gt(0)}<span class="cap">/ {formatNumber(cap)}</span>{/if}
     <span class="name" class:jumped={nav.jumped === id}>{RESOURCES[id].name}</span>
+    <!-- Newly unlocked line you've never staffed. For the toggle lines this row
+         renders (defense, ward) "staffed" means auto switched on once. -->
+    {#if isResourceNew(gs, id)}
+      <span class="isnew" title="New line — you haven't staffed {RESOURCES[id].name} yet.">NEW</span
+      >
+    {/if}
     {#each game.pops.filter((p) => p.id === id) as p (p.seq)}
       <span class="pop">+{formatNumber(p.amount)}</span>
     {/each}
@@ -234,6 +241,22 @@
   }
   .name {
     margin-left: 2px;
+  }
+  /* Same pill as the resource rows on the structure cards (ResourcePanel), so a
+     new line reads identically wherever it happens to be rendered. */
+  .isnew {
+    align-self: center;
+    margin-left: 4px;
+    padding: 0 4px;
+    border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    line-height: 1.5;
+    white-space: nowrap;
   }
   .name.jumped {
     border-radius: 3px;

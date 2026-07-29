@@ -4,7 +4,7 @@
   import { game } from './ui/gameStore.svelte';
   import { sound } from './ui/sound.svelte';
   import { getAvailableWorkers, getTotalWorkers, getCapacity } from './engine/selectors';
-  import { RESOURCES, type ResourceId } from './content/resources';
+  import { type ResourceId } from './content/resources';
   import { formatNumber } from './engine/numbers';
   import SettlementPanel from './ui/SettlementPanel.svelte';
   import ThreatPanel from './ui/ThreatPanel.svelte';
@@ -16,6 +16,7 @@
   import MainTabs from './ui/MainTabs.svelte';
   import AlertFlyout from './ui/AlertFlyout.svelte';
   import StatusDots from './ui/StatusDots.svelte';
+  import StoreGauge from './ui/StoreGauge.svelte';
   import Toasts from './ui/Toasts.svelte';
   import {
     getNavSections,
@@ -398,28 +399,19 @@
       </h1>
 
       <!-- Core storage gauges. Icon and amount together are a link to the
-           resource's full producer row, wherever it currently lives. -->
+           resource's full producer row, wherever it currently lives; hovering
+           one opens a small staffing flyout (see StoreGauge). -->
       {#if gs.workers.trained >= 1 && stores.length > 0}
         <div class="stores">
           {#each stores as s (s.id)}
-            {@const Icon = s.icon}
-            <div class="store">
-              <button
-                type="button"
-                class="store-jump"
-                onclick={() => jumpToStore(s.id)}
-                title="{RESOURCES[s.id].name}: {formatNumber(s.amount)} / {formatNumber(s.cap)}"
-                aria-label="Go to {RESOURCES[s.id].name}"
-              >
-                <Icon size={14} color="var(--gold)" aria-hidden="true" />
-                <span class="store-num"
-                  >{formatNumber(s.amount)}<span class="store-cap">/{formatNumber(s.cap)}</span
-                  ></span
-                >
-              </button>
-
-              <span class="store-bar"><span class="store-fill" style:width="{s.pct}%"></span></span>
-            </div>
+            <StoreGauge
+              id={s.id}
+              icon={s.icon}
+              amount={s.amount}
+              cap={s.cap}
+              pct={s.pct}
+              onjump={jumpToStore}
+            />
           {/each}
         </div>
       {/if}
@@ -523,6 +515,18 @@
                   class:bad={s.alert.severity === 'bad'}
                   role="img"
                   aria-label={s.alert.reason}
+                ></span>
+              {/if}
+              <!-- Something in this section has never been built or staffed.
+                   Rides alongside the alert dot rather than merging into it: an
+                   alert is the worst thing waiting, this is a fact that stands
+                   until you act on it, so a red shortage must not hide it. -->
+              {#if s.hasNew}
+                <span
+                  class="new-pip"
+                  role="img"
+                  aria-label="{s.label}: something new"
+                  title="Something here is new — never built or staffed"
                 ></span>
               {/if}
               {#if s.count > 0}
@@ -765,6 +769,25 @@
      bottom-left until the status strip claimed that edge; moving it up also
      pairs it with the alert dot opposite, leaving the whole bottom of the tile
      to one row of dots. */
+  /* "Something in here has never been built or staffed", on the tile's right
+     edge, vertically centred — clear of the alert dot's top-right corner and the
+     status strip along the bottom, so all three read as separate marks.
+
+     A SQUARE, not a circle, and in --accent: it has to stay legible next to the
+     round good/warn/bad dots without competing for their meaning, and shape
+     carries that difference where a fourth hue in the same corner would not. */
+  .new-pip {
+    position: absolute;
+    top: 50%;
+    right: 3px;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--bg-panel);
+    pointer-events: none;
+  }
   .count-badge {
     position: absolute;
     top: 2px;
@@ -884,70 +907,13 @@
     color: var(--text-on-header);
   }
 
-  /* At-a-glance core storage gauges. */
+  /* At-a-glance core storage gauges. Each gauge is a StoreGauge, which owns its
+     own internals (and the staffing flyout); this only lays them out. */
   .stores {
     display: flex;
     align-items: center;
     gap: var(--space-3);
     flex-wrap: wrap;
-  }
-  /* Icon + amount on top, the fill bar wrapped onto its own line beneath them —
-     narrower than carrying the bar inline, which matters in a header that also
-     holds the wordmark and the worker readout. */
-  .store {
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 5px;
-    row-gap: 4px;
-    /* Holds the gauge steady as digits come and go (and keeps the bar from
-       collapsing to the width of a one-digit amount). */
-    min-width: 56px;
-    color: var(--text-on-header);
-    font-variant-numeric: tabular-nums;
-  }
-  /* Icon + amount together are the link to the full producer row. */
-  .store-jump {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 0;
-    background: none;
-    border: 0;
-    border-radius: var(--radius);
-    color: inherit;
-    font: inherit;
-    font-variant-numeric: tabular-nums;
-    cursor: pointer;
-    transition: color var(--transition);
-  }
-  .store-jump:hover {
-    color: var(--gold);
-  }
-  .store-jump:focus-visible {
-    outline: 2px solid var(--gold);
-    outline-offset: 2px;
-  }
-  .store-num {
-    font-size: 14px;
-  }
-  .store-cap {
-    color: var(--text-muted);
-  }
-  .store-bar {
-    display: block;
-    flex-basis: 100%;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 999px;
-    overflow: hidden;
-  }
-  .store-fill {
-    display: block;
-    height: 100%;
-    background: var(--gold);
-    border-radius: 999px;
-    transition: width 0.2s linear;
   }
   .hud {
     display: flex;
@@ -1214,14 +1180,6 @@
     }
   }
 
-  /* Below 768px the /cap text is dropped — it wouldn't fit the narrow column,
-     and the bar shows fullness on its own. */
-  @media (max-width: 767.98px) {
-    .store-cap {
-      display: none;
-    }
-  }
-
   /* Phones: tighten gaps and shrink the worker readout so the row still fits on
      one line. */
   @media (max-width: 640px) {
@@ -1230,9 +1188,6 @@
     }
     .stores {
       gap: 10px;
-    }
-    .store-num {
-      font-size: 13px;
     }
     .worker-stat {
       font-size: 13px;

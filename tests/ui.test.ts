@@ -93,6 +93,27 @@ describe('ResourcePanel (runtime)', () => {
     game.state.automation.defense = false;
   });
 
+  // A line you have never staffed wears a NEW pill until the first worker lands
+  // on it — and the pill does NOT come back when that worker is pulled off.
+  it('marks a never-staffed line NEW and retires it on the first worker', async () => {
+    cleanup();
+    const gs = game.state;
+    gs.workers.trained = 2;
+    gs.everStaffed = {};
+    gs.workers.assigned.wood = 0;
+    render(ResourcePanel, { props: { tab: 'resources' } });
+
+    const woodRow = () => document.querySelector<HTMLElement>('[data-res="wood"]')!;
+    expect(woodRow().querySelector('.isnew')).toBeTruthy();
+
+    await fireEvent.click(screen.getByLabelText('Add worker to Wood'));
+    expect(woodRow().querySelector('.isnew')).toBeNull();
+
+    await fireEvent.click(screen.getByLabelText('Remove worker from Wood'));
+    expect(gs.workers.assigned.wood).toBe(0);
+    expect(woodRow().querySelector('.isnew')).toBeNull();
+  });
+
   // The rail/tab dots say "Barracks: Archer needed to raise Defense"; landing on
   // the card, the mark says WHICH row that was about.
   it('marks the row a threat track is starved of, and clears it when stocked', async () => {
@@ -416,9 +437,11 @@ describe('content tabs (runtime)', () => {
     full();
     render(App);
 
+    // The tab's own name, not everything inside the button — a tab can also
+    // carry an alert count and a "NEW" pill, which are notices, not names.
     const labels = within(tabBar())
       .getAllByRole('button')
-      .map((t) => t.textContent?.replace(/\s+/g, ' ').trim());
+      .map((t) => t.querySelector('.label')?.textContent?.replace(/\s+/g, ' ').trim());
 
     expect(labels).toEqual([
       'Settlement',

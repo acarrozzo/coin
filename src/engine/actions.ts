@@ -39,6 +39,8 @@ export function assignWorker(state: GameState, id: ResourceId, delta: number): v
     const headroom = getMaxWorkers(state, id) - current;
     if (headroom <= 0) return;
     state.workers.assigned[id] = current + Math.min(delta, available, headroom);
+    // First worker ever put on this line retires its NEW badge for good.
+    state.everStaffed[id] = true;
   } else {
     state.workers.assigned[id] = Math.max(0, current + delta);
   }
@@ -53,6 +55,9 @@ export function setAutomation(state: GameState, id: ResourceId, on: boolean): bo
   if (!isToggleProducer(id) || !isResourceUnlocked(state, id)) return false;
   if (state.automation[id] === on) return false;
   state.automation[id] = on;
+  // Switching auto on IS staffing a toggle line — the only form it has — so it
+  // retires the NEW badge the same way assigning a worker does.
+  if (on) state.everStaffed[id] = true;
   // Leaving stale progress behind would let a line switched off mid-cycle
   // finish that cycle the instant it comes back on.
   if (!on) state.production.progress[id] = 0;

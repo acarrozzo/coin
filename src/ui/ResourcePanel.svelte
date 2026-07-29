@@ -18,6 +18,8 @@
     getLiveNetProductionRate,
     isRateUnlocked,
     isStorageFull,
+    isBuildingNew,
+    isResourceNew,
     splitCost,
     getLineWorkers,
     getThreatDemands,
@@ -148,6 +150,17 @@
                     Land of Plenty</span
                   >{/if}</span
               >
+              <!-- A building the settlement has just opened up and you have
+                   never built. Stays until it is built — no dismissal, no
+                   timer. Sits with the name rather than out on the header's
+                   right edge, where MAX lives: it is a fact about this
+                   building, not a state of its upgrade track. -->
+              {#if group.building && isBuildingNew(gs, group.building)}
+                <span
+                  class="isnew"
+                  title="{buildName} is newly available — you haven't built it yet.">NEW</span
+                >
+              {/if}
             </div>
             {#if !group.upgradeInFooter && group.building && !next}
               <span class="maxed">MAX</span>
@@ -206,6 +219,14 @@
                     >{formatNumber(gs.resources[id].amount, resourceDecimals(id))}</span
                   >
                   <span class="name" class:jumped={nav.jumped === id}>{RESOURCES[id].name}</span>
+                  <!-- Newly unlocked line you've never put anyone on. Clears on
+                       the first worker assigned (or auto switched on) forever. -->
+                  {#if isResourceNew(gs, id)}
+                    <span
+                      class="isnew"
+                      title="New line — you haven't staffed {RESOURCES[id].name} yet.">NEW</span
+                    >
+                  {/if}
                   {#if isStorageFull(gs, id)}
                     <span
                       class="at-cap"
@@ -572,6 +593,22 @@
     font-weight: 700;
     letter-spacing: 0.06em;
     line-height: 1.5;
+  }
+  /* "You have never used this" — the accent colour rather than the gold MAX
+     uses, so a new line and a full one never read as the same kind of note.
+     Same pill shape as .at-cap, so they sit together in a row without arguing. */
+  .isnew {
+    align-self: center;
+    padding: 0 4px;
+    border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    line-height: 1.5;
+    white-space: nowrap;
   }
   /* "A threat track is waiting on this" — the same red the threat dots use, so
      the mark reads as the shortage it is rather than as a row decoration. */

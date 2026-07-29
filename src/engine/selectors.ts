@@ -53,6 +53,17 @@ export function unlockedResources(state: GameState): ResourceId[] {
 }
 
 /**
+ * A production line that has unlocked but has never been staffed — the "NEW"
+ * badge on a resource row.
+ *
+ * The "ever" half can't be derived (see GameState.everStaffed): an unstaffed
+ * line and a never-used one look identical in `workers.assigned`.
+ */
+export function isResourceNew(state: GameState, id: ResourceId): boolean {
+  return isResourceUnlocked(state, id) && !state.everStaffed[id];
+}
+
+/**
  * Capacities are content constants, so the same handful of numbers is re-wrapped
  * as a Decimal thousands of times a second (every tick's cycle gate, every
  * resource row). Cache one Decimal per distinct value and hand out the shared
@@ -357,6 +368,18 @@ export function getNextBuildingLevel(state: GameState, id: BuildingId) {
 
 export function isBuildingMaxed(state: GameState, id: BuildingId): boolean {
   return getNextBuildingLevel(state, id) === null;
+}
+
+/**
+ * A building the settlement has opened up that has never been built — the
+ * "NEW" badge.
+ *
+ * Needs no stored flag: a settlement upgrade flips `isBuildingAvailable` on,
+ * and building it raises the level off 0, so the badge appears and clears
+ * itself from state that already exists.
+ */
+export function isBuildingNew(state: GameState, id: BuildingId): boolean {
+  return isBuildingAvailable(state, id) && state.buildings[id].level === 0;
 }
 
 /**

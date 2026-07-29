@@ -7,7 +7,7 @@ import { ASSAULT, HEX } from '../content/combat';
 export type { ResourceId, BuildingId };
 
 /** Bumped whenever the save shape changes; drives migrations (see save.ts). */
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 
 /** Trained workers the player starts with. */
 export const STARTING_WORKERS = 0;
@@ -52,6 +52,15 @@ export interface GameState {
    * by the line's output resource, one entry per TOGGLE_PRODUCER_IDS.
    */
   automation: Partial<Record<ResourceId, boolean>>;
+  /**
+   * Lines the player has staffed at least once — the only half of the "NEW"
+   * badge that can't be derived. A line's `workers.assigned` returns to 0 the
+   * moment it's unstaffed, so it can't answer "has this ever been used"; this
+   * can. Set on the first worker assigned (or the first time a toggle line is
+   * switched on) and never unset, so pulling workers off later doesn't make a
+   * line look new again. Absent entry = never staffed.
+   */
+  everStaffed: Partial<Record<ResourceId, boolean>>;
   combat: {
     /** Assault track: seconds to next attack, current wave, and tallies. */
     assault: ThreatState;
@@ -136,6 +145,8 @@ export function createInitialState(now: number): GameState {
     buildings,
     production: { progress },
     automation,
+    // Nothing staffed yet, so every line that unlocks reads as new.
+    everStaffed: {},
     combat: {
       assault: { timer: ASSAULT.intervalSeconds, wave: 0, wins: 0, losses: 0 },
       hex: { timer: HEX.intervalSeconds, wave: 0, wins: 0, losses: 0 },
