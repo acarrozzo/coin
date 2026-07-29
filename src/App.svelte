@@ -881,11 +881,18 @@
     }
   }
 
-  /* Explorer bar + game header stick together as one unit. */
+  /* Explorer bar + game header stick together as one unit.
+
+     The z-index must stay ABOVE .tabbar (20) and .jump-rail (20). Because
+     .topstack is positioned with a z-index it forms a stacking context, so the
+     store gauges' staffing flyout — which hangs BELOW the header, into the tab
+     bar's band — can never escape this layer no matter what z-index it sets on
+     itself. At 5 the flyout rendered behind the sticky tabs. Kept under the
+     settings drawer (30) and the alert flyout (50), which still overlay it. */
   .topstack {
     position: sticky;
     top: 0;
-    z-index: 5;
+    z-index: 25;
   }
   header {
     background: var(--bg-header);

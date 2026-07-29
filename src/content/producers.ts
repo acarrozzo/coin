@@ -234,7 +234,7 @@ export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
     workerCap: 'level',
     outputPerCycle: 1,
     cycleSeconds: 30,
-    inputs: { staff: 1, ether: 10 },
+    inputs: { staff: 1, ether: 100 },
   },
 
   // Wizard Tower — ward stat (@1) and ether (@2)
@@ -257,7 +257,7 @@ export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
     workerCap: 'level',
     outputPerCycle: 1,
     cycleSeconds: 1,
-    inputs: { wood: 100 },
+    inputs: { wood: 10 },
   },
 
   // Barracks — the standing army
@@ -374,7 +374,7 @@ export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
     workerCap: 'level',
     outputPerCycle: 1,
     cycleSeconds: 30,
-    inputs: { starmetal: 1, ether: 10 },
+    inputs: { starmetal: 1, ether: 100 },
   },
 };
 

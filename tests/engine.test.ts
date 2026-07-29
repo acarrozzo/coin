@@ -774,7 +774,7 @@ describe('net production rate — live vs nominal', () => {
     s.workers.trained = 100;
     s.buildings.wizardtower.level = 6;
     s.workers.assigned.wood = 20; // +20/s
-    s.workers.assigned.ether = 1; // 100 wood/s, needs only wood
+    s.workers.assigned.ether = 10; // 10 wood/s each = 100 wood/s, needs only wood
     s.resources.wood.amount = getCapacity(s, 'wood')!; // at cap, but draining hard
 
     // 20 − 100 = −80/s; at cap but a real deficit, so it shows negative.
