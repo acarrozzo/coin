@@ -12,7 +12,7 @@ import { notify } from '../src/ui/notify.svelte';
 import { D } from '../src/engine/numbers';
 import { createInitialState } from '../src/engine/state';
 import { getAvailableWorkers, needsThreatSupply, willRepelAssault } from '../src/engine/selectors';
-import { getNavSections, getTabs, FULL_MARKET_LEVEL } from '../src/ui/sections';
+import { getNavSections, getTabs, tabLabel, FULL_MARKET_LEVEL } from '../src/ui/sections';
 import { nav } from '../src/ui/nav.svelte';
 import { ASSAULT, HEX } from '../src/content/combat';
 import { SELLABLE_RESOURCES } from '../src/content/market';
@@ -359,8 +359,21 @@ describe('content tabs (runtime)', () => {
   const HEADER_H = 60;
   let scrollTop = 0;
 
+  /**
+   * Sections this test wants to be a stub of a card rather than a full panel.
+   * The spy weighs sections by how much of the screen they fill, so a card too
+   * small to win that contest is the case its anchor rule exists for.
+   */
+  const SHORT = new Set<string>();
+  const SHORT_H = 90;
+
   const anchorEls = () => Array.from(document.querySelectorAll<HTMLElement>(ANCHORS));
   const sectionEls = () => Array.from(document.querySelectorAll<HTMLElement>('[data-nav]'));
+
+  // A section header is a single line; a section is a whole panel. The
+  // difference is the point — it's the gap a header opens above its region.
+  const heightOf = (el: HTMLElement) =>
+    el.dataset.region ? HEADER_H : SHORT.has(el.dataset.nav ?? '') ? SHORT_H : SECTION_H;
 
   /** Where each anchor sits down the fake page, in document order. */
   function offsets(): Map<HTMLElement, number> {
@@ -368,10 +381,7 @@ describe('content tabs (runtime)', () => {
     let y = 0;
     for (const el of anchorEls()) {
       out.set(el, y);
-      // A section header is a single line; a section is a whole panel. The
-      // difference is the point — it's the gap a header opens above its region
-      // that a sections-only spy would fall into.
-      y += el.dataset.region ? HEADER_H : SECTION_H;
+      y += heightOf(el);
     }
     return out;
   }
@@ -380,7 +390,7 @@ describe('content tabs (runtime)', () => {
   function layout() {
     for (const [el, y] of offsets()) {
       const top = y - scrollTop;
-      const height = el.dataset.region ? HEADER_H : SECTION_H;
+      const height = heightOf(el);
       el.getBoundingClientRect = () =>
         ({ top, bottom: top + height, height, left: 0, right: 0, width: 0 }) as DOMRect;
     }
@@ -392,6 +402,32 @@ describe('content tabs (runtime)', () => {
     scrollTop = el ? (offsets().get(el) ?? 0) : 0;
     layout();
   }
+
+  /** Scroll the fake page to an absolute offset. */
+  function scrollToY(y: number) {
+    scrollTop = y;
+    layout();
+  }
+
+  /** How tall the whole fake page currently is. */
+  function pageHeight() {
+    const els = anchorEls();
+    const last = els.at(-1);
+    return last ? (offsets().get(last) ?? 0) + heightOf(last) : 0;
+  }
+
+  /** Scroll a section to the line, then `dy` further down — parking it partly read. */
+  function scrollPastNav(id: string, dy: number) {
+    scrollToNav(id);
+    scrollTop += dy;
+    layout();
+  }
+
+  /** The section after `id` in rail order — the one filling the screen below it. */
+  const navAfter = (id: string) => {
+    const secs = getNavSections(game.state);
+    return secs[secs.findIndex((s) => s.id === id) + 1];
+  };
 
   /**
    * Re-lay-out, fire a scroll, and let the spy's rAF (and Svelte) catch up.
@@ -409,6 +445,7 @@ describe('content tabs (runtime)', () => {
     cleanup();
     nav.select('settlement'); // the tab store is a module singleton — reset it
     scrollTop = 0;
+    SHORT.clear();
     const gs = game.state;
     gs.level = level;
     gs.workers.trained = 4;
@@ -427,6 +464,10 @@ describe('content tabs (runtime)', () => {
   /** Scoped to the tab bar — the rail has same-named buttons. */
   const tabBtn = (name: RegExp) =>
     within(tabBar()).getByRole('button', { name }) as HTMLButtonElement;
+  /** The label of the rail button currently highlighted, if any. */
+  const railActive = () =>
+    document.querySelector('.jump-btn.active')?.getAttribute('aria-label') ?? null;
+  const navLabel = (id: string) => getNavSections(game.state).find((s) => s.id === id)?.label;
   const railLabels = () =>
     within(screen.getByRole('navigation', { name: 'Jump to section' }))
       .getAllByRole('button')
@@ -818,6 +859,68 @@ describe('content tabs (runtime)', () => {
     scrollToNav('market');
     await settle();
     expect(nav.tab).toBe('market');
+  });
+
+  it('highlights the section filling the screen, not the one clinging to the line', async () => {
+    full();
+    render(App);
+    await settle();
+
+    // Read most of the way through the Blacksmith: its last sliver is still
+    // crossing the top of the content area, but the next card now fills the
+    // screen. Highlighting by whatever crossed that top edge would keep naming
+    // the section you've finished — the whole complaint this rule answers.
+    const next = navAfter('group:blacksmith')!;
+    scrollPastNav('group:blacksmith', 400);
+    await settle();
+
+    expect(railActive()).toBe(next.label);
+    expect(tabBtn(new RegExp(`^${tabLabel(next.tab)}`)).getAttribute('aria-current')).toBe('true');
+  });
+
+  it('never sends the highlight back up the page while scrolling down', async () => {
+    full();
+    // The layout that broke this: a run of small cards (Quest Hall, Wizard
+    // Tower, Cloud Shaman) sitting directly above two big panels (Market,
+    // Prestige). Weighing sections by how much screen they cover picked the big
+    // panels while the player was still reading the small ones, so the
+    // highlight ping-ponged — quests, market, wizard tower, prestige, cloud
+    // shaman — instead of walking down the page.
+    for (const id of ['group:castle', 'group:wizardtower', 'group:cloudshaman']) SHORT.add(id);
+    render(App);
+    await settle();
+
+    const order = getNavSections(game.state).map((s) => s.label);
+    const seen: number[] = [];
+    for (let y = 0; y < pageHeight(); y += 120) {
+      scrollToY(y);
+      await settle();
+      const at = order.indexOf(railActive() ?? '');
+      if (at !== seen.at(-1)) seen.push(at);
+    }
+
+    // Every section gets its turn, in page order, and none is ever revisited.
+    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(seen.length).toBeGreaterThan(3);
+  });
+
+  it('keeps a jumped-to card highlighted even when a bigger one sits below it', async () => {
+    full();
+    // A card with barely any height — short enough that the read-ahead mark
+    // lands past it, in the full-size card below.
+    SHORT.add('group:blacksmith');
+    render(App);
+    await settle();
+
+    // Click its rail button. The rail has to agree with the click that just
+    // happened: lighting up the neighbour instead, in the same instant, would
+    // read as the jump having gone wrong.
+    await fireEvent.click(railBtn('Blacksmith')!);
+    await settle();
+
+    expect(railActive()).toBe(navLabel('group:blacksmith'));
+    expect(nav.tab).toBe('crafting');
   });
 
   it('keeps any number inside the dot, never beside the label', () => {

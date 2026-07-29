@@ -196,6 +196,20 @@
   let flashEl: HTMLElement | null = null;
 
   /**
+   * The section a jump has just landed on, which holds the rail and tab
+   * highlight for as long as its ring is lit — see the spy's `current`.
+   *
+   * Riding the ring's lifetime rather than a timer of its own is the point:
+   * "where you just asked to be" and "what's being called out on screen" are
+   * the same fact, so the highlight and the ring can't disagree, and the
+   * measurement takes back over the moment the landing stops being announced.
+   *
+   * A tab click lands on a region header, which is no section — so that clears
+   * the pin rather than setting one, and the spy names the region's first card.
+   */
+  let pinned = $state<string | null>(null);
+
+  /**
    * Light the accent ring on a jumped-to section, concurrently with the scroll,
    * so it's already glowing as the section slides into view rather than
    * snapping on after it lands.
@@ -207,6 +221,7 @@
       flashEl?.classList.remove('nav-flash');
     }
     flashEl = el;
+    pinned = el.closest<HTMLElement>('[data-nav]')?.dataset.nav ?? null;
     // Re-adding the class in the same frame wouldn't restart the transition, so
     // force a style flush between removing and re-adding for repeat jumps.
     el.classList.remove('nav-flash');
@@ -215,6 +230,8 @@
     flashTimer = window.setTimeout(() => {
       el.classList.remove('nav-flash');
       flashTimer = 0;
+      pinned = null;
+      requestSpy();
     }, FLASH_HOLD_MS);
   }
   const available = $derived(getAvailableWorkers(gs));
@@ -279,8 +296,17 @@
     return () => game.stop();
   });
 
+  /**
+   * How much of a section has to still be below the sticky line for it to keep
+   * the highlight, as a fraction of the visible strip. Nothing but a lookahead:
+   * at 0 this is "whatever last crossed the top edge", which keeps naming a
+   * section whose final few pixels are showing while the next one fills the
+   * screen.
+   */
+  const READ_AHEAD = 0.25;
+
   // Scroll-spy: light up the rail button — AND the tab — for whichever section
-  // sits just below the sticky header. Reads the DOM fresh each pass so it
+  // the player is actually looking at. Reads the DOM fresh each pass so it
   // adapts as sections unlock, and throttles to one recompute per animation
   // frame.
   //
@@ -297,30 +323,40 @@
     let raf = 0;
     const recompute = () => {
       raf = 0;
+      // The strip of window the game is actually visible through: below the
+      // sticky chrome, above the fold.
       const line = headerH + tabsH + SCROLL_PEEK + 4;
-      // Section headers are measured alongside sections. They have to be: a
-      // header sits ABOVE its region's first section, so scrolling one to the
-      // line leaves that section still below it — and a sections-only pass
-      // would report the *previous* region right after a tab click landed you
-      // here.
-      const els = Array.from(document.querySelectorAll<HTMLElement>('[data-nav],[data-region]'));
-      let i = 0;
-      for (let n = 0; n < els.length; n++) {
-        if (els[n].getBoundingClientRect().top - line <= 1) i = n;
-      }
+      const mark = line + (window.innerHeight - line) * READ_AHEAD;
 
-      // A header stands in for the first section beneath it, so crossing one
-      // moves the rail and the tab bar together rather than one at a time.
-      let el: HTMLElement | undefined = els[i];
-      let tab: TabId | null = null;
-      if (el?.dataset.region) {
-        tab = el.dataset.region as TabId;
-        el = els.slice(i + 1).find((e) => e.dataset.nav);
-      }
-      const current = el?.dataset.nav ?? null;
+      /**
+       * The first section still reaching past the read-ahead mark — i.e. the
+       * topmost one you have more than a sliver of left to read.
+       *
+       * Note what this is NOT: "the section filling most of the screen". That
+       * sounds better and behaves far worse, because it isn't monotonic in the
+       * scroll position — a run of small cards (Quest Hall, Wizard Tower, Cloud
+       * Shaman) sits above two big panels (Market, Prestige), so the big ones
+       * win the contest while you're reading the small ones and the highlight
+       * ping-pongs backwards. Picking off a single coordinate makes going
+       * backwards impossible: sections are laid out in order, so the answer can
+       * only ever move down the page as you do.
+       *
+       * Section headers don't need measuring. Under the old top-edge rule they
+       * did — a header sits ABOVE its region's first section, so landing on one
+       * left that section below the line and the previous region highlighted —
+       * but the mark sits far enough down that the section under the header
+       * owns it on arrival, which is the same answer without the special case.
+       */
+      const els = Array.from(document.querySelectorAll<HTMLElement>('[data-nav]'));
+      const hit = els.find((el) => el.getBoundingClientRect().bottom > mark) ?? els.at(-1);
 
+      // A jump beats the measurement while its landing ring is lit: the player
+      // just said where they want to be, and a short card can be dwarfed by
+      // whatever follows it, so measuring alone would light up its neighbour in
+      // the same instant they clicked.
+      const current = pinned ?? hit?.dataset.nav ?? null;
       activeSection = current;
-      tab ??= current ? tabForSection(gs, current) : null;
+      const tab = current ? tabForSection(gs, current) : null;
       if (tab) nav.select(tab);
     };
     const onScroll = () => {
