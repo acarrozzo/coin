@@ -1,6 +1,6 @@
 import { Decimal, D } from './numbers';
 import type { GameState, ResourceId, BuildingId } from './state';
-import { RESOURCE_IDS, isConsumableResource } from '../content/resources';
+import { RESOURCES, RESOURCE_IDS, isConsumableResource } from '../content/resources';
 import { BUILDINGS } from '../content/buildings';
 import {
   PRODUCERS,
@@ -146,6 +146,86 @@ export function canStartCycle(state: GameState, id: ResourceId): boolean {
     if (state.resources[rid].amount.lt(workers * qty)) return false;
   }
   return true;
+}
+
+/**
+ * The four health states a production line can be in, as the nav's status dots
+ * report them. A different axis from `Severity` in ui/sections: that one ranks
+ * "is there something to click here", this one answers "is this line working".
+ */
+export type ResourceStatus = 'producing' | 'starved' | 'idle' | 'wanted';
+
+/**
+ * Whether any *running* line is short of `id` right now — the thing that turns
+ * an unstaffed line from merely idle into a bottleneck.
+ *
+ * Measured per consumer against its own staffing, the same all-or-nothing test
+ * canStartCycle makes: a line needs `workers × qty` of every ingredient to
+ * begin, so being short for the crew it actually has is what stalls it.
+ *
+ * Toggle lines need no special case. getLineWorkers reports a switched-on
+ * defense/ward at its full workerCap, so a ward short of mages marks mages as
+ * wanted exactly like a staffed blacksmith short of iron does.
+ */
+function isResourceWanted(state: GameState, id: ResourceId): boolean {
+  for (const c of getConsumers(id)) {
+    const workers = getLineWorkers(state, c.id);
+    if (workers > 0 && state.resources[id].amount.lt(workers * c.qty)) return true;
+  }
+  return false;
+}
+
+/**
+ * A line's health, for the status dots on the tab bar and the jump rail.
+ *
+ * Deliberately NOT `canStartCycle`, though it shares that function's input
+ * gate: canStartCycle also fails at storage cap, and a full store is not a
+ * problem to fix. A staffed line sitting at cap reads as `producing` — it did
+ * its job.
+ *
+ * Returns null for anything without a line of its own (honor and wisdom are won
+ * in combat, never produced), which is the signal to render no dot at all.
+ */
+export function getResourceStatus(state: GameState, id: ResourceId): ResourceStatus | null {
+  if (!PRODUCERS[id] || !isResourceUnlocked(state, id)) return null;
+
+  const workers = getLineWorkers(state, id);
+  if (workers <= 0) return isResourceWanted(state, id) ? 'wanted' : 'idle';
+
+  for (const [rid, qty] of PRODUCER_INPUTS[id]) {
+    if (state.resources[rid].amount.lt(workers * qty)) return 'starved';
+  }
+  return 'producing';
+}
+
+/**
+ * Why a line is in the state it's in, as a sentence for the dot's tooltip. A
+ * bare coloured dot in a row of other dots is unreadable without one.
+ */
+export function resourceStatusReason(state: GameState, id: ResourceId): string {
+  const name = RESOURCES[id].name;
+  switch (getResourceStatus(state, id)) {
+    case 'producing':
+      return isAtCapacity(state, id) ? `${name} — storage full` : `${name} — producing`;
+    case 'starved': {
+      const workers = getLineWorkers(state, id);
+      const missing = PRODUCER_INPUTS[id]
+        .filter(([rid, qty]) => state.resources[rid].amount.lt(workers * qty))
+        .map(([rid]) => RESOURCES[rid].name);
+      return `${name} — waiting on ${missing.join(' and ')}`;
+    }
+    case 'wanted': {
+      const waiting = getConsumers(id)
+        .filter((c) => {
+          const w = getLineWorkers(state, c.id);
+          return w > 0 && state.resources[id].amount.lt(w * c.qty);
+        })
+        .map((c) => RESOURCES[c.id].name);
+      return `${name} — no workers, ${waiting.join(' and ')} waiting`;
+    }
+    default:
+      return `${name} — no workers`;
+  }
 }
 
 /** Nominal production per second (workers × rate; ignores inputs and caps). */

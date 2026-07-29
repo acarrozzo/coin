@@ -37,6 +37,9 @@ import {
   countMarketOpportunities,
   isPrestigeUnlocked,
   canPrestige,
+  getResourceStatus,
+  resourceStatusReason,
+  type ResourceStatus,
 } from '../engine/selectors';
 
 export { isPrestigeUnlocked, canPrestige } from '../engine/selectors';
@@ -52,8 +55,6 @@ import Cloud from '@lucide/svelte/icons/cloud';
 import Deer from './icons/Deer.svelte';
 import UsersGroup from './icons/UsersGroup.svelte';
 // Rail-only icons for the non-resource sections.
-import Swords from '@lucide/svelte/icons/swords';
-import Shield from '@lucide/svelte/icons/shield';
 import Skull from '@lucide/svelte/icons/skull';
 import BuildingStore from './icons/BuildingStore.svelte';
 import Crown from '@lucide/svelte/icons/crown';
@@ -229,6 +230,32 @@ export interface TabAlert extends Alert {
   label: string;
 }
 
+/**
+ * One production line's health, as a dot in a rail button's status strip.
+ *
+ * A different axis from `Alert`, and they ride side by side rather than merging:
+ * an alert says "there is something to click here", a dot says "this line is
+ * working / stalled / unmanned". A card can be silent on one and loud on the
+ * other — a fully staffed, perfectly fed Blacksmith with an affordable upgrade
+ * is all-green dots plus a gold alert.
+ */
+export interface StatusDot {
+  id: ResourceId;
+  status: ResourceStatus;
+  /** Sentence naming the state, for the dot's tooltip. */
+  reason: string;
+}
+
+/** The status dots for a run of resources, in row order, skipping unproduced ones. */
+function statusDots(gs: GameState, ids: readonly ResourceId[]): StatusDot[] {
+  const dots: StatusDot[] = [];
+  for (const id of ids) {
+    const status = getResourceStatus(gs, id);
+    if (status !== null) dots.push({ id, status, reason: resourceStatusReason(gs, id) });
+  }
+  return dots;
+}
+
 /** What's affordable in the settlement panel: an upgrade, a worker, or both. */
 function settlementAlert(gs: GameState): Alert | null {
   const upgrade = canUpgradeSettlement(gs);
@@ -357,6 +384,11 @@ export interface NavSection {
    * a threat track you can top up; 'bad' = one you cannot (see threatAlert).
    */
   alert: Alert | null;
+  /**
+   * Health of each production line in this section, in row order. Empty for
+   * sections that hold no lines at all (Settlement, Market, Prestige).
+   */
+  dots: StatusDot[];
   /** Which tab this section lives on — the rail only shows the active tab's. */
   tab: TabId;
 }
@@ -379,35 +411,37 @@ export function getNavSections(gs: GameState): NavSection[] {
     // Flag either affordable action in this section: a settlement upgrade or
     // training the next worker (both live in SettlementPanel).
     alert: settlementAlert(gs),
+    // No lines of its own — the settlement's gathering rows live on the Core
+    // Resources card, over on the Resources tab.
+    dots: [],
     tab: 'settlement',
   });
 
-  // The two threat tracks share one panel, on their own tab, but get their own
-  // rail buttons — each flags only its own supply problem, so the player knows
-  // which one to feed. Splitting them off Settlement also stops an amber
-  // under-supplied warning being masked by a gold "you can upgrade" dot.
+  // Both threat tracks under one rail button, covering the two panels on the
+  // Threats tab. They had a button each for a while — one alert per track, so
+  // the player could tell which one to feed — but the status dots now carry
+  // that: two dots, defense then ward, each naming its own track's problem on
+  // hover. The button's own alert takes the worse of the two.
   //
-  // Both carry a worker count of 0: their lines are auto-replenish switches
-  // that spend no worker, so there is nothing to badge here. Their alert dot
-  // reports whether the switch is on.
-  if (isCombatUnlocked(gs)) {
-    sections.push({
-      id: 'combat:assault',
-      label: 'Assault',
-      icon: Swords,
-      count: 0,
-      alert: threatAlert(gs, 'defense'),
-      tab: 'threats',
-    });
-  }
+  // Worker count 0: both lines are auto-replenish switches that spend no
+  // worker, so there is nothing to badge here.
+  //
+  // Each track appears only once ITS OWN unlock lands — the hex arrives well
+  // after the assault, and until then the section is the assault alone.
+  const tracks: ThreatStat[] = [];
+  if (isCombatUnlocked(gs)) tracks.push('defense');
+  if (isHexUnlocked(gs)) tracks.push('ward');
 
-  if (isHexUnlocked(gs)) {
+  if (tracks.length > 0) {
     sections.push({
-      id: 'combat:hex',
-      label: 'Hex',
+      id: 'threats',
+      label: 'Threats',
       icon: Skull,
       count: 0,
-      alert: threatAlert(gs, 'ward'),
+      alert: worstAlert(...tracks.map((stat) => threatAlert(gs, stat))),
+      // Defense and ward left their structure cards for these panels when the
+      // tracks unlocked (see getResourceGroups), so their dots follow them here.
+      dots: statusDots(gs, tracks),
       tab: 'threats',
     });
   }
@@ -420,6 +454,7 @@ export function getNavSections(gs: GameState): NavSection[] {
       count: g.ids.reduce((n, id) => n + (gs.workers.assigned[id] ?? 0), 0),
       // A shortage holding up a threat track outranks an affordable upgrade.
       alert: worstAlert(threatDemandAlert(gs, g.ids), buildAlert(gs, g.building)),
+      dots: statusDots(gs, g.ids),
       tab: g.tab,
     });
   }
@@ -438,6 +473,7 @@ export function getNavSections(gs: GameState): NavSection[] {
             reason: `${countMarketOpportunities(gs)} offers ready`,
           }
         : null,
+      dots: [],
       tab: 'market',
     });
   }
@@ -449,6 +485,7 @@ export function getNavSections(gs: GameState): NavSection[] {
       icon: Crown,
       count: 0,
       alert: canPrestige(gs) ? { severity: 'good', reason: 'Prestige available' } : null,
+      dots: [],
       tab: 'prestige',
     });
   }
@@ -489,7 +526,9 @@ export interface TabDef {
  */
 export const TAB_DEFS: readonly TabDef[] = [
   { id: 'settlement', label: 'Settlement', icon: House },
-  { id: 'threats', label: 'Threats', icon: Shield },
+  // Skull, matching its one section — like Market and Prestige, this tab holds a
+  // single section, and the pair reads as one thing only if they share a glyph.
+  { id: 'threats', label: 'Threats', icon: Skull },
   { id: 'resources', label: 'Resources', icon: Boxes },
   { id: 'crafting', label: 'Crafting', icon: Anvil },
   { id: 'quests', label: 'Quests', icon: ScrollText },

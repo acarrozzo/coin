@@ -16,6 +16,7 @@ import { getNavSections, getTabs, FULL_MARKET_LEVEL } from '../src/ui/sections';
 import { nav } from '../src/ui/nav.svelte';
 import { ASSAULT, HEX } from '../src/content/combat';
 import { SELLABLE_RESOURCES } from '../src/content/market';
+import type { ResourceId } from '../src/content/resources';
 import { PRESTIGE_TIERS, PRESTIGE_UNLOCK_LEVEL, MAX_PRESTIGE } from '../src/content/prestige';
 
 // Runtime check: proves Svelte 5 runes reactivity + the store wiring + event
@@ -439,8 +440,7 @@ describe('content tabs (runtime)', () => {
     // Market and Prestige are all in the document from the start.
     for (const key of [
       'settlement',
-      'combat:assault',
-      'combat:hex',
+      'threats',
       'group:core',
       'group:deepmine',
       'group:hunterscabin',
@@ -465,8 +465,10 @@ describe('content tabs (runtime)', () => {
     // GROUP_DEFS and clicking one would land you in the middle of another.
     expect(sectionIds()).toEqual([
       'settlement',
-      'combat:assault',
-      'combat:hex',
+      // Two anchors, one section: the assault and hex panels both answer to the
+      // combined `threats` button, and adjacent anchors are still one run.
+      'threats',
+      'threats',
       'group:core',
       'group:deepmine',
       'group:hunterscabin',
@@ -508,8 +510,7 @@ describe('content tabs (runtime)', () => {
     // The rail is now the table of contents for the whole page, not for one tab.
     expect(railLabels()).toEqual([
       'Settlement',
-      'Assault',
-      'Hex',
+      'Threats',
       'Core Resources',
       'Deep Mine',
       "Hunter's Cabin",
@@ -582,8 +583,11 @@ describe('content tabs (runtime)', () => {
     full();
     render(App);
 
-    const assault = document.querySelector<HTMLElement>('[data-nav="combat:assault"]');
-    const hex = document.querySelector<HTMLElement>('[data-nav="combat:hex"]');
+    // One nav section, two panels — both carry the `threats` anchor, in page
+    // order, so the rail button jumps to the assault and stays lit across both.
+    const [assault, hex] = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-nav="threats"]'),
+    );
     expect(assault).toBeTruthy();
     expect(hex).toBeTruthy();
 
@@ -616,7 +620,7 @@ describe('content tabs (runtime)', () => {
         .getAllByRole('button')
         .map((b) => b.getAttribute('aria-label'));
     expect(labelsIn(groups[0])).toEqual(['Settlement']);
-    expect(labelsIn(groups[1])).toEqual(['Assault', 'Hex']);
+    expect(labelsIn(groups[1])).toEqual(['Threats']);
     expect(labelsIn(groups[2])).toEqual(['Core Resources', 'Deep Mine']);
     expect(labelsIn(groups[3])).toEqual(["Hunter's Cabin", 'Blacksmith', 'Barracks']);
     expect(labelsIn(groups[4])).toEqual(['Quest Hall']);
@@ -624,6 +628,94 @@ describe('content tabs (runtime)', () => {
 
     // Dividers sit BETWEEN clusters — never a leading or trailing one.
     expect(rail.querySelectorAll('.rail-div').length).toBe(groups.length - 1);
+  });
+
+  // Status dots live on the rail button only. A matching strip under each
+  // tab-bar label was built alongside it and cut: a rail button is one card, so
+  // a dot there stands for one production line, where a tab spans several cards.
+  const STATES = ['producing', 'starved', 'idle', 'wanted'];
+  /** The state of each dot in a strip, in strip order (skipping Svelte's scoping class). */
+  const statuses = (el: HTMLElement | null) =>
+    Array.from(el?.querySelectorAll('.sdot') ?? []).map(
+      (d) => STATES.find((s) => d.classList.contains(s)) ?? '?',
+    );
+  const railBtn = (name: string) =>
+    screen
+      .getByRole('navigation', { name: 'Jump to section' })
+      .querySelector<HTMLElement>(`[aria-label="${name}"]`);
+
+  /**
+   * full() resets the level, workers and market but not assignments or
+   * buildings, and `game` is a module singleton — so a test that touches those
+   * has to put them back or it changes what every later test inherits.
+   */
+  function restoring<T extends object>(obj: T, run: () => void) {
+    const before = { ...obj };
+    try {
+      run();
+    } finally {
+      Object.assign(obj, before);
+    }
+  }
+
+  it('strips the rail buttons only, never the tab bar', () => {
+    full();
+    restoring(game.state.workers.assigned, () => {
+      for (const id of Object.keys(game.state.workers.assigned)) {
+        game.state.workers.assigned[id as ResourceId] = 0;
+      }
+      render(App);
+
+      // A card's lines, in row order. Nothing staffed, so every one reads
+      // unmanned rather than producing.
+      const core = statuses(railBtn('Core Resources'));
+      expect(core.length).toBeGreaterThan(0);
+      expect(new Set(core)).toEqual(new Set(['idle']));
+
+      // Sections holding no production lines of their own get no strip at all —
+      // the settlement's gathering rows live on the Core Resources card.
+      expect(statuses(railBtn('Settlement'))).toEqual([]);
+      expect(statuses(railBtn('Market'))).toEqual([]);
+
+      // The tab bar carries alert dots, but never a status strip.
+      expect(tabBar().querySelectorAll('.sdot').length).toBe(0);
+    });
+  });
+
+  // A structure card appears as soon as its building can be BUILT, so it can be
+  // on the rail with no lines behind it yet. An empty strip, not a row of dots
+  // for resources that don't exist.
+  it('adds dots to a crafting card only once its building is raised', async () => {
+    full();
+    render(App);
+
+    const cabin = game.state.buildings.hunterscabin;
+    try {
+      expect(statuses(railBtn("Hunter's Cabin"))).toEqual([]);
+      cabin.level = 1;
+      await tick();
+      expect(statuses(railBtn("Hunter's Cabin")).length).toBeGreaterThan(0);
+    } finally {
+      cabin.level = 0;
+    }
+  });
+
+  it('turns a dot green when its line is staffed', async () => {
+    full();
+    const assigned = game.state.workers.assigned;
+    const before = assigned.wood;
+    try {
+      assigned.wood = 0;
+      render(App);
+
+      const wood = () => statuses(railBtn('Core Resources'))[0];
+      expect(wood()).toBe('idle');
+      assigned.wood = 1;
+      await tick();
+      expect(wood()).toBe('producing');
+    } finally {
+      assigned.wood = before;
+    }
   });
 
   it('lights the rail divider for the chapter being read', async () => {
@@ -808,10 +900,9 @@ describe('content tabs (runtime)', () => {
     expect(tabOf('group:wizardtower')).toBe('mysticism');
     expect(tabOf('settlement')).toBe('settlement');
     expect(tabOf('market')).toBe('market');
-    // Both threat tracks left Settlement for their own region, so an amber
-    // under-supplied dot can't be masked by Settlement's gold upgrade dot.
-    expect(tabOf('combat:assault')).toBe('threats');
-    expect(tabOf('combat:hex')).toBe('threats');
+    // Both threat tracks left Settlement for one region of their own, so an
+    // amber under-supplied dot can't be masked by Settlement's gold upgrade dot.
+    expect(tabOf('threats')).toBe('threats');
   });
 
   it('opens the Threats tab only once assaults begin', () => {
@@ -960,22 +1051,26 @@ describe('threat supply alerts', () => {
     expect(needsThreatSupply(s, 'defense')).toBe(false);
   });
 
-  it('gives assault and hex their own rail sections, each with its own dot', () => {
+  // Both tracks share one rail button. Its alert takes the worse of the two, and
+  // its two status dots — defense then ward — say which track is the bad one.
+  it('gives assault and hex a single rail section, with a dot each', () => {
     const s = armed();
     s.workers.trained = 2;
     s.resources.defense.amount = D(3); // assault short, hex fine
 
     const ids = getNavSections(s).map((sec) => sec.id);
-    expect(ids).toContain('combat:assault');
-    expect(ids).toContain('combat:hex');
+    expect(ids).toContain('threats');
+    expect(ids).not.toContain('combat:assault');
+    expect(ids).not.toContain('combat:hex');
 
-    const assault = getNavSections(s).find((sec) => sec.id === 'combat:assault');
-    const hex = getNavSections(s).find((sec) => sec.id === 'combat:hex');
-    // Below its cap, so red — while the hex track, at cap and running, is quiet.
-    expect(assault?.alert?.severity).toBe('bad');
-    expect(hex?.alert).toBe(null);
+    const threats = getNavSections(s).find((sec) => sec.id === 'threats');
+    // Defense is below its cap, so the shared alert reddens even though the hex
+    // track — at cap and running — has nothing to say.
+    expect(threats?.alert?.severity).toBe('bad');
+    // One dot per track, in track order, so the red one names which is starved.
+    expect(threats?.dots.map((d) => d.id)).toEqual(['defense', 'ward']);
     // Auto-replenish spends no workers, so a threat section never badges one.
-    expect(assault?.count).toBe(0);
+    expect(threats?.count).toBe(0);
   });
 
   it('never flags a wave you cannot do anything about', () => {
@@ -985,14 +1080,14 @@ describe('threat supply alerts', () => {
     s.combat.assault.wave = 40;
     s.resources.archer.amount = D(10);
     expect(willRepelAssault(s)).toBe(false);
-    expect(getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert).toBe(null);
+    expect(getNavSections(s).find((sec) => sec.id === 'threats')?.alert).toBe(null);
   });
 
   it('flags a line blocked for want of its inputs', () => {
     const s = armed();
     s.resources.defense.amount = D(3); // room to produce...
     s.resources.archer.amount = D(0); // ...but nothing to produce it from
-    const alert = getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert;
+    const alert = getNavSections(s).find((sec) => sec.id === 'threats')?.alert;
     expect(alert?.severity).toBe('bad');
     expect(alert?.reason).toBe('No Archer to raise Defense');
   });
@@ -1057,7 +1152,7 @@ describe('threat supply alerts', () => {
     s.resources.archer.amount = D(0); // no archers, and no need of any
     expect(getNavSections(s).find((sec) => sec.id === 'group:barracks')?.alert).toBe(null);
     // The threat track itself is equally quiet — the two agree by construction.
-    expect(getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert).toBe(null);
+    expect(getNavSections(s).find((sec) => sec.id === 'threats')?.alert).toBe(null);
   });
 
   it('names every missing input, not just the first', () => {
@@ -1065,7 +1160,7 @@ describe('threat supply alerts', () => {
     s.resources.ward.amount = D(3);
     s.resources.mage.amount = D(0);
     s.resources.trollskull.amount = D(0); // ward needs both
-    expect(getNavSections(s).find((sec) => sec.id === 'combat:hex')?.alert?.reason).toBe(
+    expect(getNavSections(s).find((sec) => sec.id === 'threats')?.alert?.reason).toBe(
       'No Mage and Troll Skull to raise Ward',
     );
   });
@@ -1076,7 +1171,7 @@ describe('threat supply alerts', () => {
     // would send you to flip a switch that then couldn't do anything.
     s.automation.defense = false;
     s.resources.archer.amount = D(0);
-    expect(getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert?.reason).toMatch(
+    expect(getNavSections(s).find((sec) => sec.id === 'threats')?.alert?.reason).toMatch(
       /^No Archer/,
     );
   });
@@ -1086,7 +1181,7 @@ describe('threat supply alerts', () => {
     s.resources.archer.amount = D(10); // stocked, so inputs are not the issue
 
     s.resources.defense.amount = D(3);
-    expect(getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert).toEqual({
+    expect(getNavSections(s).find((sec) => sec.id === 'threats')?.alert).toEqual({
       severity: 'bad',
       reason: 'Defense below cap',
     });
@@ -1094,13 +1189,15 @@ describe('threat supply alerts', () => {
     // At cap but switched off: worth mentioning, not worth alarming.
     s.resources.defense.amount = D(5);
     s.automation.defense = false;
-    expect(getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert).toEqual({
+    expect(getNavSections(s).find((sec) => sec.id === 'threats')?.alert).toEqual({
       severity: 'warn',
       reason: 'Defense auto-replenish off',
     });
   });
 
-  it('gives a tab every alert in it, worst first', () => {
+  // One button for two tracks, so its dot takes the worse of their two alerts —
+  // an amber "switched off" must never hide a red "below cap" on the other side.
+  it('takes the worse of the two tracks for the shared dot', () => {
     const s = armed();
     s.workers.trained = 1;
     s.resources.archer.amount = D(10);
@@ -1110,18 +1207,18 @@ describe('threat supply alerts', () => {
     s.automation.defense = false; // assault amber — merely switched off
 
     const threats = getTabs(s).find((t) => t.id === 'threats');
-    expect(threats?.alerts?.map((a) => [a.id, a.severity])).toEqual([
-      ['combat:hex', 'bad'],
-      ['combat:assault', 'warn'],
-    ]);
+    expect(threats?.alerts?.map((a) => [a.id, a.severity])).toEqual([['threats', 'bad']]);
+    expect(threats?.alerts?.[0].reason).toBe('Ward below cap');
   });
 
-  it('omits the hex section until hexes unlock', () => {
+  // The section arrives with the assault and gains the hex later, so between the
+  // two unlocks it is the assault alone — one dot, not a placeholder for two.
+  it('carries only the assault dot until hexes unlock', () => {
     const s = armed();
     s.level = ASSAULT.unlockLevel; // combat live, hex not yet
-    const ids = getNavSections(s).map((sec) => sec.id);
-    expect(ids).toContain('combat:assault');
-    expect(ids).not.toContain('combat:hex');
+    const threats = getNavSections(s).find((sec) => sec.id === 'threats');
+    expect(threats).toBeTruthy();
+    expect(threats?.dots.map((d) => d.id)).toEqual(['defense']);
   });
 });
 

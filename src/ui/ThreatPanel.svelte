@@ -129,7 +129,10 @@
 </script>
 
 {#if unlocked}
-  <section class="panel" data-nav="combat:{track}" style:--track-accent={ui.accent}>
+  <!-- Both tracks answer to the one `threats` nav section, so both panels carry
+       that anchor: the rail button jumps to whichever comes first (the assault),
+       and the scroll-spy keeps the button lit across both. -->
+  <section class="panel" data-nav="threats" style:--track-accent={ui.accent}>
     <div class="chead">
       <h2>
         <ui.icon size={22} color={ui.accent} aria-hidden="true" />

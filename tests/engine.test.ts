@@ -29,6 +29,8 @@ import {
   canTrainWorker,
   getNetProductionRate,
   getLiveNetProductionRate,
+  getResourceStatus,
+  canStartCycle,
   canSell,
   getSellOffer,
   isRateUnlocked,
@@ -698,6 +700,114 @@ describe('net production rate — live vs nominal', () => {
 
     // 20 − 100 = −80/s; at cap but a real deficit, so it shows negative.
     expect(getLiveNetProductionRate(s, 'wood').toNumber()).toBe(-80);
+  });
+});
+
+// The four states behind the nav's status dots. Shares canStartCycle's input
+// gate but deliberately parts company with it at storage cap.
+describe('resource status', () => {
+  it('reads producing when staffed and fed, idle when unstaffed', () => {
+    const s = createInitialState(0);
+    s.workers.trained = 5;
+
+    expect(getResourceStatus(s, 'wood')).toBe('idle');
+    s.workers.assigned.wood = 2;
+    expect(getResourceStatus(s, 'wood')).toBe('producing');
+  });
+
+  // A gathering line has no inputs, so it can never starve — staffed is enough.
+  it('reads producing for an input-less line with an empty store', () => {
+    const s = createInitialState(0);
+    s.workers.trained = 5;
+    s.workers.assigned.wood = 2;
+    s.resources.wood.amount = D(0);
+
+    expect(getResourceStatus(s, 'wood')).toBe('producing');
+  });
+
+  it('reads starved when staffed but missing an ingredient', () => {
+    const s = createInitialState(0);
+    s.level = 9;
+    s.workers.trained = 100;
+    s.buildings.hunterscabin.level = 6;
+    s.workers.assigned.spear = 4; // eats wood and stone
+    s.resources.wood.amount = D(5000);
+    s.resources.stone.amount = D(0);
+
+    expect(getResourceStatus(s, 'spear')).toBe('starved');
+    s.resources.stone.amount = D(5000);
+    expect(getResourceStatus(s, 'spear')).toBe('producing');
+  });
+
+  // The one place this parts from canStartCycle: that returns false at cap, but
+  // a full store is not a problem to fix, so the dot stays green.
+  it('reads producing, not starved, when the store is full', () => {
+    const s = createInitialState(0);
+    s.workers.trained = 5;
+    s.workers.assigned.wood = 2;
+    s.resources.wood.amount = getCapacity(s, 'wood')!;
+
+    expect(canStartCycle(s, 'wood')).toBe(false); // cap-gated
+    expect(getResourceStatus(s, 'wood')).toBe('producing'); // but healthy
+  });
+
+  // An unstaffed line is only a problem if it's holding something else up.
+  it('reads wanted when an unstaffed line starves a running consumer', () => {
+    const s = createInitialState(0);
+    s.level = 9;
+    s.workers.trained = 100;
+    s.buildings.hunterscabin.level = 6;
+    s.workers.assigned.stone = 0; // nobody mining
+    s.resources.wood.amount = D(5000);
+    s.resources.stone.amount = D(0);
+
+    // Nothing running wants stone yet: merely idle.
+    expect(getResourceStatus(s, 'stone')).toBe('idle');
+
+    // Staff the spear line, which eats stone it hasn't got.
+    s.workers.assigned.spear = 4;
+    expect(getResourceStatus(s, 'stone')).toBe('wanted');
+
+    // Fill the store and the consumer stops waiting, even though stone is
+    // still unstaffed — the dot marks a bottleneck, not an empty chair.
+    s.resources.stone.amount = D(5000);
+    expect(getResourceStatus(s, 'stone')).toBe('idle');
+  });
+
+  // Toggle lines need no special case: getLineWorkers reports a switched-on
+  // ward at its full workerCap, so it starves and demands like any staffed line.
+  it('treats a toggle line as staffed only while its switch is on', () => {
+    const s = createInitialState(0);
+    s.level = 9;
+    s.workers.trained = 100;
+    s.buildings.wizardtower.level = 6;
+    s.buildings.barracks.level = 5;
+    s.resources.mage.amount = D(0);
+    s.resources.trollskull.amount = D(0);
+
+    // Switched off: unmanned, and nothing running is short of mages.
+    setAutomation(s, 'ward', false);
+    expect(getResourceStatus(s, 'ward')).toBe('idle');
+    expect(getResourceStatus(s, 'mage')).toBe('idle');
+
+    // Switched on with an empty store: the ward itself is starved, and the
+    // unstaffed mage line is now the bottleneck holding it up.
+    setAutomation(s, 'ward', true);
+    expect(getResourceStatus(s, 'ward')).toBe('starved');
+    expect(getResourceStatus(s, 'mage')).toBe('wanted');
+  });
+
+  // Honor and wisdom are won in combat, never produced — no line, no dot.
+  it('returns null for a resource with no producer', () => {
+    const s = createInitialState(0);
+    expect(getResourceStatus(s, 'honor')).toBeNull();
+    expect(getResourceStatus(s, 'wisdom')).toBeNull();
+  });
+
+  it('returns null for a locked resource', () => {
+    const s = createInitialState(0);
+    expect(isResourceUnlocked(s, 'iron')).toBe(false);
+    expect(getResourceStatus(s, 'iron')).toBeNull();
   });
 });
 

@@ -15,6 +15,7 @@
   import WelcomeBack from './ui/WelcomeBack.svelte';
   import MainTabs from './ui/MainTabs.svelte';
   import AlertFlyout from './ui/AlertFlyout.svelte';
+  import StatusDots from './ui/StatusDots.svelte';
   import Toasts from './ui/Toasts.svelte';
   import {
     getNavSections,
@@ -527,6 +528,7 @@
               {#if s.count > 0}
                 <span class="count-badge" aria-hidden="true">{s.count}</span>
               {/if}
+              <StatusDots dots={s.dots} />
             </button>
           {/each}
         </div>
@@ -682,6 +684,12 @@
     flex: 0 0 auto;
     width: 44px;
     height: 44px;
+    /* The glyph rides up a little to clear the status strip on the bottom edge,
+       keeping it optically centred between the count badge and the dots rather
+       than sitting on top of them. Padding, not a transform, so the absolutely
+       positioned corner pieces are unaffected. */
+    padding-bottom: 7px;
+    box-sizing: border-box;
     background: var(--bg-panel);
     border: var(--panel-border);
     border-radius: var(--panel-radius);
@@ -753,10 +761,13 @@
       animation: none;
     }
   }
-  /* Worker count: just the number, tucked in the icon's bottom-left corner. */
+  /* Worker count: just the number, tucked in the icon's top-left corner. It sat
+     bottom-left until the status strip claimed that edge; moving it up also
+     pairs it with the alert dot opposite, leaving the whole bottom of the tile
+     to one row of dots. */
   .count-badge {
     position: absolute;
-    bottom: 2px;
+    top: 2px;
     left: 4px;
     font-size: 10px;
     font-weight: 700;
