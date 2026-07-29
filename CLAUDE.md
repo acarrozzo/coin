@@ -116,7 +116,16 @@ Tests live in [tests/](tests/): `engine`, `combat`, `ui`, `integration`, `smoke`
   `floor(n²/2)` cost curve) + `bonus` (bought with arrows in the Shop), minus
   what's `assigned` per line. A line's max staff comes from its `workerCap`:
   `'pool'` (whole pool), `'level'` (gating structure's level), or a fixed number
-  (single-slot converters like defense/ward/quests use `1`).
+  (single-slot converters like the quest items use `1`).
+- **Toggle lines.** A producer with `staffing: 'toggle'` (today `defense` and
+  `ward`) isn't staffed at all — it's an on/off "auto-replenish" switch held in
+  `state.automation`, costing **no** worker. While on it runs at `workerCap`
+  staffing, so its inputs, cycle and output are exactly a fully staffed line's;
+  while off it makes nothing and its cycle progress is dropped. Everything that
+  cares about staffing reads **`getLineWorkers`**, never `workers.assigned`
+  directly — that selector is the one seam between the two models. Marking
+  another line `staffing: 'toggle'` is a data edit: state seeds its flag and
+  both `ProducerRow` and `ResourcePanel` render its switch.
 - **Caps.** wood/stone/food caps come from the current settlement tier;
   defense/ward/coin caps come from the Castle / Wizard Tower / Bank level
   (`getCapacity`). Uncapped resources return `null`.
@@ -135,7 +144,8 @@ Tests live in [tests/](tests/): `engine`, `combat`, `ui`, `integration`, `smoke`
   `attackPower = basePower × growth^wave`. Meet it → repelled, +1 reward, wave
   escalates. Fall short → lose `lossAmount` of the stat (core resources looted if
   it hits 0) and the attacker **resets to wave 0**. Defense/ward are capped by
-  building level, so waves eventually outgrow your walls until you upgrade.
+  building level, so waves eventually outgrow your walls until you upgrade. Both
+  stats are auto-replenish toggle lines (see Toggle lines above), not staffed.
 - **Prestige is a full run reset.** Available from settlement level 6, and from
   then on to anyone who has ever prestiged — the zone must not vanish when it
   drops them back to level 0. Each tier in

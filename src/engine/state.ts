@@ -1,12 +1,13 @@
 import { Decimal, D } from './numbers';
 import { RESOURCE_IDS, type ResourceId } from '../content/resources';
 import { BUILDING_IDS, type BuildingId } from '../content/buildings';
+import { TOGGLE_PRODUCER_IDS } from '../content/producers';
 import { ASSAULT, HEX } from '../content/combat';
 
 export type { ResourceId, BuildingId };
 
 /** Bumped whenever the save shape changes; drives migrations (see save.ts). */
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 
 /** Trained workers the player starts with. */
 export const STARTING_WORKERS = 0;
@@ -44,6 +45,13 @@ export interface GameState {
   production: {
     progress: Record<ResourceId, number>;
   };
+  /**
+   * On/off switches for the lines with `staffing: 'toggle'` (defense, ward).
+   * These run without spending a worker, so their "staffing" can't live in
+   * `workers.assigned` — a switched-on line must not draw down the pool. Keyed
+   * by the line's output resource, one entry per TOGGLE_PRODUCER_IDS.
+   */
+  automation: Partial<Record<ResourceId, boolean>>;
   combat: {
     /** Assault track: seconds to next attack, current wave, and tallies. */
     assault: ThreatState;
@@ -105,6 +113,13 @@ export function createInitialState(now: number): GameState {
     progress[id] = 0;
   }
 
+  // Toggle lines start off — the player switches auto-replenish on when they
+  // want it, the same way every other line starts unstaffed.
+  const automation: Partial<Record<ResourceId, boolean>> = {};
+  for (const id of TOGGLE_PRODUCER_IDS) {
+    automation[id] = false;
+  }
+
   const buildings = {} as Record<BuildingId, { level: number }>;
   for (const id of BUILDING_IDS) {
     buildings[id] = { level: 0 };
@@ -120,6 +135,7 @@ export function createInitialState(now: number): GameState {
     workers: { trained: STARTING_WORKERS, bonus: 0, assigned },
     buildings,
     production: { progress },
+    automation,
     combat: {
       assault: { timer: ASSAULT.intervalSeconds, wave: 0, wins: 0, losses: 0 },
       hex: { timer: HEX.intervalSeconds, wave: 0, wins: 0, losses: 0 },

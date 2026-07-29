@@ -23,6 +23,15 @@ export type StructureId = 'settlement' | BuildingId;
  */
 export type WorkerCap = 'pool' | 'level' | number;
 
+/**
+ * How a line is manned:
+ * - 'workers' (default): the player assigns workers out of the shared pool.
+ * - 'toggle': a single on/off switch — no worker is spent. While on, the line
+ *   runs at exactly `workerCap` staffing, so its inputs and rate are unchanged.
+ *   Used by the two combat stats, which are maintenance rather than labour.
+ */
+export type Staffing = 'workers' | 'toggle';
+
 export interface ProducerDef {
   output: ResourceId;
   category: ResourceCategory;
@@ -31,6 +40,8 @@ export interface ProducerDef {
   /** Structure level at which this line unlocks. */
   minLevel: number;
   workerCap: WorkerCap;
+  /** Defaults to 'workers'; see Staffing. */
+  staffing?: Staffing;
   /** Output produced per cycle per worker. */
   outputPerCycle: number;
   /** Seconds per production cycle. */
@@ -233,6 +244,7 @@ export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
     structure: 'wizardtower',
     minLevel: 1,
     workerCap: 1,
+    staffing: 'toggle',
     outputPerCycle: 1,
     cycleSeconds: 5,
     inputs: { mage: 1, trollskull: 10 },
@@ -307,6 +319,7 @@ export const PRODUCERS: Partial<Record<ResourceId, ProducerDef>> = {
     structure: 'castle',
     minLevel: 1,
     workerCap: 1,
+    staffing: 'toggle',
     outputPerCycle: 1,
     cycleSeconds: 1,
     inputs: { archer: 1 },
@@ -383,6 +396,20 @@ export const PRODUCER_INPUTS: Record<ResourceId, readonly (readonly [ResourceId,
       return [id, inputs ? (Object.entries(inputs) as [ResourceId, number][]) : NO_INPUTS];
     }),
   ) as Record<ResourceId, readonly (readonly [ResourceId, number])[]>;
+
+/**
+ * Lines manned by an on/off switch instead of workers (`staffing: 'toggle'`).
+ * Derived, not hand-listed: marking another line as a toggle in the table above
+ * is all it takes — state seeds a flag for it and the UI renders its switch.
+ */
+export const TOGGLE_PRODUCER_IDS: readonly ResourceId[] = PRODUCER_IDS.filter(
+  (id) => PRODUCERS[id]?.staffing === 'toggle',
+);
+
+const TOGGLE_PRODUCER_SET = new Set<ResourceId>(TOGGLE_PRODUCER_IDS);
+
+/** Whether a line is switched on/off rather than staffed with workers. */
+export const isToggleProducer = (id: ResourceId): boolean => TOGGLE_PRODUCER_SET.has(id);
 
 /** One line's draw on a resource: how much it eats per worker per cycle. */
 export interface ConsumerRef {

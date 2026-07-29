@@ -2,7 +2,7 @@ import { D, Decimal } from './numbers';
 import { createInitialState, SAVE_VERSION, type GameState } from './state';
 import { RESOURCE_IDS, type ResourceId } from '../content/resources';
 import { BUILDING_IDS } from '../content/buildings';
-import { isFractionalResource } from '../content/producers';
+import { isFractionalResource, isToggleProducer, TOGGLE_PRODUCER_IDS } from '../content/producers';
 import { SELLABLE_RESOURCES, WORKER_CONTRACT_IDS, MAX_COIN_EARNED } from '../content/market';
 import { MAX_PRESTIGE } from '../content/prestige';
 
@@ -138,6 +138,16 @@ const migrations: Record<number, (data: RawSave) => RawSave> = {
   // an existing player has simply never prestiged, and the missing field falls
   // back to `{ level: 0 }` in deserialize.
   9: (data) => ({ ...data, version: 10 }),
+  // v10 → v11 (auto-replenish): defense/ward became on/off toggles instead of
+  // worker-staffed lines. Hand any worker parked on them back to the pool; the
+  // new `automation` block is absent and falls back to all-off in deserialize.
+  10: (data) => {
+    const workers = data.workers as { assigned?: Record<string, unknown> } | undefined;
+    if (workers?.assigned) {
+      for (const id of TOGGLE_PRODUCER_IDS) delete workers.assigned[id];
+    }
+    return { ...data, version: 11 };
+  },
 };
 
 function migrate(data: RawSave): RawSave {
@@ -168,6 +178,7 @@ export function serialize(state: GameState): string {
     level: state.level,
     resources,
     workers: state.workers,
+    automation: state.automation,
     buildings: state.buildings,
     combat: state.combat,
     market: {
@@ -221,9 +232,20 @@ export function deserialize(raw: string, now: number): GameState {
     if (typeof workers.bonus === 'number') state.workers.bonus = workers.bonus;
     if (workers.assigned) {
       for (const id of RESOURCE_IDS) {
+        // Toggle lines are never staffed; a stray count from an edited save
+        // would otherwise lock workers out of the pool for good.
+        if (isToggleProducer(id)) continue;
         const a = workers.assigned[id];
         if (typeof a === 'number') state.workers.assigned[id] = a;
       }
+    }
+  }
+
+  const automation = data.automation as Record<string, unknown> | undefined;
+  if (automation) {
+    for (const id of TOGGLE_PRODUCER_IDS) {
+      const on = automation[id];
+      if (typeof on === 'boolean') state.automation[id] = on;
     }
   }
 

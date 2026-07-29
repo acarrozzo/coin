@@ -1,15 +1,17 @@
 <script lang="ts">
   import { game } from './gameStore.svelte';
   import { RESOURCES, type ResourceId } from '../content/resources';
-  import { PRODUCERS } from '../content/producers';
+  import { PRODUCERS, isToggleProducer } from '../content/producers';
   import {
     canStartCycle,
     getAvailableWorkers,
     getMaxWorkers,
     getCapacity,
+    getLineWorkers,
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate } from '../engine/numbers';
   import { RESOURCE_ICON } from './resourceIcons';
+  import AutoToggle from './AutoToggle.svelte';
   import { nav, jumpToResource } from './nav.svelte';
 
   interface Props {
@@ -23,7 +25,11 @@
   const available = $derived(getAvailableWorkers(gs));
 
   const Icon = $derived(RESOURCE_ICON[id]);
-  const assigned = $derived(gs.workers.assigned[id]);
+  // Toggle lines (defense, ward) run at full staffing while switched on and
+  // spend no worker, so the row's rate/starvation maths reads the effective
+  // staffing rather than the (always 0) assigned count.
+  const isToggle = $derived(isToggleProducer(id));
+  const assigned = $derived(getLineWorkers(gs, id));
   const maxWorkers = $derived(getMaxWorkers(gs, id));
   const showMax = $derived(PRODUCERS[id]?.workerCap === 'level' || PRODUCERS[id]?.workerCap === 1);
   const cycleSeconds = $derived(PRODUCERS[id]?.cycleSeconds ?? 1);
@@ -75,19 +81,23 @@
   </span>
 
   <div class="workers">
-    <button
-      onclick={() => game.assign(id, -1)}
-      disabled={assigned === 0}
-      aria-label="Remove worker from {RESOURCES[id].name}">−</button
-    >
-    <span class="count"
-      >{assigned}{#if showMax}/{maxWorkers}{/if}</span
-    >
-    <button
-      onclick={() => game.assign(id, 1)}
-      disabled={available <= 0 || assigned >= maxWorkers}
-      aria-label="Add worker to {RESOURCES[id].name}">+</button
-    >
+    {#if isToggle}
+      <AutoToggle {id} />
+    {:else}
+      <button
+        onclick={() => game.assign(id, -1)}
+        disabled={assigned === 0}
+        aria-label="Remove worker from {RESOURCES[id].name}">−</button
+      >
+      <span class="count"
+        >{assigned}{#if showMax}/{maxWorkers}{/if}</span
+      >
+      <button
+        onclick={() => game.assign(id, 1)}
+        disabled={available <= 0 || assigned >= maxWorkers}
+        aria-label="Add worker to {RESOURCES[id].name}">+</button
+      >
+    {/if}
   </div>
 
   <div class="trail">
@@ -277,6 +287,8 @@
     opacity: 0.35;
     cursor: not-allowed;
   }
+  /* A toggle line has no worker count to show: the whole workers cell is one
+     AutoToggle, which carries its own styling. */
   /* Rate and cost share one wrapping cell: rate pinned left, cost pinned right
      (margin-left:auto). When they can't both fit on one line the cost wraps
      onto the next line instead of the two colliding — responsive at any width,

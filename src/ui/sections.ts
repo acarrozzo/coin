@@ -30,6 +30,8 @@ import {
   getTotalWorkers,
   threatSupplyGaps,
   threatInputGaps,
+  getThreatDemands,
+  type ThreatStat,
   getStructureLevel,
   hasMarketOpportunity,
   countMarketOpportunities,
@@ -252,16 +254,16 @@ function settlementAlert(gs: GameState): Alert | null {
  * What it does report is the three things you can act on, worst first:
  *
  *   red    the line is BLOCKED — you lack the archers/mages/skulls it consumes,
- *          so no amount of staffing produces anything
+ *          so no amount of switching it on produces anything
  *   red    the stat is below its cap — you are not as defended as you could be
- *   amber  the line is simply unstaffed, with everything else in order
+ *   amber  auto-replenish is simply off, with everything else in order
  *
- * Quiet at cap with the line staffed: the converter is idle by design there, so
- * missing inputs aren't yet a problem worth raising.
+ * Quiet at cap with the line switched on: the converter is idle by design
+ * there, so missing inputs aren't yet a problem worth raising.
  */
-function threatAlert(gs: GameState, stat: 'defense' | 'ward'): Alert | null {
-  const { belowCap, understaffed } = threatSupplyGaps(gs, stat);
-  if (!belowCap && !understaffed) return null;
+function threatAlert(gs: GameState, stat: ThreatStat): Alert | null {
+  const { belowCap, off } = threatSupplyGaps(gs, stat);
+  if (!belowCap && !off) return null;
 
   const name = RESOURCES[stat].name;
 
@@ -269,19 +271,67 @@ function threatAlert(gs: GameState, stat: 'defense' | 'ward'): Alert | null {
   // them pointless.
   const missing = threatInputGaps(gs, stat);
   if (missing.length > 0) {
-    const names = missing.map((id) => RESOURCES[id].name);
-    const list =
-      names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
-    return { severity: 'bad', reason: `No ${list} to raise ${name}` };
+    return { severity: 'bad', reason: `No ${nameList(missing)} to raise ${name}` };
   }
 
   if (belowCap) {
     return {
       severity: 'bad',
-      reason: understaffed ? `${name} below cap, line unstaffed` : `${name} below cap`,
+      reason: off ? `${name} below cap, auto-replenish off` : `${name} below cap`,
     };
   }
-  return { severity: 'warn', reason: `${name} line unstaffed` };
+  return { severity: 'warn', reason: `${name} auto-replenish off` };
+}
+
+/** "Archer", "Mage and Troll Skull" — resource names as a spoken list. */
+function nameList(ids: ResourceId[]): string {
+  const names = ids.map((id) => RESOURCES[id].name);
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
+}
+
+/**
+ * A structure card whose own output is what a threat track is starved of.
+ *
+ * The Threats tab already says "No Archer to raise Defense" — but that dot is
+ * on the panel you're not looking at, and archers are made three tabs away in
+ * the Barracks. So the same shortage is raised a second time, at the place you
+ * would actually go to fix it: this is the card that can end the shortage.
+ *
+ * Red, like the threat-side alert: while it stands, your walls cannot be rebuilt
+ * at all.
+ */
+function threatDemandAlert(gs: GameState, ids: ResourceId[]): Alert | null {
+  const demands = getThreatDemands(gs);
+
+  // Grouped by the stat waiting, so one card short of two tracks' inputs reads
+  // as two clauses rather than an undifferentiated pile of resource names.
+  const byStat = new Map<ThreatStat, ResourceId[]>();
+  for (const id of ids) {
+    for (const stat of demands[id] ?? []) {
+      const list = byStat.get(stat) ?? [];
+      list.push(id);
+      byStat.set(stat, list);
+    }
+  }
+  if (byStat.size === 0) return null;
+
+  const reason = [...byStat]
+    .map(([stat, needed]) => `${nameList(needed)} needed to raise ${RESOURCES[stat].name}`)
+    .join('; ');
+  return { severity: 'bad', reason };
+}
+
+/**
+ * The most severe of several alerts, or null if there are none. A section shows
+ * one dot, so when a card can both be upgraded and is holding up your defenses,
+ * the danger is what it reports.
+ */
+function worstAlert(...alerts: (Alert | null)[]): Alert | null {
+  let worst: Alert | null = null;
+  for (const a of alerts) {
+    if (a && (!worst || SEVERITY_RANK[a.severity] > SEVERITY_RANK[worst.severity])) worst = a;
+  }
+  return worst;
 }
 
 /** An affordable build or upgrade on a structure card. */
@@ -336,12 +386,16 @@ export function getNavSections(gs: GameState): NavSection[] {
   // rail buttons — each flags only its own supply problem, so the player knows
   // which one to feed. Splitting them off Settlement also stops an amber
   // under-supplied warning being masked by a gold "you can upgrade" dot.
+  //
+  // Both carry a worker count of 0: their lines are auto-replenish switches
+  // that spend no worker, so there is nothing to badge here. Their alert dot
+  // reports whether the switch is on.
   if (isCombatUnlocked(gs)) {
     sections.push({
       id: 'combat:assault',
       label: 'Assault',
       icon: Swords,
-      count: gs.workers.assigned.defense ?? 0,
+      count: 0,
       alert: threatAlert(gs, 'defense'),
       tab: 'threats',
     });
@@ -352,7 +406,7 @@ export function getNavSections(gs: GameState): NavSection[] {
       id: 'combat:hex',
       label: 'Hex',
       icon: Skull,
-      count: gs.workers.assigned.ward ?? 0,
+      count: 0,
       alert: threatAlert(gs, 'ward'),
       tab: 'threats',
     });
@@ -364,7 +418,8 @@ export function getNavSections(gs: GameState): NavSection[] {
       label: g.label,
       icon: g.icon,
       count: g.ids.reduce((n, id) => n + (gs.workers.assigned[id] ?? 0), 0),
-      alert: buildAlert(gs, g.building),
+      // A shortage holding up a threat track outranks an affordable upgrade.
+      alert: worstAlert(threatDemandAlert(gs, g.ids), buildAlert(gs, g.building)),
       tab: g.tab,
     });
   }

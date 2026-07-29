@@ -21,6 +21,7 @@ import {
 } from '../engine/save';
 import {
   assignWorker,
+  setAutomation,
   trainWorker,
   sellResource,
   buyRateUnlock,
@@ -229,6 +230,11 @@ function createGameStore() {
     },
     assign(id: ResourceId, delta: number): void {
       assignWorker(state, id, delta);
+    },
+    /** Flip a toggle line's auto-replenish (defense, ward). Persisted at once —
+        it's a standing setting, not something to lose to a crash mid-autosave. */
+    setAuto(id: ResourceId, on: boolean): void {
+      if (setAutomation(state, id, on)) persist();
     },
     train(): void {
       if (trainWorker(state)) {

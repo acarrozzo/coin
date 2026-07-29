@@ -1,6 +1,6 @@
 import { D, type Decimal } from '../engine/numbers';
 import type { GameState, ResourceId } from '../engine/state';
-import { getCapacity, canStartCycle } from '../engine/selectors';
+import { getCapacity, canStartCycle, getLineWorkers } from '../engine/selectors';
 import { PRODUCERS, PRODUCER_IDS, PRODUCER_INPUTS } from '../content/producers';
 
 /** Notified with each completed cycle's output — see tick's `onGain`. */
@@ -27,10 +27,10 @@ export function runProduction(state: GameState, dt: number, onGain?: GainHandler
   for (const id of PRODUCER_IDS) {
     const p = PRODUCERS[id];
     if (!p) continue;
-    const workers = state.workers.assigned[id];
+    const workers = getLineWorkers(state, id);
     const cs = p.cycleSeconds;
 
-    // An unstaffed (or locked) line holds no progress.
+    // An unstaffed (or switched-off, or locked) line holds no progress.
     if (workers <= 0) {
       state.production.progress[id] = 0;
       continue;

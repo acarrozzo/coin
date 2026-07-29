@@ -2,7 +2,13 @@ import { Decimal, D } from './numbers';
 import type { GameState, ResourceId, BuildingId } from './state';
 import { RESOURCE_IDS, isConsumableResource } from '../content/resources';
 import { BUILDINGS } from '../content/buildings';
-import { PRODUCERS, PRODUCER_INPUTS, getConsumers, type StructureId } from '../content/producers';
+import {
+  PRODUCERS,
+  PRODUCER_INPUTS,
+  getConsumers,
+  isToggleProducer,
+  type StructureId,
+} from '../content/producers';
 import { getTier, SETTLEMENT_TIERS, type ResourceCost } from '../content/settlement';
 import { ASSAULT, HEX, type ThreatConfig } from '../content/combat';
 import {
@@ -96,6 +102,25 @@ export function isStorageFull(state: GameState, id: ResourceId): boolean {
 }
 
 /**
+ * The staffing a line is actually running at — the single number production and
+ * every rate selector work from.
+ *
+ * For a normal line that's its assigned workers. For a toggle line (defense,
+ * ward) it's `workerCap` while the switch is on and 0 while it's off: no worker
+ * is spent, but the line otherwise behaves exactly as a fully staffed one, so
+ * its inputs, cycle and output are unchanged.
+ */
+export function getLineWorkers(state: GameState, id: ResourceId): number {
+  if (!isToggleProducer(id)) return state.workers.assigned[id];
+  return state.automation[id] ? getMaxWorkers(state, id) : 0;
+}
+
+/** Whether a toggle line's auto-replenish switch is on. */
+export function isAutomationOn(state: GameState, id: ResourceId): boolean {
+  return isToggleProducer(id) && state.automation[id] === true;
+}
+
+/**
  * Whether a production line may BEGIN a fresh cycle right now.
  *
  * Two gates, both checked only at cycle start (the atomic model):
@@ -111,7 +136,7 @@ export function isStorageFull(state: GameState, id: ResourceId): boolean {
 export function canStartCycle(state: GameState, id: ResourceId): boolean {
   const p = PRODUCERS[id];
   if (!p) return false;
-  const workers = state.workers.assigned[id];
+  const workers = getLineWorkers(state, id);
   if (workers <= 0 || !isResourceUnlocked(state, id)) return false;
 
   const cap = getCapacity(state, id);
@@ -128,7 +153,7 @@ export function getProductionRate(state: GameState, id: ResourceId): Decimal {
   const p = PRODUCERS[id];
   if (!p || !isResourceUnlocked(state, id)) return D(0);
   const perWorker = p.outputPerCycle / p.cycleSeconds;
-  return D(state.workers.assigned[id]).times(perWorker);
+  return D(getLineWorkers(state, id)).times(perWorker);
 }
 
 /**
@@ -142,7 +167,7 @@ export function getProductionRate(state: GameState, id: ResourceId): Decimal {
 export function getNetProductionRate(state: GameState, id: ResourceId): Decimal {
   let rate = getProductionRate(state, id);
   for (const c of getConsumers(id)) {
-    const workers = state.workers.assigned[c.id];
+    const workers = getLineWorkers(state, c.id);
     if (workers <= 0) continue;
     rate = rate.minus(D(workers).times(c.qty).div(c.cycleSeconds));
   }
@@ -165,7 +190,7 @@ export function getNetProductionRate(state: GameState, id: ResourceId): Decimal 
 export function getLiveNetProductionRate(state: GameState, id: ResourceId): Decimal {
   let rate = getProductionRate(state, id);
   for (const c of getConsumers(id)) {
-    const workers = state.workers.assigned[c.id];
+    const workers = getLineWorkers(state, c.id);
     if (workers <= 0 || !canStartCycle(state, c.id)) continue;
     rate = rate.minus(D(workers).times(c.qty).div(c.cycleSeconds));
   }
@@ -336,42 +361,43 @@ export function willBreakHex(state: GameState): boolean {
 
 /**
  * Does a threat track need supplying? True when its stat sits below the cap its
- * building allows, or when its line isn't fully staffed — either way the player
- * has slack to take up. A cap of 0 (building not yet raised) returns false:
- * there's nothing actionable on the line until the structure exists.
+ * building allows, or when its auto-replenish is switched off — either way the
+ * player has slack to take up. A cap of 0 (building not yet raised) returns
+ * false: there's nothing actionable on the line until the structure exists.
  */
 export function needsThreatSupply(state: GameState, stat: 'defense' | 'ward'): boolean {
   const gaps = threatSupplyGaps(state, stat);
-  return gaps.belowCap || gaps.understaffed;
+  return gaps.belowCap || gaps.off;
 }
 
 /**
  * The two separate reasons a threat track can be under-supplied. Split out
- * because they call for different actions — feed the stat, or staff the line —
- * and the alert dots name which one is actually wrong.
+ * because they call for different actions — feed the stat, or switch the line
+ * on — and the alert dots name which one is actually wrong.
  */
 export function threatSupplyGaps(
   state: GameState,
   stat: 'defense' | 'ward',
-): { belowCap: boolean; understaffed: boolean } {
+): { belowCap: boolean; off: boolean } {
   const cap = getCapacity(state, stat);
   // A cap of 0 (building not yet raised) means nothing is actionable yet.
-  if (cap === null || cap.lte(0)) return { belowCap: false, understaffed: false };
+  if (cap === null || cap.lte(0)) return { belowCap: false, off: false };
   return {
     belowCap: state.resources[stat].amount.lt(cap),
-    understaffed: (state.workers.assigned[stat] ?? 0) < getMaxWorkers(state, stat),
+    off: !isAutomationOn(state, stat),
   };
 }
 
 /**
- * The inputs a threat line couldn't cover at FULL staffing — the things you'd
- * have to make before putting anyone on it would achieve anything. Defense is
- * built from archers, ward from mages and troll skulls; without them the line
- * is blocked however well staffed it is.
+ * The inputs a threat line couldn't cover when running — the things you'd have
+ * to make before switching it on would achieve anything. Defense is built from
+ * archers, ward from mages and troll skulls; without them the line is blocked
+ * however it's switched.
  *
- * Deliberately measured against getMaxWorkers rather than current staffing: an
- * empty line with no archers should report the archers, not the empty slot, or
- * you fix the staffing and only then discover the real problem.
+ * Deliberately measured against getMaxWorkers (a toggle line's running
+ * staffing) rather than what it's doing right now: a switched-off line with no
+ * archers should report the archers, not the switch, or you flip it on and only
+ * then discover the real problem.
  *
  * Empty before the capping building exists — nothing on this track is
  * actionable until there's somewhere to put the stat.
@@ -384,6 +410,39 @@ export function threatInputGaps(state: GameState, stat: 'defense' | 'ward'): Res
   return PRODUCER_INPUTS[stat]
     .filter(([rid, qty]) => state.resources[rid].amount.lt(workers * qty))
     .map(([rid]) => rid);
+}
+
+/** The two threat stats, in track order. */
+export type ThreatStat = 'defense' | 'ward';
+
+/**
+ * The inverse of threatInputGaps: for each resource a *live* threat track is
+ * short of, which stats are waiting on it — `{ archer: ['defense'] }`.
+ *
+ * threatInputGaps answers "what is this track missing?", which is the right
+ * question on the Threats tab. This answers "who is waiting on this resource?",
+ * which is the question everywhere else: it's what lets the Barracks card flag
+ * that its archers are holding up your walls, rather than the player having to
+ * already be looking at the Assault panel to find that out.
+ *
+ * Only unlocked tracks count, and only ones that actually need supplying right
+ * now — the same gate threatAlert uses. A track sitting at its cap with
+ * auto-replenish on is fine with an empty barracks, and nagging for archers it
+ * has no use for would make the mark mean nothing.
+ */
+export function getThreatDemands(state: GameState): Partial<Record<ResourceId, ThreatStat[]>> {
+  const demands: Partial<Record<ResourceId, ThreatStat[]>> = {};
+  const live: ThreatStat[] = [];
+  if (isCombatUnlocked(state)) live.push('defense');
+  if (isHexUnlocked(state)) live.push('ward');
+
+  for (const stat of live) {
+    if (!needsThreatSupply(state, stat)) continue;
+    for (const id of threatInputGaps(state, stat)) {
+      (demands[id] ??= []).push(stat);
+    }
+  }
+  return demands;
 }
 
 // ---------- Market ----------

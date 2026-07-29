@@ -2,7 +2,7 @@
   import { fly } from 'svelte/transition';
   import { game } from './gameStore.svelte';
   import { RESOURCES, type ResourceId } from '../content/resources';
-  import { PRODUCERS, resourceDecimals } from '../content/producers';
+  import { PRODUCERS, isToggleProducer, resourceDecimals } from '../content/producers';
   import { BUILDINGS } from '../content/buildings';
   import type { BuildingId } from '../engine/state';
   import type { ResourceCost } from '../content/settlement';
@@ -19,9 +19,14 @@
     isRateUnlocked,
     isStorageFull,
     splitCost,
+    getLineWorkers,
+    getThreatDemands,
   } from '../engine/selectors';
   import { formatNumber, formatCycleRate, formatSignedRate } from '../engine/numbers';
   import { RESOURCE_ICON } from './resourceIcons';
+  import AutoToggle from './AutoToggle.svelte';
+  import AlertAnchor from './AlertAnchor.svelte';
+  import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
   import { getGroupsForTab, type TabId } from './sections';
   import { nav, jumpToResource } from './nav.svelte';
 
@@ -36,6 +41,16 @@
 
   const groups = $derived(getGroupsForTab(gs, tab));
 
+  // Which of these resources a threat track is currently starved of. The rail
+  // and tab dots carry this too (see sections.ts); the row marker is what tells
+  // you WHICH line on the card is the one holding your walls up.
+  const threatDemands = $derived(getThreatDemands(gs));
+
+  function demandReason(ids: ResourceId[]): string {
+    const names = ids.map((id) => RESOURCES[id].name);
+    return `Needed to raise ${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]} — that line is blocked until you have some.`;
+  }
+
   function inputEntries(id: ResourceId) {
     return Object.entries(PRODUCERS[id]?.inputs ?? {}) as [ResourceId, number][];
   }
@@ -49,9 +64,10 @@
 
   // A crafting line with workers that can't muster a full batch of some input
   // (needs workers × qty of every ingredient, all-or-nothing) is "starved".
+  // Reads effective staffing, so a switched-on toggle line counts as manned.
   function starvedInput(id: ResourceId): ResourceId | null {
     const p = PRODUCERS[id];
-    const workers = gs.workers.assigned[id];
+    const workers = getLineWorkers(gs, id);
     if (!p?.inputs || workers === 0) return null;
     for (const [rid, qty] of Object.entries(p.inputs) as [ResourceId, number][]) {
       if (gs.resources[rid].amount.lt(workers * qty)) return rid;
@@ -159,7 +175,8 @@
           <div class="rows">
             {#each group.ids as id (id)}
               {@const Icon = RESOURCE_ICON[id]}
-              {@const assigned = gs.workers.assigned[id]}
+              {@const isToggle = isToggleProducer(id)}
+              {@const assigned = getLineWorkers(gs, id)}
               {@const maxWorkers = getMaxWorkers(gs, id)}
               {@const showMax = PRODUCERS[id]?.workerCap === 'level'}
               {@const starved = starvedInput(id)}
@@ -194,25 +211,48 @@
                       >MAX</span
                     >
                   {/if}
+                  <!-- This resource is what a threat track is short of: the
+                       shortage is flagged here, on the line that can end it. -->
+                  {#if threatDemands[id]?.length}
+                    {@const wanting = threatDemands[id]!}
+                    <AlertAnchor
+                      alerts={[
+                        {
+                          id: `demand:${id}`,
+                          label: RESOURCES[id].name,
+                          severity: 'bad',
+                          reason: demandReason(wanting),
+                        },
+                      ]}
+                    >
+                      <span class="needed" role="img" aria-label={demandReason(wanting)}>
+                        <TriangleAlert size={13} aria-hidden="true" />
+                      </span>
+                    </AlertAnchor>
+                  {/if}
                   {#each game.pops.filter((p) => p.id === id) as p (p.seq)}
                     <span class="pop">+{formatNumber(p.amount)}</span>
                   {/each}
                 </span>
 
                 <div class="workers">
-                  <button
-                    onclick={() => game.assign(id, -1)}
-                    disabled={assigned === 0}
-                    aria-label="Remove worker from {RESOURCES[id].name}">−</button
-                  >
-                  <span class="count"
-                    >{assigned}{#if showMax}/{maxWorkers}{/if}</span
-                  >
-                  <button
-                    onclick={() => game.assign(id, 1)}
-                    disabled={available <= 0 || assigned >= maxWorkers}
-                    aria-label="Add worker to {RESOURCES[id].name}">+</button
-                  >
+                  {#if isToggle}
+                    <AutoToggle {id} />
+                  {:else}
+                    <button
+                      onclick={() => game.assign(id, -1)}
+                      disabled={assigned === 0}
+                      aria-label="Remove worker from {RESOURCES[id].name}">−</button
+                    >
+                    <span class="count"
+                      >{assigned}{#if showMax}/{maxWorkers}{/if}</span
+                    >
+                    <button
+                      onclick={() => game.assign(id, 1)}
+                      disabled={available <= 0 || assigned >= maxWorkers}
+                      aria-label="Add worker to {RESOURCES[id].name}">+</button
+                    >
+                  {/if}
                 </div>
 
                 <div class="trail">
@@ -531,6 +571,15 @@
     letter-spacing: 0.06em;
     line-height: 1.5;
   }
+  /* "A threat track is waiting on this" — the same red the threat dots use, so
+     the mark reads as the shortage it is rather than as a row decoration. */
+  .needed {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    color: var(--bad);
+    cursor: help;
+  }
   .name {
     margin-left: 2px;
   }
@@ -759,6 +808,8 @@
   .workers button:hover:not(:disabled) {
     background: color-mix(in srgb, var(--accent) 20%, transparent);
   }
+  /* The toggle lines (defense, ward) have no worker count: their whole workers
+     cell is one AutoToggle, which carries its own styling. */
   button:disabled {
     opacity: 0.35;
     cursor: not-allowed;

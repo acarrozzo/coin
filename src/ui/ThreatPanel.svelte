@@ -58,7 +58,7 @@
     fail: string;
     rewardIcon: Component;
     rewardColor: string;
-    /** Filled into the flyout's "dedicate ___ to raise ___" line. */
+    /** The unit the line consumes — "spends ___ to raise ___" in the flyout. */
     worker: string;
     capBuilding: string;
     /**
@@ -173,8 +173,9 @@
 
 {#snippet trackDetails()}
   <p class="fly-how">
-    Dedicate {ui.worker} to raise <strong>{RESOURCES[stat].name}</strong> (up to your
-    {ui.capBuilding}'s cap).
+    Switch <strong>Auto</strong> on and this line spends {ui.worker} to raise
+    <strong>{RESOURCES[stat].name}</strong>
+    on its own (up to your {ui.capBuilding}'s cap). It costs no workers.
   </p>
   <dl class="fly-stats">
     <div>

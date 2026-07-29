@@ -11,7 +11,7 @@ import { game } from '../src/ui/gameStore.svelte';
 import { notify } from '../src/ui/notify.svelte';
 import { D } from '../src/engine/numbers';
 import { createInitialState } from '../src/engine/state';
-import { needsThreatSupply, willRepelAssault } from '../src/engine/selectors';
+import { getAvailableWorkers, needsThreatSupply, willRepelAssault } from '../src/engine/selectors';
 import { getNavSections, getTabs, FULL_MARKET_LEVEL } from '../src/ui/sections';
 import { nav } from '../src/ui/nav.svelte';
 import { ASSAULT, HEX } from '../src/content/combat';
@@ -45,6 +45,84 @@ describe('ResourcePanel (runtime)', () => {
           el?.textContent?.trim().startsWith(String(before + 1)) === true,
       ),
     ).toBeTruthy();
+  });
+
+  // Defense is a toggle line: the workers cell is one switch, and flipping it
+  // must change nothing about the worker pool.
+  it('switches defense auto-replenish on from the Castle card', async () => {
+    cleanup();
+    game.state.workers.trained = 2;
+    game.state.level = 1; // below the assault unlock, so Defense is still on its own card
+    game.state.buildings.castle.level = 1; // Quest Hall card + defense row
+    game.state.automation.defense = false;
+    render(ResourcePanel, { props: { tab: 'quests' } });
+
+    const auto = screen.getByRole('switch', { name: /Auto/ });
+    expect(auto.getAttribute('aria-checked')).toBe('false');
+    // No worker controls on this row at all.
+    expect(screen.queryByLabelText('Add worker to Defense')).toBeNull();
+
+    // Hovering the button raises the shared AlertFlyout, warning in red-dot
+    // language about what leaving it off costs. The whole button is the trigger
+    // — the handlers sit on its AlertAnchor wrapper, which is what a pointer
+    // enters. (The flyout is aria-hidden, so it's queried from the DOM.)
+    const anchor = auto.closest('.anchor')!;
+    await fireEvent.mouseEnter(anchor);
+    const flyout = document.querySelector('.flyout');
+    expect(flyout?.querySelector('.dot.bad')).toBeTruthy();
+    expect(flyout?.textContent).toMatch(/Defense/);
+    expect(flyout?.textContent).toMatch(/looted/);
+    await fireEvent.mouseLeave(anchor);
+    expect(document.querySelector('.flyout')).toBeNull();
+
+    const freeBefore = getAvailableWorkers(game.state);
+    await fireEvent.click(auto);
+
+    expect(game.state.automation.defense).toBe(true);
+    expect(game.state.workers.assigned.defense).toBe(0); // costs no worker
+    expect(getAvailableWorkers(game.state)).toBe(freeBefore); // pool untouched
+    expect((await screen.findByRole('switch', { name: /Auto/ })).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+
+    // The store is shared across this file — put the Castle back down so later
+    // tests see the tab layout they expect.
+    cleanup();
+    game.state.buildings.castle.level = 0;
+    game.state.automation.defense = false;
+  });
+
+  // The rail/tab dots say "Barracks: Archer needed to raise Defense"; landing on
+  // the card, the mark says WHICH row that was about.
+  it('marks the row a threat track is starved of, and clears it when stocked', async () => {
+    cleanup();
+    const gs = game.state;
+    gs.level = ASSAULT.unlockLevel; // assaults live, so Defense is waiting on archers
+    gs.buildings.castle.level = 1; // defense cap > 0
+    gs.buildings.barracks.level = 1; // the Archer row exists
+    gs.resources.defense.amount = D(0);
+    gs.resources.archer.amount = D(0);
+    render(ResourcePanel, { props: { tab: 'crafting' } });
+
+    const mark = document.querySelector('[data-res="archer"] .needed');
+    expect(mark).toBeTruthy();
+    expect(mark?.getAttribute('aria-label')).toMatch(/Needed to raise Defense/);
+
+    // Hovering it explains itself through the same shared flyout.
+    await fireEvent.mouseEnter(mark!.closest('.anchor')!);
+    expect(document.querySelector('.flyout')?.textContent).toMatch(/Needed to raise Defense/);
+    await fireEvent.mouseLeave(mark!.closest('.anchor')!);
+
+    // Make some archers and the mark goes away on its own.
+    gs.resources.archer.amount = D(5);
+    await tick();
+    expect(document.querySelector('[data-res="archer"] .needed')).toBeNull();
+
+    cleanup();
+    gs.level = 0;
+    gs.buildings.castle.level = 0;
+    gs.buildings.barracks.level = 0;
+    gs.resources.archer.amount = D(0);
   });
 
   it('upgrades the settlement and fires a level-up toast', async () => {
@@ -843,9 +921,10 @@ describe('content tabs (runtime)', () => {
 });
 
 // The rail's threat dots answer "is this track under-supplied?", not "will the
-// next wave land" — a full, staffed track stays quiet even when it's outmatched.
+// next wave land" — a full track with auto-replenish on stays quiet even when
+// it's outmatched.
 describe('threat supply alerts', () => {
-  /** A state with combat + hex live and both stats capped by a built structure. */
+  /** Combat + hex live, both stats capped by a built structure and auto on. */
   function armed() {
     const s = createInitialState(0);
     s.level = HEX.unlockLevel;
@@ -853,12 +932,12 @@ describe('threat supply alerts', () => {
     s.buildings.wizardtower.level = 1; // ward cap 5
     s.resources.defense.amount = D(5);
     s.resources.ward.amount = D(5);
-    s.workers.assigned.defense = 1;
-    s.workers.assigned.ward = 1;
+    s.automation.defense = true;
+    s.automation.ward = true;
     return s;
   }
 
-  it('is quiet when the stat is at cap and the line is staffed', () => {
+  it('is quiet when the stat is at cap and auto-replenish is on', () => {
     expect(needsThreatSupply(armed(), 'defense')).toBe(false);
   });
 
@@ -868,16 +947,16 @@ describe('threat supply alerts', () => {
     expect(needsThreatSupply(s, 'defense')).toBe(true);
   });
 
-  it('flags an unstaffed line even at full stat', () => {
+  it('flags a switched-off line even at full stat', () => {
     const s = armed();
-    s.workers.assigned.ward = 0;
+    s.automation.ward = false;
     expect(needsThreatSupply(s, 'ward')).toBe(true);
   });
 
   it('stays quiet before the capping building exists', () => {
     const s = armed();
     s.buildings.castle.level = 0; // cap 0 — nothing to supply yet
-    s.workers.assigned.defense = 0;
+    s.automation.defense = false;
     expect(needsThreatSupply(s, 'defense')).toBe(false);
   });
 
@@ -892,15 +971,16 @@ describe('threat supply alerts', () => {
 
     const assault = getNavSections(s).find((sec) => sec.id === 'combat:assault');
     const hex = getNavSections(s).find((sec) => sec.id === 'combat:hex');
-    // Below its cap, so red — while the hex track, at cap and staffed, is quiet.
+    // Below its cap, so red — while the hex track, at cap and running, is quiet.
     expect(assault?.alert?.severity).toBe('bad');
     expect(hex?.alert).toBe(null);
-    expect(assault?.count).toBe(1); // workers on the defense line only
+    // Auto-replenish spends no workers, so a threat section never badges one.
+    expect(assault?.count).toBe(0);
   });
 
   it('never flags a wave you cannot do anything about', () => {
     const s = armed();
-    // Hopelessly outmatched, but at cap with the line staffed and stocked:
+    // Hopelessly outmatched, but at cap with the line running and stocked:
     // losing is now unavoidable, so there is nothing worth a dot.
     s.combat.assault.wave = 40;
     s.resources.archer.amount = D(10);
@@ -917,6 +997,69 @@ describe('threat supply alerts', () => {
     expect(alert?.reason).toBe('No Archer to raise Defense');
   });
 
+  // The shortage is raised twice: on the threat track that's starved, and on
+  // the card that makes the thing — which is three tabs away from the panel
+  // telling you about it.
+  it('also flags the shortage on the card that produces the missing input', () => {
+    const s = armed();
+    s.buildings.barracks.level = 1; // archers are made here
+    s.resources.defense.amount = D(3);
+    s.resources.archer.amount = D(0);
+
+    const barracks = getNavSections(s).find((sec) => sec.id === 'group:barracks');
+    expect(barracks?.alert).toEqual({
+      severity: 'bad',
+      reason: 'Archer needed to raise Defense',
+    });
+  });
+
+  it('groups a card short of two tracks by the stat waiting on it', () => {
+    const s = armed();
+    s.buildings.barracks.level = 3; // archers (defense) and mages (ward)
+    s.resources.defense.amount = D(3);
+    s.resources.ward.amount = D(3);
+    s.resources.archer.amount = D(0);
+    s.resources.mage.amount = D(0);
+    s.resources.trollskull.amount = D(100); // the ward's other input is fine
+
+    expect(getNavSections(s).find((sec) => sec.id === 'group:barracks')?.alert?.reason).toBe(
+      'Archer needed to raise Defense; Mage needed to raise Ward',
+    );
+  });
+
+  it('lets a shortage outrank an affordable upgrade on the same card', () => {
+    const s = armed();
+    s.buildings.barracks.level = 1;
+    s.resources.defense.amount = D(3);
+    s.resources.archer.amount = D(0);
+    // Enough of everything to buy the next Barracks level, which would
+    // otherwise post a gold "upgrade affordable" dot on this same card.
+    for (const id of ['wood', 'stone', 'food', 'iron', 'steel'] as const) {
+      s.resources[id].amount = D(100_000);
+    }
+
+    const barracks = getNavSections(s).find((sec) => sec.id === 'group:barracks');
+    expect(barracks?.alert?.severity).toBe('bad');
+    expect(barracks?.alert?.reason).toMatch(/^Archer needed/);
+  });
+
+  it('says nothing on the card once the shortage is covered', () => {
+    const s = armed();
+    s.buildings.barracks.level = 1;
+    s.resources.defense.amount = D(3);
+    s.resources.archer.amount = D(5);
+    expect(getNavSections(s).find((sec) => sec.id === 'group:barracks')?.alert).toBe(null);
+  });
+
+  it('says nothing on the card when the track is full and running', () => {
+    const s = armed(); // defense at cap, auto on
+    s.buildings.barracks.level = 1;
+    s.resources.archer.amount = D(0); // no archers, and no need of any
+    expect(getNavSections(s).find((sec) => sec.id === 'group:barracks')?.alert).toBe(null);
+    // The threat track itself is equally quiet — the two agree by construction.
+    expect(getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert).toBe(null);
+  });
+
   it('names every missing input, not just the first', () => {
     const s = armed();
     s.resources.ward.amount = D(3);
@@ -927,18 +1070,18 @@ describe('threat supply alerts', () => {
     );
   });
 
-  it('reports the shortage before the staffing, not after', () => {
+  it('reports the shortage before the switch, not after', () => {
     const s = armed();
-    // Nobody on the line AND nothing to feed it. Reporting "unstaffed" would
-    // send you to assign a worker who then couldn't do anything.
-    s.workers.assigned.defense = 0;
+    // Line switched off AND nothing to feed it. Reporting "auto-replenish off"
+    // would send you to flip a switch that then couldn't do anything.
+    s.automation.defense = false;
     s.resources.archer.amount = D(0);
     expect(getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert?.reason).toMatch(
       /^No Archer/,
     );
   });
 
-  it('reds a stat below its cap, ambers a merely unstaffed line', () => {
+  it('reds a stat below its cap, ambers a merely switched-off line', () => {
     const s = armed();
     s.resources.archer.amount = D(10); // stocked, so inputs are not the issue
 
@@ -948,12 +1091,12 @@ describe('threat supply alerts', () => {
       reason: 'Defense below cap',
     });
 
-    // At cap but nobody on the line: worth mentioning, not worth alarming.
+    // At cap but switched off: worth mentioning, not worth alarming.
     s.resources.defense.amount = D(5);
-    s.workers.assigned.defense = 0;
+    s.automation.defense = false;
     expect(getNavSections(s).find((sec) => sec.id === 'combat:assault')?.alert).toEqual({
       severity: 'warn',
-      reason: 'Defense line unstaffed',
+      reason: 'Defense auto-replenish off',
     });
   });
 
@@ -964,7 +1107,7 @@ describe('threat supply alerts', () => {
     s.resources.mage.amount = D(10);
     s.resources.trollskull.amount = D(100);
     s.resources.ward.amount = D(3); // hex red — below cap
-    s.workers.assigned.defense = 0; // assault amber — merely unstaffed
+    s.automation.defense = false; // assault amber — merely switched off
 
     const threats = getTabs(s).find((t) => t.id === 'threats');
     expect(threats?.alerts?.map((a) => [a.id, a.severity])).toEqual([

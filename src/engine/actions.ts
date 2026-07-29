@@ -10,6 +10,7 @@ import {
   canBuyWorkerContract,
   canBuyFood,
 } from './selectors';
+import { isToggleProducer } from '../content/producers';
 import {
   SELL_OFFERS,
   RATE_UNLOCK_COST,
@@ -24,9 +25,11 @@ import {
 /**
  * Move workers on/off a production line. `delta` is typically +1 / -1.
  * Clamps to [0, min(line cap, assigned + available pool)].
+ *
+ * Toggle lines (defense, ward) are not staffed at all — see setAutomation.
  */
 export function assignWorker(state: GameState, id: ResourceId, delta: number): void {
-  if (delta === 0 || !isResourceUnlocked(state, id)) return;
+  if (delta === 0 || isToggleProducer(id) || !isResourceUnlocked(state, id)) return;
 
   const current = state.workers.assigned[id];
 
@@ -39,6 +42,21 @@ export function assignWorker(state: GameState, id: ResourceId, delta: number): v
   } else {
     state.workers.assigned[id] = Math.max(0, current + delta);
   }
+}
+
+/**
+ * Switch a toggle line's auto-replenish on or off (defense, ward). No worker is
+ * spent: while on, the line runs at full staffing off its normal inputs and
+ * idles at its cap like any other. Returns whether the switch moved.
+ */
+export function setAutomation(state: GameState, id: ResourceId, on: boolean): boolean {
+  if (!isToggleProducer(id) || !isResourceUnlocked(state, id)) return false;
+  if (state.automation[id] === on) return false;
+  state.automation[id] = on;
+  // Leaving stale progress behind would let a line switched off mid-cycle
+  // finish that cycle the instant it comes back on.
+  if (!on) state.production.progress[id] = 0;
+  return true;
 }
 
 /** Train one worker, paying the current food cost. Returns whether it happened. */

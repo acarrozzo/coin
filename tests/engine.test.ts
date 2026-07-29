@@ -5,6 +5,7 @@ import { D, formatNumber, setRoundingSource } from '../src/engine/numbers';
 import { tick } from '../src/engine/tick';
 import {
   assignWorker,
+  setAutomation,
   trainWorker,
   sellResource,
   buyRateUnlock,
@@ -320,17 +321,48 @@ describe('building-derived caps & converters', () => {
     expect(getCapacity(s, 'coin')).toBeNull();
   });
 
-  it('builds defense from archers, capped by defenseMax', () => {
+  it('builds defense from archers while auto-replenish is on, capped by defenseMax', () => {
     const s = createInitialState(0);
     s.buildings.castle.level = 1; // unlocks defense, cap 5
     s.workers.trained = 1;
     s.resources.archer.amount = D(100);
-    expect(getMaxWorkers(s, 'defense')).toBe(1); // single-slot converter
-    assignWorker(s, 'defense', 3); // clamps to 1
-    expect(s.workers.assigned.defense).toBe(1);
+
+    // Switched off by default: the line makes nothing however long it runs.
+    tick(s, 100, { combat: false });
+    expect(s.resources.defense.amount.toNumber()).toBe(0);
+
+    expect(setAutomation(s, 'defense', true)).toBe(true);
     tick(s, 100, { combat: false }); // wants 100 defense, but cap is 5
     expect(s.resources.defense.amount.toNumber()).toBe(5);
     expect(s.resources.archer.amount.toNumber()).toBe(95); // 5 archers consumed
+    // ...and it cost no workers: the whole pool is still free.
+    expect(s.workers.assigned.defense).toBe(0);
+    expect(getAvailableWorkers(s)).toBe(1);
+  });
+
+  it('refuses to staff a toggle line with workers', () => {
+    const s = createInitialState(0);
+    s.buildings.castle.level = 1;
+    s.workers.trained = 3;
+    assignWorker(s, 'defense', 1);
+    expect(s.workers.assigned.defense).toBe(0);
+    expect(getAvailableWorkers(s)).toBe(3);
+  });
+
+  it('drops a switched-off line’s cycle progress so it cannot bank one', () => {
+    const s = createInitialState(0);
+    s.buildings.wizardtower.level = 1; // ward: 5s cycle
+    s.resources.mage.amount = D(10);
+    s.resources.trollskull.amount = D(100);
+
+    setAutomation(s, 'ward', true);
+    tick(s, 4, { combat: false }); // 4s into a 5s cycle
+    setAutomation(s, 'ward', false);
+    expect(s.production.progress.ward).toBe(0);
+
+    setAutomation(s, 'ward', true);
+    tick(s, 1, { combat: false }); // would have completed if progress survived
+    expect(s.resources.ward.amount.toNumber()).toBe(0);
   });
 
   it('caps magic-orb questing at the Castle level', () => {
@@ -503,6 +535,35 @@ describe('save', () => {
     expect(restored.version).toBe(SAVE_VERSION);
     expect(restored.market.sold.wood).toBe(true);
     expect(restored.market.contracts.i).toBe(true);
+  });
+
+  it('round-trips the auto-replenish switches', () => {
+    const s = createInitialState(0);
+    s.buildings.castle.level = 1;
+    setAutomation(s, 'defense', true);
+
+    const restored = deserialize(serialize(s), 0);
+    expect(restored.automation.defense).toBe(true);
+    expect(restored.automation.ward).toBe(false);
+  });
+
+  it('hands back workers parked on defense/ward (v10 → v11)', () => {
+    const v10 = JSON.stringify({
+      version: 10,
+      createdAt: 1,
+      playtime: 1,
+      level: 6,
+      resources: {},
+      workers: { trained: 4, bonus: 0, assigned: { wood: 2, defense: 1, ward: 1 } },
+    });
+    const restored = deserialize(v10, 0);
+    expect(restored.version).toBe(SAVE_VERSION);
+    expect(restored.workers.assigned.defense).toBe(0);
+    expect(restored.workers.assigned.ward).toBe(0);
+    expect(restored.workers.assigned.wood).toBe(2); // ordinary lines untouched
+    expect(getAvailableWorkers(restored)).toBe(2); // the two are back in the pool
+    // The switches start off — the player opts in, as on a fresh save.
+    expect(restored.automation.defense).toBe(false);
   });
 
   it('falls back to a fresh state on garbage', () => {
