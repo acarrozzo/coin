@@ -38,6 +38,8 @@ import {
   hasMarketOpportunity,
   countSellOpportunities,
   countBuyOpportunities,
+  isNextBuildingLevelHidden,
+  isNextBuildingLevelBeyondStorage,
 } from '../src/engine/selectors';
 import {
   MAX_COIN_EARNED,
@@ -238,6 +240,43 @@ describe('buildings', () => {
     expect(s.buildings.blacksmith.level).toBe(2);
     expect(s.resources.stone.amount.toNumber()).toBe(600); // 400 stone spent
     expect(s.resources.iron.amount.toNumber()).toBe(1); // iron required, not consumed
+  });
+
+  it('hides a farm upgrade the settlement tier can never store', () => {
+    // The Farm has no requiresLevel — its gate is the storage cap. At tier 3
+    // (cap 250) L8 is the last affordable level: L9 costs 300/300, which the
+    // tier can't hold, so the UI drops the row until the settlement grows.
+    const s = createInitialState(0);
+    s.level = 3;
+    s.buildings.farm.level = 7; // next is L8 @ 220
+    expect(isNextBuildingLevelHidden(s, 'farm')).toBe(false);
+
+    s.buildings.farm.level = 8; // next is L9 @ 300 > cap 250
+    expect(isNextBuildingLevelHidden(s, 'farm')).toBe(true);
+
+    s.level = 4; // cap 500 — reachable again
+    expect(isNextBuildingLevelHidden(s, 'farm')).toBe(false);
+  });
+
+  it('keeps the first farm build visible at the tier that unlocks it', () => {
+    // Farm L1 costs 10/10 against tier 2's cap of 25 — expensive, not unreachable.
+    const s = createInitialState(0);
+    s.level = 2;
+    expect(s.buildings.farm.level).toBe(0);
+    expect(isNextBuildingLevelHidden(s, 'farm')).toBe(false);
+  });
+
+  it('only applies the storage gate to buildings marked cappedByStorage', () => {
+    // Castle L5 costs 6400 stone against tier 8's 10000 cap; the Blacksmith is
+    // unmarked, so even a cost above the cap leaves it to the existing gates.
+    const s = createInitialState(0);
+    s.level = 4;
+    s.buildings.blacksmith.level = 1; // next is { stone: 400, iron: 1 }, cap 500
+    expect(isNextBuildingLevelBeyondStorage(s, 'blacksmith')).toBe(false);
+    // …still hidden, but by its requiresLevel: 5 gate, as before.
+    expect(isNextBuildingLevelHidden(s, 'blacksmith')).toBe(true);
+    s.level = 5;
+    expect(isNextBuildingLevelHidden(s, 'blacksmith')).toBe(false);
   });
 });
 

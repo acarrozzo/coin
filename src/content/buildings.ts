@@ -64,6 +64,14 @@ export interface BuildingDef {
   availableAtLevel: number;
   /** Levels in order; index 0 is the first build. */
   levels: BuildingLevel[];
+  /**
+   * This building has no per-level `requiresLevel` gates — its progression gate
+   * IS the settlement storage cap (see FARM_COSTS). Once the next level costs
+   * more of a capped resource than the tier can ever hold, the upgrade is
+   * unreachable until the settlement grows, and the UI hides it outright the
+   * same way it hides a `requiresLevel`-gated one.
+   */
+  cappedByStorage?: boolean;
 }
 
 export const BUILDINGS: Record<BuildingId, BuildingDef> = {
@@ -72,6 +80,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
     blurb: 'Turns labor into food.',
     availableAtLevel: 1,
     levels: buildFarmLevels(),
+    cappedByStorage: true,
   },
   blacksmith: {
     name: 'Blacksmith',

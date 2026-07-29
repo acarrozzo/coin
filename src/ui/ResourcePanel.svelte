@@ -11,7 +11,7 @@
     getMaxWorkers,
     getStructureLevel,
     getNextBuildingLevel,
-    isNextBuildingLevelGated,
+    isNextBuildingLevelHidden,
     canBuild,
     canStartCycle,
     getNetProductionRate,
@@ -135,7 +135,7 @@
         {@const GroupIcon = group.icon}
         {@const level = group.building ? getStructureLevel(gs, group.building) : 0}
         {@const next = group.building ? getNextBuildingLevel(gs, group.building) : null}
-        {@const gated = group.building ? isNextBuildingLevelGated(gs, group.building) : false}
+        {@const gated = group.building ? isNextBuildingLevelHidden(gs, group.building) : false}
         {@const buildName = group.building ? BUILDINGS[group.building].name : ''}
         <div class="group" data-nav="group:{group.key}" transition:fly={{ y: 10, duration: 300 }}>
           <header class="ghead">
@@ -154,8 +154,10 @@
             {/if}
           </header>
 
-          <!-- A settlement-gated next level shows nothing at all: no summary, no
-             cost, no button. It reappears when the settlement reaches its tier. -->
+          <!-- A next level the settlement puts out of reach — gated behind a
+             higher tier, or costing more than this tier can store — shows
+             nothing at all: no summary, no cost, no button. It reappears once
+             the settlement grows. -->
           {#if !group.upgradeInFooter && next && !gated}
             <div class="upgrade-row">
               <button

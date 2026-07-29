@@ -291,6 +291,31 @@ export function isNextBuildingLevelGated(state: GameState, id: BuildingId): bool
   return !!next?.requiresLevel && state.level < next.requiresLevel;
 }
 
+/**
+ * The next level costs more of a capped resource than the current settlement
+ * tier can ever store, so no amount of gathering can pay for it. Only applies to
+ * buildings marked `cappedByStorage` (the Farm), whose progression gate is the
+ * cap rather than an explicit `requiresLevel`.
+ */
+export function isNextBuildingLevelBeyondStorage(state: GameState, id: BuildingId): boolean {
+  if (!BUILDINGS[id].cappedByStorage) return false;
+  const next = getNextBuildingLevel(state, id);
+  if (!next) return false;
+  for (const [rid, amount] of Object.entries(next.cost) as [ResourceId, number][]) {
+    const cap = getCapacity(state, rid);
+    if (cap !== null && cap.lt(amount)) return true;
+  }
+  return false;
+}
+
+/**
+ * Every reason the UI shows nothing at all for the next level rather than
+ * dangling a button the player can't act on from this card.
+ */
+export function isNextBuildingLevelHidden(state: GameState, id: BuildingId): boolean {
+  return isNextBuildingLevelGated(state, id) || isNextBuildingLevelBeyondStorage(state, id);
+}
+
 export function canBuild(state: GameState, id: BuildingId): boolean {
   if (!isBuildingAvailable(state, id)) return false;
   const next = getNextBuildingLevel(state, id);
