@@ -14,8 +14,6 @@
     isNextBuildingLevelHidden,
     canBuild,
     canStartCycle,
-    getNetProductionRate,
-    getLiveNetProductionRate,
     isRateUnlocked,
     isStorageFull,
     isBuildingNew,
@@ -24,9 +22,10 @@
     getLineWorkers,
     getThreatDemands,
   } from '../engine/selectors';
-  import { formatNumber, formatCycleRate, formatSignedRate } from '../engine/numbers';
+  import { formatNumber, formatCycleRate } from '../engine/numbers';
   import { RESOURCE_ICON } from './resourceIcons';
   import AutoToggle from './AutoToggle.svelte';
+  import RateCell from './RateCell.svelte';
   import AlertAnchor from './AlertAnchor.svelte';
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
   import { getGroupsForTab, type TabId } from './sections';
@@ -296,24 +295,7 @@
                   <span class="rcost">
                     {#if group.key === 'core'}
                       {#if isRateUnlocked(gs, id)}
-                        {@const live = getLiveNetProductionRate(gs, id)}
-                        {@const nominal = getNetProductionRate(gs, id)}
-                        <span class="netrates">
-                          <span
-                            class="netrate"
-                            class:pos={live.gt(0)}
-                            class:neg={live.lt(0)}
-                            title="Live {RESOURCES[
-                              id
-                            ].name.toLowerCase()} rate — what's actually happening now: production minus only the lines that can currently run (starved or at-cap lines draw nothing), held at 0 when full."
-                            >{formatSignedRate(live)}</span
-                          >
-                          <span
-                            class="netrate target"
-                            title="Target rate — production minus every staffed consumer at full throughput, ignoring starvation and caps."
-                            >{formatSignedRate(nominal)} target</span
-                          >
-                        </span>
+                        <RateCell {id} />
                       {:else}
                         <span class="netrate-locked" title="Unlock this rate display in the Market."
                           >rate locked</span
@@ -702,35 +684,10 @@
     font-size: 11px;
   }
 
-  /* Core rows: the running net rate (production − consumption) for wood/stone/
-     food, sitting where crafting rows show their input pills — far right. */
-  .netrates {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 1px;
-    line-height: 1.15;
-  }
-  .netrate {
-    color: var(--text-muted);
-    font-size: 15px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  .netrate.pos {
-    color: var(--good);
-  }
-  .netrate.neg {
-    color: var(--bad);
-  }
-  /* The nominal "target" rate rides beneath the live one, smaller and quieter —
-     context for the headline, not the headline itself. */
-  .netrate.target {
-    font-size: 11px;
-    font-weight: 500;
-    color: color-mix(in srgb, var(--text-muted) 70%, var(--bg-panel));
-  }
+  /* Core rows show a RateMonitor (production − consumption, plus what that
+     balance means) where crafting rows show their input pills — far right. It
+     owns its own styling; only the locked placeholder that takes its slot is
+     styled here. */
   /* Core rate not yet unlocked in the Market — a quiet placeholder in its slot. */
   .netrate-locked {
     color: color-mix(in srgb, var(--text-muted) 70%, var(--bg-panel));

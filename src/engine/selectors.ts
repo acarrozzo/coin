@@ -239,6 +239,40 @@ export function resourceStatusReason(state: GameState, id: ResourceId): string {
   }
 }
 
+/** One line's pull on a resource, for the "who's draining this?" breakdown. */
+export interface ResourceDraw {
+  /** The consuming line. */
+  id: ResourceId;
+  /** What it is drawing per second at its current staffing (0 when unstaffed). */
+  rate: Decimal;
+  status: ResourceStatus;
+  reason: string;
+}
+
+/**
+ * Every unlocked line that eats this resource, with its current draw and health.
+ *
+ * Unlocked rather than merely drawing: the list is rendered in a hover card, and
+ * one that resized as lines were staffed would be unusable — while an idle
+ * consumer is itself often the answer to "where did my wood go".
+ *
+ * Content order, never sorted — like the nav's status dots, an entry's position
+ * is how you recognise it between glances.
+ */
+export function getResourceDraws(state: GameState, id: ResourceId): ResourceDraw[] {
+  return getConsumers(id)
+    .filter((c) => isResourceUnlocked(state, c.id))
+    .map((c) => {
+      const workers = getLineWorkers(state, c.id);
+      return {
+        id: c.id,
+        rate: D(workers).times(c.qty).div(c.cycleSeconds),
+        status: getResourceStatus(state, c.id) ?? 'idle',
+        reason: resourceStatusReason(state, c.id),
+      };
+    });
+}
+
 /** Nominal production per second (workers × rate; ignores inputs and caps). */
 export function getProductionRate(state: GameState, id: ResourceId): Decimal {
   const p = PRODUCERS[id];
@@ -288,6 +322,109 @@ export function getLiveNetProductionRate(state: GameState, id: ResourceId): Deci
   // At cap the amount can't rise: a surplus is really "holding steady", not "+X".
   if (rate.gt(0) && isAtCapacity(state, id)) return D(0);
   return rate;
+}
+
+/**
+ * What a core resource's rate readout MEANS, as one of six states — the thing a
+ * signed number alone can't say. Four different situations all read "0/s": the
+ * store is full, production exactly matches draw, nothing is running at all, and
+ * "a surplus that only exists because a consumer is stalled". They call for
+ * different reactions, so they get different states (and different colours).
+ *
+ * Derived entirely from the two rate selectors above plus the cap, so it can
+ * never disagree with the numbers it's colouring.
+ */
+export type CoreRateState = 'rising' | 'fragile' | 'full' | 'steady' | 'falling' | 'idle';
+
+export function getRateState(state: GameState, id: ResourceId): CoreRateState {
+  const live = getLiveNetProductionRate(state, id);
+  const target = getNetProductionRate(state, id);
+
+  // Falling first: a deficit is the one state you must act on, and it stays
+  // legible whether or not the store happens to be full at this instant.
+  if (live.lt(0)) return 'falling';
+  // Then the cap. At cap it is the binding constraint on everything else — a
+  // masked deficit can't be acted on until the cap moves, so `full` outranks
+  // `fragile` deliberately. isStorageFull, not isAtCapacity: the same test the
+  // row's MAX pill uses, so the two never contradict each other.
+  if (isStorageFull(state, id)) return 'full';
+  // A surplus that exists only because a staffed consumer can't run: unblock it
+  // and you land on `target`, which is break-even or worse. Restricted to
+  // target ≤ 0 on purpose — when the target is still positive you're healthy
+  // either way, and the blocked line already flags itself on its own row.
+  if (live.gt(target) && target.lte(0)) return 'fragile';
+  if (live.gt(0)) return 'rising';
+  // Left: live and target both 0. Either the economy is in balance here, or
+  // nothing is happening at all.
+  return isLineActive(state, id) ? 'steady' : 'idle';
+}
+
+/** Whether anything at all is moving through this resource — its own line
+    staffed, or any consumer drawing on it. Separates `steady` from `idle`. */
+function isLineActive(state: GameState, id: ResourceId): boolean {
+  if (getLineWorkers(state, id) > 0) return true;
+  return getConsumers(id).some((c) => getLineWorkers(state, c.id) > 0);
+}
+
+/** The rate state as a sentence, for the indicator's tooltip and screen readers. */
+export function rateStateReason(state: GameState, id: ResourceId): string {
+  const name = RESOURCES[id].name;
+  switch (getRateState(state, id)) {
+    case 'rising':
+      return `${name} rising`;
+    case 'falling':
+      return `${name} falling — consumption outruns production`;
+    case 'full':
+      return `${name} storage is full — production is going nowhere`;
+    case 'fragile':
+      return `${name} is only rising because a line that draws it is stalled — expect ${formatRateForReason(
+        getNetProductionRate(state, id),
+      )} once it runs`;
+    case 'steady':
+      return `${name} is in balance — production matches what's drawn`;
+    default:
+      return `${name} — nothing producing or drawing it`;
+  }
+}
+
+/** Bare signed per-second figure for a reason sentence (no formatter import
+    cycle: numbers.ts must not know about resources). */
+function formatRateForReason(rate: Decimal): string {
+  return `${rate.gte(0) ? '+' : '-'}${rate.abs().toFixed(2)}/s`;
+}
+
+/** Where a core resource is heading and how long it has: the deadline behind
+    the rate. Only the two moving states have one — `full`/`steady`/`idle`/
+    `fragile` are all standing still, and a cap-less resource can never fill. */
+export interface RateEta {
+  kind: 'empty' | 'full';
+  seconds: number;
+}
+
+/** Beyond this an estimate is noise, not a deadline — reported as null. */
+const MAX_ETA_SECONDS = 24 * 3600;
+
+export function getRateEta(state: GameState, id: ResourceId): RateEta | null {
+  const st = getRateState(state, id);
+  const live = getLiveNetProductionRate(state, id);
+
+  if (st === 'falling') {
+    const seconds = state.resources[id].amount.div(live.abs()).toNumber();
+    return finiteEta({ kind: 'empty', seconds });
+  }
+  if (st === 'rising') {
+    const cap = getCapacity(state, id);
+    if (!cap) return null;
+    const seconds = cap.minus(state.resources[id].amount).div(live).toNumber();
+    return finiteEta({ kind: 'full', seconds });
+  }
+  return null;
+}
+
+function finiteEta(eta: RateEta): RateEta | null {
+  if (!Number.isFinite(eta.seconds) || eta.seconds < 0 || eta.seconds > MAX_ETA_SECONDS)
+    return null;
+  return eta;
 }
 
 // ---------- Workers ----------

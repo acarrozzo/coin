@@ -7,6 +7,8 @@ import SettlementPanel from '../src/ui/SettlementPanel.svelte';
 import MarketPanel from '../src/ui/MarketPanel.svelte';
 import PrestigePanel from '../src/ui/PrestigePanel.svelte';
 import App from '../src/App.svelte';
+import StoreGauge from '../src/ui/StoreGauge.svelte';
+import { RESOURCE_ICON } from '../src/ui/resourceIcons';
 import { game } from '../src/ui/gameStore.svelte';
 import { notify } from '../src/ui/notify.svelte';
 import { D } from '../src/engine/numbers';
@@ -16,7 +18,7 @@ import { getNavSections, getTabs, tabLabel, FULL_MARKET_LEVEL } from '../src/ui/
 import { nav } from '../src/ui/nav.svelte';
 import { ASSAULT, HEX } from '../src/content/combat';
 import { SELLABLE_RESOURCES } from '../src/content/market';
-import type { ResourceId } from '../src/content/resources';
+import { RESOURCE_IDS, type ResourceId } from '../src/content/resources';
 import { PRESTIGE_TIERS, PRESTIGE_UNLOCK_LEVEL, MAX_PRESTIGE } from '../src/content/prestige';
 
 // Runtime check: proves Svelte 5 runes reactivity + the store wiring + event
@@ -1480,5 +1482,302 @@ describe('PrestigePanel — sub-tabs and prestige level', () => {
     game.state.prestige.level = 2;
     const after = getNavSections(game.state).find((s) => s.id === 'prestige');
     expect(after?.label).toBe('Prestige Lvl 2');
+  });
+});
+
+// The header gauge's hover flyout is the second place a core resource's rate is
+// reported (ResourcePanel's row is the first), and the only one that names the
+// lines draining it. These pin the two halves that can silently disagree with
+// the row: the Market gate, and who counts as a consumer.
+describe('StoreGauge flyout (runtime)', () => {
+  function gauge(id: 'wood' | 'stone' | 'food' = 'wood') {
+    cleanup();
+    const gs = game.state;
+    gs.level = 3;
+    gs.workers.trained = 4;
+    gs.buildings.blacksmith.level = 1; // arrow: the first line to eat wood
+    gs.buildings.hunterscabin.level = 1; // spear: the second
+    gs.market.rateUnlocks = { wood: false, stone: false, food: false };
+    for (const rid of ['wood', 'stone', 'arrow', 'spear'] as ResourceId[]) {
+      gs.workers.assigned[rid] = 0;
+      gs.resources[rid].amount = D(100);
+    }
+    return { gs, id };
+  }
+
+  function mount(id: 'wood' | 'stone' | 'food') {
+    render(StoreGauge, {
+      props: {
+        id,
+        icon: RESOURCE_ICON[id],
+        amount: game.state.resources[id].amount,
+        cap: D(200),
+        pct: 50,
+        onjump: () => {},
+      },
+    });
+  }
+
+  it('keeps the net rates and the consumer list behind the Market unlock', async () => {
+    const { gs } = gauge();
+    gs.workers.assigned.wood = 2;
+    mount('wood');
+
+    // Locked: the gross line rate only, exactly as before.
+    expect(screen.getByText(/wood \/ sec/)).toBeTruthy();
+    expect(screen.queryByText(/Pulling wood/i)).toBeNull();
+    expect(screen.queryByText(/target$/)).toBeNull();
+
+    gs.market.rateUnlocks.wood = true;
+    await tick();
+
+    expect(screen.getByText(/Pulling wood/i)).toBeTruthy();
+    expect(screen.getByText(/target$/)).toBeTruthy();
+  });
+
+  it('lists every unlocked wood consumer with its draw and status', async () => {
+    const { gs } = gauge();
+    gs.market.rateUnlocks.wood = true;
+    gs.workers.assigned.wood = 2;
+    gs.workers.assigned.arrow = 1; // 2 wood per 0.5s → -4/s, running
+    mount('wood');
+    await tick();
+
+    const rows = [...document.querySelectorAll('.draw')].map((el) => el.textContent);
+    // Content order, not sorted by state: arrow (Blacksmith) then spear
+    // (Hunter's Cabin). Staff/sword/ether are still locked at level 3.
+    expect(rows.length).toBe(2);
+    expect(rows[0]).toContain('Arrow');
+    expect(rows[0]).toContain('-4/s');
+    expect(rows[1]).toContain('Spear');
+    // Unstaffed lines stay listed, flat and labelled.
+    expect(rows[1]).toContain('0/s');
+    expect(rows[1]).toContain('idle');
+
+    // A staffed line short of an ingredient reads as starved, not as a draw.
+    gs.workers.assigned.spear = 1;
+    gs.resources.stone.amount = D(0);
+    await tick();
+    expect(document.querySelectorAll('.draw')[1]?.textContent).toContain('starved');
+  });
+
+  it('jumps to a consumer line from its name', async () => {
+    const { gs } = gauge();
+    gs.market.rateUnlocks.wood = true;
+    // The row the link points at, mounted the way the real page mounts it.
+    const row = document.createElement('div');
+    row.dataset.res = 'arrow';
+    row.scrollIntoView = vi.fn();
+    document.body.append(row);
+
+    mount('wood');
+    // Hover the gauge: closed, the flyout is aria-hidden and its links are out
+    // of the accessibility tree (and untabbable), which is the point.
+    expect(screen.queryByRole('button', { name: 'Go to Arrow' })).toBeNull();
+    await fireEvent.pointerEnter(document.querySelector('.store')!);
+    await tick();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Go to Arrow' }));
+
+    expect(row.scrollIntoView).toHaveBeenCalled();
+    expect(nav.jumped).toBe('arrow');
+    row.remove();
+  });
+});
+
+// The rate monitor is one component rendered on two surfaces (the Core rows and
+// the header gauge's flyout). These cover the wiring — that both surfaces show
+// the same state for the same economy, and that the state survives the Market
+// gate — with the state logic itself covered in engine.test.ts.
+describe('RateMonitor (runtime)', () => {
+  /** Level 9, plenty of workers, and the wood-eating lines available. */
+  function economy() {
+    cleanup();
+    const gs = game.state;
+    gs.level = 9;
+    gs.workers.trained = 100;
+    gs.buildings.blacksmith.level = 5;
+    gs.buildings.hunterscabin.level = 6;
+    gs.buildings.wizardtower.level = 2; // its whole table — ether needs level 2
+    gs.buildings.farm.level = 1;
+    gs.market.rateUnlocks = { wood: true, stone: true, food: true };
+    for (const rid of RESOURCE_IDS) gs.workers.assigned[rid] = 0;
+    gs.resources.wood.amount = D(5000);
+    gs.resources.stone.amount = D(5000);
+    return gs;
+  }
+
+  const monitors = () => [...document.querySelectorAll('.monitor')] as HTMLElement[];
+  /** Row monitors only. Each cell also renders a compact one inside its hover
+      card, which would otherwise double every count here. */
+  const rowMonitors = () => monitors().filter((el) => !el.classList.contains('compact'));
+  const state = (el: HTMLElement) =>
+    [...el.classList].find((c) => c !== 'monitor' && c !== 'compact' && !c.startsWith('svelte-'));
+
+  it('colours the core row by state, and moves with the economy', async () => {
+    const gs = economy();
+    render(ResourcePanel, { props: { tab: 'resources' } });
+
+    // Nothing staffed: idle, not a bare "0/s".
+    expect(state(rowMonitors()[0]!)).toBe('idle');
+
+    gs.workers.assigned.wood = 20;
+    await tick();
+    expect(state(rowMonitors()[0]!)).toBe('rising');
+
+    // A stalled consumer masking a deficit reads fragile, not green.
+    gs.workers.assigned.wood = 10;
+    gs.workers.assigned.spear = 4;
+    gs.resources.stone.amount = D(0);
+    await tick();
+    expect(state(rowMonitors()[0]!)).toBe('fragile');
+
+    // A real deficit outranks everything.
+    gs.workers.assigned.spear = 0;
+    gs.workers.assigned.ether = 1; // −10/s against +10/s... plus the wood line
+    gs.workers.assigned.wood = 5;
+    await tick();
+    expect(state(rowMonitors()[0]!)).toBe('falling');
+  });
+
+  it('shows the deadline behind a falling rate', async () => {
+    const gs = economy();
+    gs.workers.assigned.ether = 1; // −10/s, nothing gathering wood
+    gs.resources.wood.amount = D(600);
+    render(ResourcePanel, { props: { tab: 'resources' } });
+    await tick();
+
+    expect(rowMonitors()[0]!.textContent).toContain('empty in 1m');
+  });
+
+  it('reads the same state in the header flyout as in the row', async () => {
+    const gs = economy();
+    gs.workers.assigned.wood = 20;
+    render(StoreGauge, {
+      props: {
+        id: 'wood',
+        icon: RESOURCE_ICON.wood,
+        amount: gs.resources.wood.amount,
+        cap: D(10000),
+        pct: 50,
+        onjump: () => {},
+      },
+    });
+    await tick();
+
+    const [flyout] = monitors();
+    expect(state(flyout!)).toBe('rising');
+    expect(flyout!.classList.contains('compact')).toBe(true);
+    // Colour is never the only signal: a glyph draws, and it names the state to
+    // a screen reader.
+    const glyph = flyout!.querySelector('.glyph')!;
+    expect(glyph.querySelector('svg')).toBeTruthy();
+    expect(glyph.getAttribute('aria-label')).toBe('Wood rising');
+
+    // Same component, same state, on the other surface.
+    render(ResourcePanel, { props: { tab: 'resources' } });
+    await tick();
+    expect(new Set(rowMonitors().map(state))).toEqual(new Set(['rising', 'idle']));
+  });
+
+  it('renders no monitor at all while the rate is Market-locked', async () => {
+    const gs = economy();
+    gs.market.rateUnlocks.wood = false;
+    gs.workers.assigned.wood = 20;
+    render(ResourcePanel, { props: { tab: 'resources' } });
+    await tick();
+
+    expect(screen.getByText('rate locked')).toBeTruthy();
+    // Stone and food still have theirs, so this asserts the gate, not emptiness.
+    expect(rowMonitors().length).toBe(2);
+  });
+});
+
+// The point of RateCell: the rate readout in a Core row opens the same card the
+// header gauge does, rather than a second, similar tooltip.
+describe('RateCell hover card (runtime)', () => {
+  function coreRow() {
+    cleanup();
+    const gs = game.state;
+    gs.level = 9;
+    gs.workers.trained = 100;
+    gs.buildings.blacksmith.level = 5;
+    gs.buildings.hunterscabin.level = 6;
+    gs.buildings.farm.level = 1;
+    // The store is shared across tests, and the Wizard Tower's ether line is a
+    // wood consumer — pin it down so this block's wood draws are exactly the
+    // Blacksmith's and the Hunter's Cabin's.
+    gs.buildings.wizardtower.level = 0;
+    gs.market.rateUnlocks = { wood: true, stone: true, food: true };
+    for (const rid of RESOURCE_IDS) gs.workers.assigned[rid] = 0;
+    gs.resources.wood.amount = D(5000);
+    gs.resources.stone.amount = D(5000);
+    gs.workers.assigned.wood = 10;
+    return gs;
+  }
+
+  /** The wood row's cell — first in the Core card. */
+  const cell = () => document.querySelector('[data-res="wood"] .cell') as HTMLElement;
+  const card = () => cell().querySelector('.flyout') as HTMLElement;
+
+  it('opens the pull breakdown on hover, and nothing else', async () => {
+    coreRow();
+    render(ResourcePanel, { props: { tab: 'resources' } });
+    await tick();
+
+    // Closed: rendered but inert, and out of the accessibility tree.
+    expect(card().classList.contains('open')).toBe(false);
+    expect(card().getAttribute('aria-hidden')).toBe('true');
+
+    await fireEvent.pointerEnter(cell());
+    await tick();
+
+    expect(card().classList.contains('open')).toBe(true);
+    expect(within(card()).getByText(/Pulling wood/i)).toBeTruthy();
+    expect(within(card()).getByRole('button', { name: 'Go to Arrow' })).toBeTruthy();
+
+    // Only the breakdown: staffing, the gross rate and the live/target monitor
+    // are all already on the row, inches away.
+    expect(within(card()).queryByLabelText('Add worker to Wood')).toBeNull();
+    expect(within(card()).queryByText(/wood \/ sec/)).toBeNull();
+    expect(card().querySelector('.monitor')).toBeNull();
+    expect(card().querySelector('.card-title')).toBeNull();
+  });
+
+  // Nothing to disclose → no disclosure: the monitor renders bare, with no
+  // button wrapped around it and no card to open.
+  it('renders no trigger before anything consumes the resource', async () => {
+    const gs = coreRow();
+    gs.buildings.blacksmith.level = 0; // arrow
+    gs.buildings.hunterscabin.level = 0; // spear
+    render(ResourcePanel, { props: { tab: 'resources' } });
+    await tick();
+
+    const row = document.querySelector('[data-res="wood"]')!;
+    expect(row.querySelector('.monitor')).toBeTruthy();
+    expect(row.querySelector('.cell')).toBeNull();
+    expect(row.querySelector('.flyout')).toBeNull();
+  });
+
+  // Touch has no hover, so the trigger is a real button: a tap pins the card, and
+  // Escape or a click elsewhere drops it.
+  it('pins on click and dismisses on Escape', async () => {
+    coreRow();
+    render(ResourcePanel, { props: { tab: 'resources' } });
+    const trigger = within(cell()).getByRole('button', { name: "What's pulling Wood" });
+
+    await fireEvent.click(trigger);
+    await tick();
+    expect(card().classList.contains('open')).toBe(true);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+
+    // Pinned, so leaving with the pointer must not close it.
+    await fireEvent.pointerLeave(cell());
+    await tick();
+    expect(card().classList.contains('open')).toBe(true);
+
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await tick();
+    expect(card().classList.contains('open')).toBe(false);
   });
 });

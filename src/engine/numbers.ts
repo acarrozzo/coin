@@ -106,6 +106,21 @@ export function formatSignedRate(value: Numeric): string {
   return `${d.gt(0) ? '+' : '-'}${formatNumber(d.abs())}/s`;
 }
 
+/**
+ * A short span of time, for deadlines like "empty in 2m 10s". Coarsens as it
+ * grows — hours drop seconds, minutes keep them — so a countdown reads at a
+ * glance rather than being a wall of digits.
+ */
+export function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  return `${s}s`;
+}
+
 /** Strip trailing zeros (and a dangling decimal point) from a fixed string. */
 function trimZeros(s: string): string {
   return s.includes('.') ? s.replace(/\.?0+$/, '') : s;

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState, SAVE_VERSION } from '../src/engine/state';
 import { PRODUCER_INPUTS } from '../src/content/producers';
-import { D, formatNumber, setRoundingSource } from '../src/engine/numbers';
+import { D, formatNumber, formatDuration, setRoundingSource } from '../src/engine/numbers';
 import { tick } from '../src/engine/tick';
 import {
   assignWorker,
@@ -29,6 +29,9 @@ import {
   canTrainWorker,
   getNetProductionRate,
   getLiveNetProductionRate,
+  getRateState,
+  getRateEta,
+  rateStateReason,
   getResourceStatus,
   canStartCycle,
   canSell,
@@ -720,6 +723,21 @@ describe('formatNumber rounding toggle', () => {
   });
 });
 
+describe('formatDuration', () => {
+  it('coarsens as the span grows', () => {
+    expect(formatDuration(45)).toBe('45s');
+    expect(formatDuration(60)).toBe('1m');
+    expect(formatDuration(130)).toBe('2m 10s');
+    expect(formatDuration(3600)).toBe('1h');
+    expect(formatDuration(3600 * 2 + 300)).toBe('2h 5m'); // hours drop seconds
+  });
+
+  it('floors fractions and never goes negative', () => {
+    expect(formatDuration(0.4)).toBe('0s');
+    expect(formatDuration(-5)).toBe('0s');
+  });
+});
+
 describe('net production rate — live vs nominal', () => {
   // A staffed consumer that can't actually run (starved on a non-wood input)
   // is counted by the nominal rate but not the live one, which then matches the
@@ -779,6 +797,167 @@ describe('net production rate — live vs nominal', () => {
 
     // 20 − 100 = −80/s; at cap but a real deficit, so it shows negative.
     expect(getLiveNetProductionRate(s, 'wood').toNumber()).toBe(-80);
+  });
+});
+
+// What the core rate readout MEANS — six states over the two rates above, since
+// four separate situations all print "0/s".
+describe('core rate state', () => {
+  /** A settlement with room to breathe: high cap, plenty of workers, the two
+      structures whose lines eat wood available to staff. */
+  function economy() {
+    const s = createInitialState(0);
+    s.level = 9;
+    s.workers.trained = 100;
+    s.buildings.blacksmith.level = 5;
+    s.buildings.hunterscabin.level = 6;
+    s.buildings.wizardtower.level = 6;
+    s.resources.wood.amount = D(5000);
+    s.resources.stone.amount = D(5000);
+    return s;
+  }
+
+  it('reads idle with nothing producing or drawing', () => {
+    const s = economy();
+    expect(getRateState(s, 'wood')).toBe('idle');
+  });
+
+  it('reads rising on a plain surplus', () => {
+    const s = economy();
+    s.workers.assigned.wood = 20;
+    expect(getRateState(s, 'wood')).toBe('rising');
+  });
+
+  it('reads falling on a deficit', () => {
+    const s = economy();
+    s.workers.assigned.wood = 5; // +5/s
+    s.workers.assigned.ether = 1; // −10/s, and ether only needs wood
+    expect(getRateState(s, 'wood')).toBe('falling');
+  });
+
+  it('reads steady when production exactly matches the draw', () => {
+    const s = economy();
+    s.workers.assigned.wood = 10; // +10/s
+    s.workers.assigned.ether = 1; // −10/s
+    expect(getLiveNetProductionRate(s, 'wood').toNumber()).toBe(0);
+    expect(getRateState(s, 'wood')).toBe('steady');
+  });
+
+  // The state the old two-colour readout got wrong: a surplus that exists only
+  // because a staffed consumer is stalled. Unblock it and you're at target.
+  it('reads fragile when a stalled consumer masks a deficit', () => {
+    const s = economy();
+    s.workers.assigned.wood = 10; // +10/s
+    s.workers.assigned.spear = 4; // −16/s nominal, but starved on stone
+    s.resources.stone.amount = D(0);
+
+    expect(getLiveNetProductionRate(s, 'wood').toNumber()).toBe(10); // looks healthy
+    expect(getNetProductionRate(s, 'wood').toNumber()).toBe(-6); // isn't
+    expect(getRateState(s, 'wood')).toBe('fragile');
+  });
+
+  // The boundary: a stalled consumer whose return still leaves a surplus is not
+  // fragile — you're healthy either way, and the stalled line flags itself.
+  it('stays rising when a stalled consumer would still leave a surplus', () => {
+    const s = economy();
+    s.workers.assigned.wood = 20; // +20/s
+    s.workers.assigned.spear = 4; // −16/s nominal → target +4/s
+    s.resources.stone.amount = D(0);
+
+    expect(getNetProductionRate(s, 'wood').toNumber()).toBe(4);
+    expect(getRateState(s, 'wood')).toBe('rising');
+  });
+
+  // target exactly 0 counts as fragile: the surplus is entirely borrowed from
+  // the stalled line.
+  it('reads fragile when the masked target is exactly break-even', () => {
+    const s = economy();
+    s.workers.assigned.wood = 16; // +16/s
+    s.workers.assigned.spear = 4; // −16/s nominal → target 0
+    s.resources.stone.amount = D(0);
+
+    expect(getNetProductionRate(s, 'wood').toNumber()).toBe(0);
+    expect(getRateState(s, 'wood')).toBe('fragile');
+  });
+
+  it('reads full at the cap', () => {
+    const s = economy();
+    s.workers.assigned.wood = 20;
+    s.resources.wood.amount = getCapacity(s, 'wood')!;
+    expect(getRateState(s, 'wood')).toBe('full');
+  });
+
+  // Precedence, both directions: falling outranks full (a real deficit at cap is
+  // still a deficit), full outranks fragile (you can't act on the masked deficit
+  // until the cap moves).
+  it('ranks falling above full, and full above fragile', () => {
+    const s = economy();
+    s.resources.wood.amount = getCapacity(s, 'wood')!;
+
+    s.workers.assigned.wood = 5;
+    s.workers.assigned.ether = 1; // −10/s → real deficit at cap
+    expect(getRateState(s, 'wood')).toBe('falling');
+
+    s.workers.assigned.ether = 0;
+    s.workers.assigned.wood = 10;
+    s.workers.assigned.spear = 4; // masked deficit, at cap
+    s.resources.stone.amount = D(0);
+    expect(getNetProductionRate(s, 'wood').toNumber()).toBeLessThan(0);
+    expect(getRateState(s, 'wood')).toBe('full');
+  });
+
+  it('names the state in the reason, and the target the fragile one hides', () => {
+    const s = economy();
+    s.workers.assigned.wood = 10;
+    s.workers.assigned.spear = 4;
+    s.resources.stone.amount = D(0);
+
+    const reason = rateStateReason(s, 'wood');
+    expect(reason).toContain('stalled');
+    expect(reason).toContain('-6.00/s'); // the target it lands on when unblocked
+  });
+});
+
+describe('core rate deadlines', () => {
+  function economy() {
+    const s = createInitialState(0);
+    s.level = 9;
+    s.workers.trained = 100;
+    s.buildings.wizardtower.level = 6;
+    return s;
+  }
+
+  it('counts down to empty while falling', () => {
+    const s = economy();
+    s.workers.assigned.ether = 1; // −10/s, nothing producing wood
+    s.resources.wood.amount = D(100);
+
+    expect(getRateEta(s, 'wood')).toEqual({ kind: 'empty', seconds: 10 });
+  });
+
+  it('counts up to full while rising', () => {
+    const s = economy();
+    s.workers.assigned.wood = 10; // +10/s
+    s.resources.wood.amount = getCapacity(s, 'wood')!.minus(50);
+
+    expect(getRateEta(s, 'wood')).toEqual({ kind: 'full', seconds: 5 });
+  });
+
+  // The standing-still states have no deadline, and neither does an estimate so
+  // distant it's noise rather than a warning.
+  it('has no deadline when steady, full, idle, or absurdly far off', () => {
+    const s = economy();
+    expect(getRateEta(s, 'wood')).toBeNull(); // idle
+
+    s.workers.assigned.wood = 10;
+    s.resources.wood.amount = getCapacity(s, 'wood')!;
+    expect(getRateEta(s, 'wood')).toBeNull(); // full
+
+    // One worker on wood (+1/s) against an empty tier-9 store: days away.
+    s.workers.assigned.wood = 1;
+    s.resources.wood.amount = D(0);
+    expect(getCapacity(s, 'wood')!.toNumber()).toBeGreaterThan(24 * 3600);
+    expect(getRateEta(s, 'wood')).toBeNull();
   });
 });
 
